@@ -1,5 +1,4 @@
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -18,7 +17,7 @@ export async function getDb() {
   if (isLocalMode()) {
     // Desktop / Solomon's Forge mode — single-file SQLite.
     const { openLocalDb } = await import("./db.local");
-    const { drizzleShim } = openLocalDb();
+    const { drizzleShim } = await openLocalDb();
     _localShim = drizzleShim;
     _db = drizzleShim;
     return _db;
@@ -26,6 +25,9 @@ export async function getDb() {
 
   if (process.env.DATABASE_URL) {
     try {
+      // Lazy-load the mysql2 driver only when a DATABASE_URL is set, so local
+      // (sql.js) mode does not require the `mysql2` package to be installed.
+      const { drizzle } = await import("drizzle-orm/mysql2");
       _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);

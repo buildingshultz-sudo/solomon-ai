@@ -1,21 +1,25 @@
 /**
- * Solomon's Forge — local SQLite adapter.
+ * Solomon's Forge — local SQLite adapter (sql.js edition).
  *
- * Goal: let the existing drizzle-mysql2 query code in routers/agent/memory
- * keep working unchanged when the app boots in desktop mode (SOLOMON_LOCAL=1),
- * by exposing the same handful of methods we use across the codebase
- * (`select`, `insert`, `update`, `delete`, `$dynamic`, where/orderBy/limit
- * chaining, plus `onDuplicateKeyUpdate`) backed by a single `data.db` file
- * via better-sqlite3.
+ * Why sql.js? It is a pure-JavaScript / WebAssembly port of SQLite that
+ * requires *zero* native compilation. The previous adapter used
+ * better-sqlite3, which depends on node-gyp + Python distutils + Visual
+ * Studio Build Tools on Windows and routinely fails to install for end
+ * users. sql.js works anywhere Node 18+ runs.
  *
- * We don't need full drizzle parity — just the surface our routers actually
- * touch. All higher-level features (search ranking, importance scoring,
- * scheduler) are pure JS over the rows we return, so as long as we hand back
- * the right row shape, everything just works.
+ * Trade-off: sql.js is in-memory by default, so we explicitly persist the
+ * database file to disk on every mutation (debounced) and on process exit.
+ *
+ * The shim surface (select / insert / update / delete with eq/desc + onDup)
+ * is identical to the original adapter so all higher-level routers,
+ * scheduler, memory and tools code keeps working unchanged.
  */
 import path from "node:path";
 import fs from "node:fs";
-import Database from "better-sqlite3";
+import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
+import { createRequire } from "node:module";
+
+const _require = createRequire(import.meta.url);
 
 import {
   users,
@@ -30,10 +34,6 @@ import {
 } from "../drizzle/schema";
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
-//
-// Only what we actually persist for the desktop build. JSON columns are stored
-// as TEXT and parsed on read; timestamps as TEXT in ISO8601. Enums are plain
-// TEXT with the same allowed values as the MySQL schema.
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,26 +173,14 @@ function tableNameOf(t: any): string {
   if (t === settings) return "settings";
   if (t === scheduledJobs) return "scheduled_jobs";
   if (t === toolRuns) return "tool_runs";
-  // drizzle-mysql tables expose a Symbol-keyed name; fall back to that.
   const sym = Object.getOwnPropertySymbols(t).find((s) => String(s).includes("Name"));
   if (sym) return String((t as any)[sym]);
   throw new Error("tableNameOf: unknown drizzle table");
 }
 
-function colNameOf(col: any): string {
-  if (!col) throw new Error("colNameOf: null column");
-  if (typeof col === "string") return col;
-  if (col.name) return col.name;
-  // drizzle MySqlColumn exposes `.name` and `.columnType`
-  const sym = Object.getOwnPropertySymbols(col).find((s) => String(s).includes("Name"));
-  if (sym) return String((col as any)[sym]);
-  throw new Error("colNameOf: unknown column shape");
-}
-
 function parseRow(table: string, row: any) {
   if (!row) return row;
   const out: any = { ...row };
-  // JSON
   for (const col of JSON_COLS[table] ?? []) {
     if (out[col] !== undefined && out[col] !== null && typeof out[col] === "string") {
       try {
@@ -202,13 +190,11 @@ function parseRow(table: string, row: any) {
       }
     }
   }
-  // booleans
   for (const col of BOOL_COLS[table] ?? []) {
     if (out[col] !== undefined && out[col] !== null) {
       out[col] = !!Number(out[col]);
     }
   }
-  // dates: convert TEXT → Date for known timestamp columns
   for (const k of Object.keys(out)) {
     if (
       (k === "createdAt" || k === "updatedAt" || k === "lastSignedIn" ||
@@ -240,21 +226,92 @@ function serializeValues(table: string, values: Record<string, any>): Record<str
   return out;
 }
 
-// ─── Condition compiler ──────────────────────────────────────────────────────
+// ─── sql.js wrapper that mimics the better-sqlite3 surface we use ────────────
 //
-// We accept the lightweight condition objects produced by drizzle helpers
-// `eq(col, val)` and `desc(col)`. The route handlers in this repo only use
-// `eq` for filtering and `desc` for ordering — that's all we have to handle.
+// We keep a tiny subset: prepare(sql).all(...params), prepare(sql).run(...params),
+// prepare(sql).get(...params), exec(sql), pragma(name = value | name).
+class SqlJsWrapper {
+  constructor(private sqlite: SqlJsDatabase, private onMutate: () => void) {}
 
+  pragma(stmt: string): any {
+    // sql.js supports pragmas via run/exec. Returning [] keeps callers happy.
+    this.sqlite.run(`PRAGMA ${stmt}`);
+    return [];
+  }
+
+  exec(sql: string): void {
+    this.sqlite.run(sql);
+    this.onMutate();
+  }
+
+  prepare(sql: string) {
+    const trimmed = sql.trim().toLowerCase();
+    const isWrite =
+      trimmed.startsWith("insert") ||
+      trimmed.startsWith("update") ||
+      trimmed.startsWith("delete") ||
+      trimmed.startsWith("create") ||
+      trimmed.startsWith("drop") ||
+      trimmed.startsWith("alter") ||
+      trimmed.startsWith("replace");
+    const self = this;
+    return {
+      all(...params: any[]): any[] {
+        const stmt = self.sqlite.prepare(sql);
+        try {
+          stmt.bind(params);
+          const rows: any[] = [];
+          while (stmt.step()) {
+            rows.push(stmt.getAsObject());
+          }
+          return rows;
+        } finally {
+          stmt.free();
+        }
+      },
+      get(...params: any[]): any {
+        const stmt = self.sqlite.prepare(sql);
+        try {
+          stmt.bind(params);
+          if (stmt.step()) {
+            return stmt.getAsObject();
+          }
+          return undefined;
+        } finally {
+          stmt.free();
+        }
+      },
+      run(...params: any[]): { changes: number; lastInsertRowid: number } {
+        self.sqlite.run(sql, params as any);
+        const changes = (self.sqlite as any).getRowsModified
+          ? (self.sqlite as any).getRowsModified()
+          : 0;
+        // last_insert_rowid via a quick query
+        let lastInsertRowid = 0;
+        try {
+          const r = self.sqlite.exec("SELECT last_insert_rowid() AS id");
+          if (r[0]?.values?.[0]?.[0] != null) {
+            lastInsertRowid = Number(r[0].values[0][0]);
+          }
+        } catch {
+          /* ignore */
+        }
+        if (isWrite) self.onMutate();
+        return { changes, lastInsertRowid };
+      },
+    };
+  }
+
+  close() {
+    this.sqlite.close();
+  }
+}
+
+// ─── Condition compiler ──────────────────────────────────────────────────────
 type Cond = { kind: "eq"; col: string; val: any } | { kind: "and"; conds: Cond[] };
 
 function decodeCondition(node: any): Cond | null {
   if (!node) return null;
-  // drizzle SQL builder returns objects with a `queryChunks` array containing
-  // column refs and inline params. We'll do something simpler: at the call
-  // sites we use `eq(table.col, value)`, which produces an object with a
-  // recognisable structure. We sniff the first column reference and the first
-  // bound param.
   const queryChunks = node.queryChunks ?? node.chunks ?? [];
   let colName: string | null = null;
   let val: any = undefined;
@@ -263,7 +320,6 @@ function decodeCondition(node: any): Cond | null {
       if (chunk.name && colName === null) colName = chunk.name;
       if (chunk.value !== undefined && val === undefined) val = chunk.value;
       if (Array.isArray(chunk.queryChunks)) {
-        // nested expression — recurse and pick first
         const inner = decodeCondition(chunk);
         if (inner && inner.kind === "eq") {
           colName = colName ?? inner.col;
@@ -280,7 +336,6 @@ function decodeCondition(node: any): Cond | null {
 
 function decodeOrder(node: any): { col: string; dir: "asc" | "desc" } | null {
   if (!node) return null;
-  // drizzle desc()/asc() wrap a column with a direction tag.
   const queryChunks = node.queryChunks ?? node.chunks ?? [];
   let colName: string | null = null;
   let dir: "asc" | "desc" = "asc";
@@ -292,7 +347,6 @@ function decodeOrder(node: any): { col: string; dir: "asc" | "desc" } | null {
       break;
     }
   }
-  // Also support a direct column reference ordering ascending.
   if (!colName && node.name) colName = node.name;
   return colName ? { col: colName, dir } : null;
 }
@@ -304,7 +358,7 @@ class SelectBuilder {
   private _where: Cond[] = [];
   private _order: { col: string; dir: "asc" | "desc" }[] = [];
   private _limit: number | null = null;
-  constructor(private db: Database.Database) {}
+  constructor(private db: SqlJsWrapper) {}
   from(table: any) { this._from = table; return this; }
   $dynamic() { return this; }
   where(cond: any) {
@@ -320,7 +374,6 @@ class SelectBuilder {
     return this;
   }
   limit(n: number) { this._limit = n; return this; }
-  // Make the builder thenable so `await db.select().from(...)` works.
   then(onFulfilled: any, onRejected?: any) {
     try {
       const rows = this._exec();
@@ -351,7 +404,7 @@ class SelectBuilder {
 class InsertBuilder {
   private _values: any | any[] | null = null;
   private _onDup: any | null = null;
-  constructor(private db: Database.Database, private table: any) {}
+  constructor(private db: SqlJsWrapper, private table: any) {}
   values(v: any | any[]) { this._values = v; return this; }
   onDuplicateKeyUpdate(opts: { set: Record<string, any> }) { this._onDup = opts.set; return this; }
   then(onFulfilled: any, onRejected?: any) {
@@ -369,7 +422,6 @@ class InsertBuilder {
       const vals = cols.map((c) => row[c]);
       let sql: string;
       if (this._onDup && tableName === "settings") {
-        // Common path: settings.upsert. Use SQLite's UPSERT.
         const update = serializeValues(tableName, this._onDup);
         const updateCols = Object.keys(update);
         sql = `INSERT INTO ${tableName} (${cols.join(",")}) VALUES (${placeholders}) ` +
@@ -391,7 +443,7 @@ class InsertBuilder {
 class UpdateBuilder {
   private _set: Record<string, any> = {};
   private _where: Cond[] = [];
-  constructor(private db: Database.Database, private table: any) {}
+  constructor(private db: SqlJsWrapper, private table: any) {}
   set(values: Record<string, any>) { this._set = values; return this; }
   where(cond: any) {
     const c = decodeCondition(cond);
@@ -418,7 +470,7 @@ class UpdateBuilder {
 
 class DeleteBuilder {
   private _where: Cond[] = [];
-  constructor(private db: Database.Database, private table: any) {}
+  constructor(private db: SqlJsWrapper, private table: any) {}
   where(cond: any) {
     const c = decodeCondition(cond);
     if (c) this._where.push(c);
@@ -441,45 +493,123 @@ class DeleteBuilder {
 
 // ─── Public driver ───────────────────────────────────────────────────────────
 
-let _db: Database.Database | null = null;
+let _wrapper: SqlJsWrapper | null = null;
 let _shim: any = null;
+let _dbPath: string = "";
+let _dirty = false;
+let _flushTimer: NodeJS.Timeout | null = null;
+let _exitHooked = false;
 
-export function openLocalDb(): { db: Database.Database; drizzleShim: any } {
-  if (_db && _shim) return { db: _db, drizzleShim: _shim };
+function scheduleFlush() {
+  _dirty = true;
+  if (_flushTimer) return;
+  _flushTimer = setTimeout(() => {
+    _flushTimer = null;
+    flushNow();
+  }, 1000); // debounce: 1 second after last write
+}
+
+function flushNow() {
+  if (!_wrapper || !_dirty || !_dbPath) return;
+  try {
+    const data = (_wrapper as any).sqlite.export() as Uint8Array;
+    // Atomic write: write to a temp file then rename.
+    const tmp = _dbPath + ".tmp";
+    fs.writeFileSync(tmp, Buffer.from(data));
+    fs.renameSync(tmp, _dbPath);
+    _dirty = false;
+  } catch (e) {
+    console.error("[db.local] flush failed:", e);
+  }
+}
+
+function hookExit() {
+  if (_exitHooked) return;
+  _exitHooked = true;
+  const handler = () => {
+    try {
+      if (_flushTimer) clearTimeout(_flushTimer);
+      _flushTimer = null;
+      flushNow();
+    } catch {
+      /* ignore */
+    }
+  };
+  process.on("exit", handler);
+  process.on("SIGINT", () => { handler(); process.exit(0); });
+  process.on("SIGTERM", () => { handler(); process.exit(0); });
+  process.on("beforeExit", handler);
+}
+
+export async function openLocalDb(): Promise<{ db: SqlJsWrapper; drizzleShim: any }> {
+  if (_wrapper && _shim) return { db: _wrapper, drizzleShim: _shim };
 
   const dataDir = process.env.SOLOMON_DATA_DIR || path.join(process.cwd(), ".solomon-data");
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  const dbPath = path.join(dataDir, "data.db");
+  _dbPath = path.join(dataDir, "data.db");
 
-  _db = new Database(dbPath);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-  _db.exec(SCHEMA_SQL);
+  // Initialise sql.js. The `locateFile` callback tells the loader where to
+  // find the wasm binary that ships with the package.
+  const SQL = await initSqlJs({
+    locateFile: (file: string) => {
+      // Resolve relative to the installed sql.js package so this works whether
+      // we're running from source (tsx) or from the bundled dist/index.js.
+      try {
+        return _require.resolve(`sql.js/dist/${file}`);
+      } catch {
+        return file;
+      }
+    },
+  } as any);
+
+  // Load existing file from disk if present.
+  let sqlite: SqlJsDatabase;
+  if (fs.existsSync(_dbPath)) {
+    try {
+      const buf = fs.readFileSync(_dbPath);
+      sqlite = new SQL.Database(new Uint8Array(buf));
+    } catch (e) {
+      console.warn("[db.local] failed to load existing db, starting fresh:", e);
+      sqlite = new SQL.Database();
+    }
+  } else {
+    sqlite = new SQL.Database();
+  }
+
+  _wrapper = new SqlJsWrapper(sqlite, scheduleFlush);
+  // Note: WAL is irrelevant for sql.js (in-memory), but foreign_keys still applies.
+  _wrapper.pragma("foreign_keys = ON");
+  _wrapper.exec(SCHEMA_SQL);
 
   // Seed local owner user once so the auth bypass has someone to log in as.
-  const existing = _db.prepare("SELECT id FROM users WHERE openId = ?").get("local-owner") as
+  const existing = _wrapper.prepare("SELECT id FROM users WHERE openId = ?").get("local-owner") as
     | { id: number }
     | undefined;
   if (!existing) {
-    _db.prepare(
+    _wrapper.prepare(
       `INSERT INTO users (openId, name, email, role) VALUES (?,?,?,?)`
     ).run("local-owner", "Owner", "owner@solomon.local", "admin");
   }
 
-  const sqlite = _db;
+  // Persist immediately so the file exists even if no writes happen later.
+  flushNow();
+  hookExit();
+
+  const wrap = _wrapper;
   _shim = {
-    select: () => new SelectBuilder(sqlite),
-    insert: (table: any) => new InsertBuilder(sqlite, table),
-    update: (table: any) => new UpdateBuilder(sqlite, table),
-    delete: (table: any) => new DeleteBuilder(sqlite, table),
+    select: () => new SelectBuilder(wrap),
+    insert: (table: any) => new InsertBuilder(wrap, table),
+    update: (table: any) => new UpdateBuilder(wrap, table),
+    delete: (table: any) => new DeleteBuilder(wrap, table),
   };
-  return { db: _db, drizzleShim: _shim };
+  return { db: _wrapper, drizzleShim: _shim };
 }
 
 export function closeLocalDb() {
-  if (_db) {
-    try { _db.close(); } catch { /* ignore */ }
-    _db = null;
+  try { flushNow(); } catch { /* ignore */ }
+  if (_wrapper) {
+    try { _wrapper.close(); } catch { /* ignore */ }
+    _wrapper = null;
     _shim = null;
   }
 }
