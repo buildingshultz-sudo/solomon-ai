@@ -585,6 +585,274 @@ const socialPostTool: SolomonTool = {
   },
 };
 
+// ─── NEW: browser automation ─────────────────────────────────────────────────
+const browserTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "browser",
+      description:
+        "Drive a real headless Chromium browser via Playwright. Pass a list of steps (goto/click/fill/press/wait/screenshot/extract/evaluate). Use for posting to social media, filling forms, scraping data, or checking accounts.",
+      parameters: {
+        type: "object",
+        properties: {
+          steps: { type: "array", description: "Sequential browser actions.", items: { type: "object" } },
+          headed: { type: "boolean", description: "Open a visible window (default false)." },
+          profile: { type: "string", description: "Optional profile dir for persistent login state." },
+        },
+        required: ["steps"],
+      },
+    },
+  },
+  async execute(input) {
+    const { runBrowser } = await import("../integrations/browser");
+    const result = await runBrowser({
+      steps: (input.steps as any[]) ?? [],
+      headed: !!input.headed,
+      profile: input.profile as string | undefined,
+    });
+    return { ok: result.ok, status: result.ok ? "success" : "error", data: result };
+  },
+};
+
+// ─── NEW: YouTube SEO suite ───────────────────────────────────────────────
+const youtubeKeywordTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "youtube_keyword_score",
+      description: "Score a keyword for YouTube SEO (volume proxy / competition / opportunity).",
+      parameters: {
+        type: "object",
+        properties: { keyword: { type: "string" } },
+        required: ["keyword"],
+      },
+    },
+  },
+  async execute(input) {
+    const { keywordScore } = await import("../integrations/youtubeSeo");
+    const data = await keywordScore(String(input.keyword));
+    return { ok: true, status: "success", data };
+  },
+};
+
+const youtubeChannelTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "youtube_channel_analytics",
+      description: "Get analytics for a YouTube channel (handle, ID, or URL).",
+      parameters: {
+        type: "object",
+        properties: { channel: { type: "string" } },
+        required: ["channel"],
+      },
+    },
+  },
+  async execute(input) {
+    const { channelAnalytics } = await import("../integrations/youtubeSeo");
+    const data = await channelAnalytics(String(input.channel));
+    return { ok: true, status: "success", data };
+  },
+};
+
+const youtubeCompetitorTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "youtube_competitor_analysis",
+      description: "Find competing YouTube channels for a query, ranked by subs.",
+      parameters: {
+        type: "object",
+        properties: { query: { type: "string" }, limit: { type: "number" } },
+        required: ["query"],
+      },
+    },
+  },
+  async execute(input) {
+    const { competitorAnalysis } = await import("../integrations/youtubeSeo");
+    const data = await competitorAnalysis(String(input.query), Number(input.limit) || 10);
+    return { ok: true, status: "success", data };
+  },
+};
+
+const youtubeSeoSuggestionsTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "youtube_seo_suggestions",
+      description: "Generate title / description / tag suggestions for a topic.",
+      parameters: {
+        type: "object",
+        properties: { topic: { type: "string" } },
+        required: ["topic"],
+      },
+    },
+  },
+  async execute(input) {
+    const { seoSuggestions } = await import("../integrations/youtubeSeo");
+    const data = await seoSuggestions(String(input.topic));
+    return { ok: true, status: "success", data };
+  },
+};
+
+// ─── NEW: Real social posting (replaces the stub above when configured) ────────
+const facebookPostTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "facebook_post",
+      description: "Publish a post (text or photo) to a Facebook Page. Set pageKey to 'page_id_2' for the second page.",
+      parameters: {
+        type: "object",
+        properties: {
+          message: { type: "string" },
+          imageUrl: { type: "string" },
+          pageKey: { type: "string", enum: ["page_id", "page_id_2"] },
+        },
+        required: ["message"],
+      },
+    },
+  },
+  async execute(input) {
+    try {
+      const { facebook } = await import("../integrations/social");
+      const data = await facebook.postToPage({
+        message: String(input.message),
+        imageUrl: input.imageUrl as string | undefined,
+        pageKey: (input.pageKey as any) ?? "page_id",
+      });
+      return { ok: true, status: "success", data };
+    } catch (e: any) {
+      return { ok: false, status: "error", message: e?.message ?? String(e) };
+    }
+  },
+};
+
+const instagramPostTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "instagram_post",
+      description: "Publish a photo or reel to the configured Instagram Business account.",
+      parameters: {
+        type: "object",
+        properties: {
+          mediaUrl: { type: "string" },
+          caption: { type: "string" },
+          isReel: { type: "boolean" },
+        },
+        required: ["mediaUrl"],
+      },
+    },
+  },
+  async execute(input) {
+    try {
+      const { instagram } = await import("../integrations/social");
+      const data = input.isReel
+        ? await instagram.postReel({ videoUrl: String(input.mediaUrl), caption: input.caption as string })
+        : await instagram.postPhoto({ imageUrl: String(input.mediaUrl), caption: input.caption as string });
+      return { ok: true, status: "success", data };
+    } catch (e: any) {
+      return { ok: false, status: "error", message: e?.message ?? String(e) };
+    }
+  },
+};
+
+const tiktokPostTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "tiktok_post",
+      description: "Publish a video to TikTok via the Content Posting API.",
+      parameters: {
+        type: "object",
+        properties: {
+          videoUrl: { type: "string" },
+          title: { type: "string" },
+          privacyLevel: { type: "string", enum: ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"] },
+        },
+        required: ["videoUrl"],
+      },
+    },
+  },
+  async execute(input) {
+    try {
+      const { tiktok } = await import("../integrations/social");
+      const data = await tiktok.postVideo({
+        videoUrl: String(input.videoUrl),
+        title: input.title as string | undefined,
+        privacyLevel: input.privacyLevel as any,
+      });
+      return { ok: true, status: "success", data };
+    } catch (e: any) {
+      return { ok: false, status: "error", message: e?.message ?? String(e) };
+    }
+  },
+};
+
+// ─── NEW: Telegram outbound ────────────────────────────────────────────────
+const telegramSendTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "telegram_send",
+      description: "Send a Telegram message (and optional photo) from Solomon's bot.",
+      parameters: {
+        type: "object",
+        properties: {
+          chatId: { type: "string" },
+          text: { type: "string" },
+          photoUrl: { type: "string" },
+        },
+        required: ["chatId", "text"],
+      },
+    },
+  },
+  async execute(input) {
+    try {
+      const { telegramSendMessage, telegramSendPhoto } = await import("../integrations/telegram");
+      if (input.photoUrl) {
+        await telegramSendPhoto(String(input.chatId), String(input.photoUrl), String(input.text));
+      } else {
+        await telegramSendMessage(String(input.chatId), String(input.text));
+      }
+      return { ok: true, status: "success" };
+    } catch (e: any) {
+      return { ok: false, status: "error", message: e?.message ?? String(e) };
+    }
+  },
+};
+
+// ─── NEW: Generic MCP escape hatch ──────────────────────────────────────
+const mcpCallTool: SolomonTool = {
+  schema: {
+    type: "function",
+    function: {
+      name: "mcp_call",
+      description: "Invoke a tool exposed by a running MCP connector (slack, stripe, gmail, hubspot, google-calendar, instagram, zapier).",
+      parameters: {
+        type: "object",
+        properties: {
+          connector: { type: "string" },
+          tool: { type: "string" },
+          args: { type: "object" },
+        },
+        required: ["connector", "tool"],
+      },
+    },
+  },
+  async execute(input) {
+    try {
+      const { callConnectorTool } = await import("../integrations/mcp");
+      const data = await callConnectorTool(input.connector as any, String(input.tool), input.args ?? {});
+      return { ok: true, status: "success", data };
+    } catch (e: any) {
+      return { ok: false, status: "error", message: e?.message ?? String(e) };
+    }
+  },
+};
+
 // ─── Registry ──────────────────────────────────────────────────────────────────
 export const SOLOMON_TOOLS: Record<string, SolomonTool> = {
   memory_search: memorySearchTool,
@@ -602,6 +870,17 @@ export const SOLOMON_TOOLS: Record<string, SolomonTool> = {
   gmail_send: gmailSendTool,
   gdrive_list: driveListTool,
   social_post: socialPostTool,
+  // ─── 2026 expansion ──────────────────────────────────────────────
+  browser: browserTool,
+  youtube_keyword_score: youtubeKeywordTool,
+  youtube_channel_analytics: youtubeChannelTool,
+  youtube_competitor_analysis: youtubeCompetitorTool,
+  youtube_seo_suggestions: youtubeSeoSuggestionsTool,
+  facebook_post: facebookPostTool,
+  instagram_post: instagramPostTool,
+  tiktok_post: tiktokPostTool,
+  telegram_send: telegramSendTool,
+  mcp_call: mcpCallTool,
 };
 
 export const SOLOMON_TOOL_SCHEMAS: Tool[] = Object.values(SOLOMON_TOOLS).map((t) => t.schema);

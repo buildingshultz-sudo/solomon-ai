@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Solomon's Forge",
+    "slug": "solomons-forge",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "solomonsforge",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0d0d0e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shultzenterprises.solomonsforge",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true,
+          "NSExceptionDomains": {
+            "100.64.0.0": { "NSIncludesSubdomains": true, "NSTemporaryExceptionAllowsInsecureHTTPLoads": true }
+          }
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0d0d0e"
+      },
+      "package": "com.shultzenterprises.solomonsforge"
+    },
+    "web": { "favicon": "./assets/favicon.png" },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#b87333"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": { "projectId": "REPLACE_AFTER_FIRST_eas_init" }
+    },
+    "owner": "irishcraftsman7"
+  }
+}

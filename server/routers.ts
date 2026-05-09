@@ -20,6 +20,23 @@ import { importManusFiles } from "./solomon/manusImport";
 import { SOLOMON_TOOL_SCHEMAS, runTool, recentToolRuns } from "./solomon/tools";
 import { listScheduledJobs, runJobNow, tickScheduler } from "./solomon/scheduler";
 import { killAll, killHistory, listOperations } from "./solomon/killSwitch";
+import {
+  startTelegramBot,
+  stopTelegramBot,
+  isTelegramRunning,
+} from "./integrations/telegram";
+import {
+  CONNECTORS,
+  listConnectorStatus,
+  startConnector,
+  stopConnector,
+} from "./integrations/mcp";
+import {
+  keywordScore,
+  channelAnalytics,
+  competitorAnalysis,
+  seoSuggestions,
+} from "./integrations/youtubeSeo";
 import { notifyOwner } from "./_core/notification";
 import type { Message } from "./_core/llm";
 
@@ -415,7 +432,42 @@ export const appRouter = router({
       }),
   }),
 
-  // ─── Task Master Kill Switch ─────────────────────────────────────────────
+  // ─── Telegram bot lifecycle ─────────────────────────────────────────────
+  telegram: router({
+    status: protectedProcedure.query(async () => ({ running: await isTelegramRunning() })),
+    start: protectedProcedure.mutation(async () => startTelegramBot()),
+    stop: protectedProcedure.mutation(async () => stopTelegramBot()),
+  }),
+
+  // ─── MCP connector framework ────────────────────────────────────────────
+  connectors: router({
+    list: protectedProcedure.query(() => listConnectorStatus()),
+    catalog: protectedProcedure.query(() => CONNECTORS),
+    start: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(({ input }) => startConnector(input.id as any)),
+    stop: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .mutation(({ input }) => stopConnector(input.id as any)),
+  }),
+
+  // ─── YouTube SEO (vidIQ replacement) ──────────────────────────────────────
+  youtubeSeo: router({
+    keywordScore: protectedProcedure
+      .input(z.object({ keyword: z.string().min(1) }))
+      .query(({ input }) => keywordScore(input.keyword)),
+    channelAnalytics: protectedProcedure
+      .input(z.object({ channel: z.string().min(1) }))
+      .query(({ input }) => channelAnalytics(input.channel)),
+    competitorAnalysis: protectedProcedure
+      .input(z.object({ query: z.string().min(1), limit: z.number().min(1).max(25).optional() }))
+      .query(({ input }) => competitorAnalysis(input.query, input.limit ?? 10)),
+    seoSuggestions: protectedProcedure
+      .input(z.object({ topic: z.string().min(1) }))
+      .query(({ input }) => seoSuggestions(input.topic)),
+  }),
+
+  // ─── Task Master Kill Switch ──────────────────────────────────────────────
   // One-click stop for every running operation: LLM streams, tool calls,
   // scheduler ticks, imports. Used by the red kill button in the UI.
   killSwitch: router({

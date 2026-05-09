@@ -1,0 +1,16 @@
+{
+  "name": "Solomon's Forge",
+  "short_name": "Solomon",
+  "description": "Solomon's Forge — local AI chief of staff for Building Shultz / Shultz Enterprises.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d0d0e",
+  "theme_color": "#0d0d0e",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "192x192", "type": "image/png" }
+  ]
+}

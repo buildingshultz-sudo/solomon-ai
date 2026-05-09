@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Cloud, Cpu, Eye, EyeOff, KeyRound, Save, Settings as SettingsIcon, Sparkles, Zap } from "lucide-react";
+import { Cloud, Cpu, Eye, EyeOff, KeyRound, Save, Settings as SettingsIcon, Sparkles, Zap, Send, Plug, Globe, Power, PowerOff, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -63,10 +63,13 @@ export default function Settings() {
       </div>
 
       <Tabs defaultValue="provider">
-        <TabsList>
-          <TabsTrigger value="provider"><Cpu className="size-3.5 mr-1.5" /> Model Provider</TabsTrigger>
+        <TabsList className="flex flex-wrap h-auto justify-start gap-1">
+          <TabsTrigger value="provider"><Cpu className="size-3.5 mr-1.5" /> Model</TabsTrigger>
           <TabsTrigger value="routing"><Zap className="size-3.5 mr-1.5" /> Routing</TabsTrigger>
           <TabsTrigger value="keys"><KeyRound className="size-3.5 mr-1.5" /> API keys</TabsTrigger>
+          <TabsTrigger value="connectors"><Plug className="size-3.5 mr-1.5" /> Connectors</TabsTrigger>
+          <TabsTrigger value="telegram"><Send className="size-3.5 mr-1.5" /> Telegram</TabsTrigger>
+          <TabsTrigger value="remote"><Globe className="size-3.5 mr-1.5" /> Remote</TabsTrigger>
           <TabsTrigger value="system"><Sparkles className="size-3.5 mr-1.5" /> System</TabsTrigger>
         </TabsList>
 
@@ -133,6 +136,18 @@ export default function Settings() {
               })}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="connectors" className="space-y-4">
+          <ConnectorsTab map={map} upsert={upsert} />
+        </TabsContent>
+
+        <TabsContent value="telegram" className="space-y-4">
+          <TelegramTab map={map} upsert={upsert} />
+        </TabsContent>
+
+        <TabsContent value="remote" className="space-y-4">
+          <RemoteAccessTab />
         </TabsContent>
 
         <TabsContent value="system" className="space-y-4">
@@ -309,5 +324,223 @@ function SettingRow({
         <Save className="size-3.5" /> Save
       </Button>
     </div>
+  );
+}
+
+// ─── Connectors tab (MCP) ────────────────────────────────────────────────────
+function ConnectorsTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
+  const utils = trpc.useUtils();
+  const list = trpc.connectors.list.useQuery(undefined, { refetchInterval: 5000 });
+  const start = trpc.connectors.start.useMutation({
+    onSuccess: (r) => {
+      toast(r.message ?? "started");
+      utils.connectors.list.invalidate();
+    },
+  });
+  const stop = trpc.connectors.stop.useMutation({
+    onSuccess: (r) => {
+      toast(r.message ?? "stopped");
+      utils.connectors.list.invalidate();
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm solomon-stencil">MCP CONNECTORS</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Connect Solomon to Slack, Stripe, Gmail, HubSpot, and more via the
+          Model Context Protocol. Each connector spawns a local MCP server
+          process when started; stop it to release credentials. Credentials
+          live only in your local SQLite — nothing is sent off this PC.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {(list.data ?? []).map((c: any) => (
+          <div key={c.id} className="rounded-md border border-border p-3 space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="font-semibold text-sm">{c.title}</div>
+                <p className="text-xs text-muted-foreground">{c.description}</p>
+                <p className="text-[10px] font-mono text-muted-foreground/70 mt-1">{c.npmPackage}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Badge variant={c.configured ? "default" : "outline"} className="text-[10px]">
+                  {c.configured ? "configured" : "needs config"}
+                </Badge>
+                <Badge variant={c.running ? "default" : "outline"} className="text-[10px]">
+                  {c.running ? "running" : "stopped"}
+                </Badge>
+                {c.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stop.mutate({ id: c.id })}>
+                    <PowerOff className="size-3.5" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    disabled={!c.configured || start.isPending}
+                    onClick={() => start.mutate({ id: c.id })}
+                  >
+                    {start.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Power className="size-3.5" />}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="grid gap-2">
+              {c.envKeys.map((k: any) => {
+                const storeKey = `mcp.${c.id}.${k.key}`;
+                const cur = map.get(storeKey);
+                return (
+                  <SettingRow
+                    key={storeKey}
+                    label={k.label}
+                    isSecret={!!k.secret}
+                    initial=""
+                    placeholder={cur?.hasValue ? "stored — enter to overwrite" : "not set"}
+                    badge={cur?.hasValue ? "stored" : "not set"}
+                    onSave={(value) =>
+                      upsert.mutate({
+                        key: storeKey,
+                        value,
+                        category: "mcp",
+                        isSecret: !!k.secret,
+                      })
+                    }
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Telegram tab ────────────────────────────────────────────────────────────
+function TelegramTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
+  const utils = trpc.useUtils();
+  const status = trpc.telegram.status.useQuery(undefined, { refetchInterval: 5000 });
+  const start = trpc.telegram.start.useMutation({
+    onSuccess: (r) => {
+      toast(r.message);
+      utils.telegram.status.invalidate();
+    },
+  });
+  const stop = trpc.telegram.stop.useMutation({
+    onSuccess: (r) => {
+      toast(r.message);
+      utils.telegram.status.invalidate();
+    },
+  });
+  const enabled = (map.get("telegram.enabled")?.value || "0") === "1";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm solomon-stencil flex items-center justify-between">
+          <span>TELEGRAM BOT</span>
+          <Badge variant={status.data?.running ? "default" : "outline"} className="text-[10px]">
+            {status.data?.running ? "live" : "stopped"}
+          </Badge>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Talk to Solomon from anywhere via Telegram. Create a bot with{" "}
+          <code className="font-mono">@BotFather</code>, paste the token below, optionally
+          restrict to your Telegram user IDs, then hit "Start bot".
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <SettingRow
+          label="Enabled"
+          help="Set to 1 to allow bot to start. 0 = off."
+          initial={map.get("telegram.enabled")?.value ?? "0"}
+          placeholder="0 or 1"
+          onSave={(v) =>
+            upsert.mutate({ key: "telegram.enabled", value: v, category: "telegram", isSecret: false })
+          }
+        />
+        <SettingRow
+          label="Bot token"
+          isSecret
+          initial=""
+          placeholder={map.get("telegram.bot_token")?.hasValue ? "stored — enter to overwrite" : "from @BotFather"}
+          badge={map.get("telegram.bot_token")?.hasValue ? "stored" : "not set"}
+          onSave={(v) =>
+            upsert.mutate({ key: "telegram.bot_token", value: v, category: "telegram", isSecret: true })
+          }
+        />
+        <SettingRow
+          label="Allowed user IDs"
+          help="Comma-separated. Empty = anyone with the bot link can chat."
+          initial={map.get("telegram.allowed_user_ids")?.value ?? ""}
+          placeholder="12345678,87654321"
+          onSave={(v) =>
+            upsert.mutate({
+              key: "telegram.allowed_user_ids",
+              value: v,
+              category: "telegram",
+              isSecret: false,
+            })
+          }
+        />
+        <div className="flex gap-2 pt-1">
+          <Button onClick={() => start.mutate()} disabled={start.isPending || !enabled}>
+            {start.isPending ? <Loader2 className="size-3.5 animate-spin" /> : <Power className="size-3.5" />}
+            <span className="ml-1.5">Start bot</span>
+          </Button>
+          <Button variant="outline" onClick={() => stop.mutate()} disabled={stop.isPending}>
+            <PowerOff className="size-3.5" />
+            <span className="ml-1.5">Stop</span>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Remote Access tab (Tailscale + Cloudflare Tunnel) ───────────────────────
+function RemoteAccessTab() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm solomon-stencil">REMOTE ACCESS — phone & off-site</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Two ways to reach Solomon's Forge from your phone or another machine.
+          Both are free. <strong>Tailscale is recommended</strong> — it's private (only
+          devices on your tailnet can connect) and dead simple.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5 text-sm">
+        <section>
+          <h3 className="font-semibold mb-1">Option A: Tailscale (recommended)</h3>
+          <ol className="list-decimal list-inside space-y-1 text-foreground/80 text-xs">
+            <li>Run <code className="font-mono">Setup Remote Access (Tailscale).bat</code> from your desktop folder.</li>
+            <li>Sign in with Google / Microsoft / GitHub when the browser pops.</li>
+            <li>The script prints your <strong>Tailscale IP</strong> (looks like <code>100.x.y.z</code>).</li>
+            <li>Install <strong>Tailscale</strong> on your phone (App Store / Play Store) and sign in with the same account.</li>
+            <li>From your phone, open <code>http://100.x.y.z:3737</code>. Done.</li>
+          </ol>
+        </section>
+
+        <section>
+          <h3 className="font-semibold mb-1">Option B: Cloudflare Tunnel (public URL)</h3>
+          <ol className="list-decimal list-inside space-y-1 text-foreground/80 text-xs">
+            <li>Run <code className="font-mono">Setup Remote Access (Cloudflare Tunnel).bat</code>.</li>
+            <li>Browse to the URL it prints (e.g. <code>https://abcd1234.trycloudflare.com</code>).</li>
+            <li>For private access, attach a Cloudflare Access policy in the Zero Trust dashboard.</li>
+          </ol>
+        </section>
+
+        <section>
+          <h3 className="font-semibold mb-1">Add to Home Screen (PWA)</h3>
+          <p className="text-xs text-muted-foreground">
+            On your phone, after Solomon's Forge loads, tap the browser menu →
+            "Add to Home Screen". You'll get a Solomon's Forge icon that launches
+            the dashboard full-screen — same as a native app.
+          </p>
+        </section>
+      </CardContent>
+    </Card>
   );
 }
