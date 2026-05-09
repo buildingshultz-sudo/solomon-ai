@@ -1,5 +1,5 @@
 /**
- * Solomon Forge — Electron main process.
+ * Solomon's Forge — Electron main process.
  *
  * Boot order:
  *   1. Show a splash window immediately (so the user sees something while
@@ -21,7 +21,7 @@ const fs = require("node:fs");
 const http = require("node:http");
 const { spawn } = require("node:child_process");
 
-const APP_NAME = "Solomon Forge";
+const APP_NAME = "Solomon's Forge";
 const PORT = Number(process.env.SOLOMON_PORT || 3737);
 const HEALTH_URL = `http://127.0.0.1:${PORT}/api/health`;
 const APP_URL = `http://127.0.0.1:${PORT}`;
@@ -174,7 +174,7 @@ function startServer() {
   const serverEntry = resourcePath("dist", "index.js");
   if (!fs.existsSync(serverEntry)) {
     dialog.showErrorBox(
-      "Solomon Forge — server missing",
+      "Solomon's Forge — server missing",
       `Could not find ${serverEntry}\n\nRun the installer again, or open a PowerShell in the install folder and run:\n  pnpm install\n  pnpm build`
     );
     app.quit();
@@ -218,7 +218,7 @@ function startServer() {
     serverProc = null;
     if (!app.isQuitting) {
       dialog.showErrorBox(
-        "Solomon Forge — server crashed",
+        "Solomon's Forge — server crashed",
         `The local server exited unexpectedly (code ${code}). See ${logPath} for details.`
       );
       app.quit();
@@ -257,7 +257,7 @@ app.whenReady().then(async () => {
   const ok = await waitForServer();
   if (!ok) {
     dialog.showErrorBox(
-      "Solomon Forge — server didn't start",
+      "Solomon's Forge — server didn't start",
       `Tried ${HEALTH_URL} for 30s with no response. Check the server log at ${path.join(
         dataDir(),
         "server.log"

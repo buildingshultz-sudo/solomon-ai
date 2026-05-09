@@ -142,7 +142,7 @@ export default function Settings() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p className="text-muted-foreground text-xs">
-                Solomon Forge runs locally on this PC. Pick your <strong>Model Provider</strong> on the first tab — Ollama for free/offline, OpenAI for cloud quality. Database is an embedded SQLite file under <code className="font-mono">.solomon-data/</code>.
+                Solomon's Forge runs locally on this PC. Pick your <strong>Model Provider</strong> on the first tab — Ollama for free/offline, OpenAI for cloud quality. Database is an embedded SQLite file under <code className="font-mono">.solomon-data/</code>.
               </p>
               <ul className="text-sm space-y-1 pt-2 list-disc list-inside text-foreground/80">
                 <li>Memory uses the database (no external vector store required).</li>

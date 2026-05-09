@@ -214,7 +214,7 @@ const normalizeToolChoice = (
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider resolution.
 //
-// Solomon Forge supports two LLM backends:
+// Solomon's Forge supports two LLM backends:
 //   - "openai"  : the original OpenAI-compatible endpoint (cloud, paid)
 //   - "ollama"  : a local Ollama server speaking its OpenAI-compat /v1 API
 //                 (free, fully offline, runs on the user's PC)
@@ -388,14 +388,28 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   const url = buildChatUrl(cfg);
+  // Register this in-flight LLM call with the kill switch so the user can
+  // abort it via the red "Task Master" button in the UI.
+  const ac = new AbortController();
+  const { registerOperation } = await import("../solomon/killSwitch");
+  const killHandle = registerOperation({
+    label: `LLM → ${cfg.provider}/${cfg.model}`,
+    kind: "llm",
+    controller: ac,
+  });
   let response: Response;
   try {
     response = await fetch(url, {
       method: "POST",
       headers,
       body: JSON.stringify(payload),
+      signal: ac.signal,
     });
   } catch (err) {
+    killHandle.complete();
+    if ((err as any)?.name === "AbortError") {
+      throw new Error("LLM call aborted by kill switch.");
+    }
     if (cfg.provider === "ollama") {
       throw new Error(
         `Cannot reach local Ollama at ${cfg.baseUrl}. Make sure Ollama is running ` +
@@ -407,11 +421,16 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   if (!response.ok) {
+    killHandle.complete();
     const errorText = await response.text();
     throw new Error(
       `LLM invoke failed [${cfg.provider} → ${cfg.model}]: ${response.status} ${response.statusText} – ${errorText}`
     );
   }
 
-  return (await response.json()) as InvokeResult;
+  try {
+    return (await response.json()) as InvokeResult;
+  } finally {
+    killHandle.complete();
+  }
 }

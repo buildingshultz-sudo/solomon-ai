@@ -1,5 +1,5 @@
 /**
- * Solomon Forge — local SQLite adapter.
+ * Solomon's Forge — local SQLite adapter.
  *
  * Goal: let the existing drizzle-mysql2 query code in routers/agent/memory
  * keep working unchanged when the app boots in desktop mode (SOLOMON_LOCAL=1),

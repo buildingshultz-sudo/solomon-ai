@@ -37,7 +37,7 @@ export async function createContext(
   let user: User | null = null;
 
   if (isLocalMode()) {
-    // Solomon Forge desktop mode: there's exactly one user (the owner) and no
+    // Solomon's Forge desktop mode: there's exactly one user (the owner) and no
     // OAuth is involved. Always present them as authenticated.
     user = await getLocalOwner();
     return { req: opts.req, res: opts.res, user };

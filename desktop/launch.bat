@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================================
-REM   Solomon Forge - launcher
+REM   Solomon's Forge - launcher
 REM
 REM   Boots the local Node server (hidden), waits for it to be ready, and then
 REM   opens Microsoft Edge / Google Chrome / fallback in --app mode so the
@@ -45,7 +45,7 @@ if errorlevel 1 (
     if not errorlevel 1 goto ready
     set /a TRIES+=1
     if %TRIES% lss 30 goto waitloop
-    echo [Solomon Forge] Server did not respond after 30s. Check %APPDATA%\SolomonForge\server.log
+    echo [Solomon's Forge] Server did not respond after 30s. Check %APPDATA%\SolomonForge\server.log
     pause
     exit /b 1
 )

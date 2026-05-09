@@ -1,15 +1,15 @@
-# Solomon Forge
+# Solomon's Forge
 
 *Local-first AI chief of staff for Building Shultz — runs on your Windows PC, free, offline, with optional cloud upgrade.*
 
-> Solomon Forge is the desktop edition of Solomon. **Solomon** is the AI itself; **the Forge** is the workshop it lives in. Double-click the desktop icon and your private back office boots in its own window — no browser tab, no monthly subscription, no internet required when running on a local model.
+> Solomon's Forge is the desktop edition of Solomon. **Solomon** is the AI itself; **the Forge** is the workshop it lives in. Double-click the desktop icon and your private back office boots in its own window — no browser tab, no monthly subscription, no internet required when running on a local model.
 
 ## What's new in Forge
 
 - **Runs on your PC.** Wraps the existing Express + React stack in Electron with an embedded SQLite database. No MySQL, no VPS, no Docker required.
 - **100% free mode.** Toggle the Model Provider in Settings to **Ollama** and Solomon thinks locally with Llama 3 / Mistral / Qwen — zero API cost, fully offline.
 - **Manus Import.** A new page accepts a folder of markdown / docs and ingests them into Solomon's long-term memory, auto-categorized into business strategy, product, marketing, finance, and general.
-- **One-click installer.** Double-click `Install Solomon Forge.bat` on your desktop — it installs Node if missing, builds the app, registers a Windows service, and drops a shortcut on your desktop.
+- **One-click installer.** Double-click `Install Solomon's Forge.bat` on your desktop — it installs Node if missing, builds the app, registers a Windows service, and drops a shortcut on your desktop.
 
 ---
 

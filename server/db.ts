@@ -16,7 +16,7 @@ export async function getDb() {
   if (_db) return _db;
 
   if (isLocalMode()) {
-    // Desktop / Solomon Forge mode — single-file SQLite.
+    // Desktop / Solomon's Forge mode — single-file SQLite.
     const { openLocalDb } = await import("./db.local");
     const { drizzleShim } = openLocalDb();
     _localShim = drizzleShim;

@@ -19,6 +19,7 @@ import { listMemories, upsertMemory, deleteMemory, searchMemories } from "./solo
 import { importManusFiles } from "./solomon/manusImport";
 import { SOLOMON_TOOL_SCHEMAS, runTool, recentToolRuns } from "./solomon/tools";
 import { listScheduledJobs, runJobNow, tickScheduler } from "./solomon/scheduler";
+import { killAll, killHistory, listOperations } from "./solomon/killSwitch";
 import { notifyOwner } from "./_core/notification";
 import type { Message } from "./_core/llm";
 
@@ -411,6 +412,22 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) return [];
         return db.select().from(toolRuns).orderBy(desc(toolRuns.id)).limit(input?.limit ?? 50);
+      }),
+  }),
+
+  // ─── Task Master Kill Switch ─────────────────────────────────────────────
+  // One-click stop for every running operation: LLM streams, tool calls,
+  // scheduler ticks, imports. Used by the red kill button in the UI.
+  killSwitch: router({
+    status: protectedProcedure.query(() => ({
+      running: listOperations(),
+      history: killHistory(),
+    })),
+    killAll: protectedProcedure
+      .input(z.object({ reason: z.string().max(200).optional() }).optional())
+      .mutation(({ input }) => {
+        const summary = killAll(input?.reason ?? "manual kill switch");
+        return summary;
       }),
   }),
 });

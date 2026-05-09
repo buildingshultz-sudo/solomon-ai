@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
 
-// Solomon Forge desktop mode: the server bypasses auth, so the client's
+// Solomon's Forge desktop mode: the server bypasses auth, so the client's
 // "redirect to login" behaviour must be a no-op. We sniff the host — anything
 // loopback is treated as local.
 function isLocalDesktop(): boolean {

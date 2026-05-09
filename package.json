@@ -1,7 +1,7 @@
 {
   "name": "solomon-forge",
   "version": "2.0.0",
-  "description": "Solomon Forge \u2014 local-first builder/tradesman AI desktop app",
+  "description": "Solomon's Forge \u2014 local-first builder/tradesman AI desktop app",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -113,7 +113,7 @@
   },
   "build": {
     "appId": "com.shultzenterprises.solomonforge",
-    "productName": "Solomon Forge",
+    "productName": "Solomon's Forge",
     "directories": { "buildResources": "electron", "output": "release" },
     "files": [
       "dist/**",
@@ -131,7 +131,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Solomon Forge"
+      "shortcutName": "Solomon's Forge"
     }
   },
   "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af",

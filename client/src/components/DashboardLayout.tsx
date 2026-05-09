@@ -39,6 +39,7 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
+import { KillSwitch } from "./KillSwitch";
 
 const menuItems = [
   { icon: MessageSquare, label: "Chat", path: "/" },
@@ -163,7 +164,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: Props) {
                     <Flame className="size-4 text-primary" />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="font-semibold tracking-tight truncate">Solomon Forge</span>
+                    <span className="font-semibold tracking-tight truncate">Solomon's Forge</span>
                     <span className="solomon-stencil text-[10px] text-muted-foreground">SHULTZ ENT.</span>
                   </div>
                 </div>
@@ -252,6 +253,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: Props) {
         )}
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </SidebarInset>
+      <KillSwitch />
     </>
   );
 }
