@@ -1,0 +1,9 @@
+{
+  "query": "CREATE INDEX `tasks_status_idx` ON `tasks` (`status`);\nCREATE INDEX `tool_runs_tool_idx` ON `tool_runs` (`toolName`);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2UWZFyLQ1V1ACKT.96fb7852151b --database DJcb93qmMhMfaPEqtU5YNq --execute CREATE INDEX `tasks_status_idx` ON `tasks` (`status`);\nCREATE INDEX `tool_runs_tool_idx` ON `tool_runs` (`toolName`);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 654
+}

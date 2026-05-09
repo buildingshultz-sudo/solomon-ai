@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `settings` (\n\t`key` varchar(128) NOT NULL,\n\t`value` text NOT NULL,\n\t`category` varchar(64) NOT NULL DEFAULT 'general',\n\t`isSecret` boolean NOT NULL DEFAULT false,\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `settings_key` PRIMARY KEY(`key`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2UWZFyLQ1V1ACKT.96fb7852151b --database DJcb93qmMhMfaPEqtU5YNq --execute CREATE TABLE IF NOT EXISTS `settings` (\n\t`key` varchar(128) NOT NULL,\n\t`value` text NOT NULL,\n\t`category` varchar(64) NOT NULL DEFAULT 'general',\n\t`isSecret` boolean NOT NULL DEFAULT false,\n\t`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n\tCONSTRAINT `settings_key` PRIMARY KEY(`key`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 343
+}

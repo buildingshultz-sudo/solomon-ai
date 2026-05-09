@@ -1,0 +1,31 @@
+{
+  "query": "SHOW TABLES;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway06.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2UWZFyLQ1V1ACKT.96fb7852151b --database DJcb93qmMhMfaPEqtU5YNq --execute SHOW TABLES;",
+  "rows": [
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "__drizzle_migrations"
+    },
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "conversations"
+    },
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "finance_entries"
+    },
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "memories"
+    },
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "messages"
+    },
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "scheduled_jobs"
+    },
+    {
+      "Tables_in_DJcb93qmMhMfaPEqtU5YNq": "users"
+    }
+  ],
+  "messages": [],
+  "stdout": "Tables_in_DJcb93qmMhMfaPEqtU5YNq\n__drizzle_migrations\nconversations\nfinance_entries\nmemories\nmessages\nscheduled_jobs\nusers\n",
+  "stderr": "",
+  "execution_time_ms": 385
+}

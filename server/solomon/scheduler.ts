@@ -1,0 +1,226 @@
+/**
+ * Solomon autonomous scheduler.
+ *
+ * A lightweight in-process tick loop that:
+ *   - reads enabled rows from `scheduled_jobs`
+ *   - decides which are due (compares cron → next due timestamp)
+ *   - runs the corresponding handler
+ *   - stamps lastRunAt / lastResult / nextRunAt
+ *
+ * Handlers covered:
+ *   - morning_brief: ask Solomon to summarize the day, push owner notification
+ *   - email_check: stub (calls gmail_inbox tool)
+ *   - youtube_analytics: stub (calls youtube_analytics tool)
+ *   - content_calendar / social_post / custom: stub
+ *
+ * Cron support is intentionally minimal — we parse a standard 5-field cron
+ * expression, which is sufficient for the patterns Solomon uses (daily, hourly).
+ * Examples: '0 6 * * *' (06:00 every day), '0 *(/2) * * *' (every two hours).
+ */
+import { desc, eq } from "drizzle-orm";
+import { getDb } from "../db";
+import { scheduledJobs, tasks } from "../../drizzle/schema";
+import { runTool } from "./tools";
+import { runSolomon } from "./agent";
+import { notifyOwner } from "../_core/notification";
+
+export type CronSchedule = {
+  minute: number[];
+  hour: number[];
+  dom: number[]; // day of month
+  month: number[];
+  dow: number[]; // day of week 0=Sun
+};
+
+export function parseCron(expr: string): CronSchedule {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) throw new Error(`Invalid cron: "${expr}"`);
+  const ranges: [number, number][] = [
+    [0, 59],
+    [0, 23],
+    [1, 31],
+    [1, 12],
+    [0, 6],
+  ];
+  const fields = parts.map((p, i) => expandField(p, ranges[i][0], ranges[i][1]));
+  return { minute: fields[0], hour: fields[1], dom: fields[2], month: fields[3], dow: fields[4] };
+}
+
+function expandField(field: string, min: number, max: number): number[] {
+  const out: number[] = [];
+  for (const segment of field.split(",")) {
+    const stepMatch = segment.match(/^(\*|\d+(?:-\d+)?)(?:\/(\d+))?$/);
+    if (!stepMatch) throw new Error(`Bad cron field: "${field}"`);
+    const [, base, stepRaw] = stepMatch;
+    const step = stepRaw ? parseInt(stepRaw, 10) : 1;
+    let lo = min;
+    let hi = max;
+    if (base !== "*") {
+      if (base.includes("-")) {
+        const [a, b] = base.split("-").map(Number);
+        lo = a; hi = b;
+      } else {
+        const v = parseInt(base, 10);
+        lo = v; hi = stepRaw ? max : v;
+      }
+    }
+    for (let v = lo; v <= hi; v += step) out.push(v);
+  }
+  return Array.from(new Set(out)).sort((a, b) => a - b);
+}
+
+export function nextRun(expr: string, after: Date = new Date()): Date {
+  const cron = parseCron(expr);
+  const d = new Date(after.getTime() + 60_000); // start at next minute
+  d.setSeconds(0, 0);
+  for (let i = 0; i < 366 * 24 * 60; i++) {
+    if (
+      cron.minute.includes(d.getMinutes()) &&
+      cron.hour.includes(d.getHours()) &&
+      cron.dom.includes(d.getDate()) &&
+      cron.month.includes(d.getMonth() + 1) &&
+      cron.dow.includes(d.getDay())
+    ) {
+      return new Date(d);
+    }
+    d.setMinutes(d.getMinutes() + 1);
+  }
+  throw new Error(`No upcoming run found for "${expr}"`);
+}
+
+// ─── Handlers ──────────────────────────────────────────────────────────────────
+async function runMorningBrief(): Promise<{ summary: string }> {
+  // Compose a tight summary using Solomon itself (cheap tier).
+  const taskRows = await runTool("task_list", { status: "active", limit: 10 }, { triggeredBy: "scheduler" });
+  const finance = await runTool("finance_summary", {}, { triggeredBy: "scheduler" });
+  const prompt = `Generate this morning's brief for Jed. Active tasks: ${JSON.stringify(taskRows.data)}. Finance summary: ${JSON.stringify(finance.data)}. Keep it to 5 lines max, plain spoken.`;
+
+  let summary = "";
+  try {
+    const r = await runSolomon({ conversation: [{ role: "user", content: prompt }], override: "fast" });
+    summary = r.assistant;
+  } catch (e) {
+    summary = `Morning brief generation failed: ${(e as Error).message}`;
+  }
+
+  // Notify owner.
+  try {
+    await notifyOwner({ title: "Solomon — Morning Brief", content: summary || "Brief generated." });
+  } catch (e) {
+    console.warn("[Solomon] morning brief notify failed", e);
+  }
+  return { summary };
+}
+
+async function runEmailCheck(): Promise<{ note: string }> {
+  const r = await runTool("gmail_inbox", { query: "is:unread newer_than:1d", maxResults: 20 }, { triggeredBy: "scheduler" });
+  return { note: r.message ?? `gmail_inbox status=${r.status}` };
+}
+
+async function runYouTubeAnalytics(): Promise<{ note: string }> {
+  const r = await runTool("youtube_analytics", { range: "last_7_days" }, { triggeredBy: "scheduler" });
+  return { note: r.message ?? `youtube_analytics status=${r.status}` };
+}
+
+async function runContentCalendar(): Promise<{ note: string }> {
+  // For now: just ensures a "draft this week's content" task exists.
+  const db = await getDb();
+  if (!db) return { note: "no db" };
+  await db.insert(tasks).values({
+    title: "Draft this week's Building Shultz content",
+    description: "Auto-generated by Solomon scheduler.",
+    priority: "medium",
+    project: "buildingshultz",
+    autonomous: true,
+  });
+  return { note: "Created weekly content draft task." };
+}
+
+const HANDLERS: Record<string, () => Promise<unknown>> = {
+  morning_brief: runMorningBrief,
+  email_check: runEmailCheck,
+  youtube_analytics: runYouTubeAnalytics,
+  content_calendar: runContentCalendar,
+  social_post: async () => ({ note: "social_post stub — wire to social tool" }),
+  custom: async () => ({ note: "custom job — no handler" }),
+};
+
+// ─── Tick loop ─────────────────────────────────────────────────────────────────
+type SchedulerHandle = { stop: () => void };
+
+let started = false;
+let handle: SchedulerHandle | null = null;
+
+export async function tickScheduler(now: Date = new Date()): Promise<{ ran: number }> {
+  const db = await getDb();
+  if (!db) return { ran: 0 };
+
+  const jobs = await db.select().from(scheduledJobs).where(eq(scheduledJobs.enabled, true));
+  let ran = 0;
+  for (const job of jobs) {
+    let due = false;
+    if (job.nextRunAt) {
+      due = job.nextRunAt.getTime() <= now.getTime();
+    } else {
+      // First time: compute nextRunAt and persist; do NOT run yet.
+      try {
+        const next = nextRun(job.cron, now);
+        await db.update(scheduledJobs).set({ nextRunAt: next }).where(eq(scheduledJobs.id, job.id));
+      } catch (e) {
+        console.warn(`[Scheduler] bad cron on job ${job.name}: ${(e as Error).message}`);
+      }
+      continue;
+    }
+    if (!due) continue;
+
+    const handler = HANDLERS[job.kind];
+    if (!handler) continue;
+    let result: unknown;
+    try {
+      result = await handler();
+    } catch (e) {
+      result = { error: (e as Error).message };
+    }
+    const next = nextRun(job.cron, now);
+    await db
+      .update(scheduledJobs)
+      .set({ lastRunAt: now, lastResult: JSON.stringify(result).slice(0, 4000), nextRunAt: next })
+      .where(eq(scheduledJobs.id, job.id));
+    ran++;
+  }
+  return { ran };
+}
+
+export function startScheduler(intervalMs = 60_000): SchedulerHandle {
+  if (started && handle) return handle;
+  const id = setInterval(() => {
+    tickScheduler().catch((e) => console.warn("[Scheduler] tick error:", e));
+  }, intervalMs);
+  started = true;
+  handle = { stop: () => { clearInterval(id); started = false; } };
+  return handle;
+}
+
+export async function listScheduledJobs() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(scheduledJobs).orderBy(desc(scheduledJobs.id));
+}
+
+export async function runJobNow(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [job] = await db.select().from(scheduledJobs).where(eq(scheduledJobs.id, id)).limit(1);
+  if (!job) throw new Error("Job not found");
+  const handler = HANDLERS[job.kind];
+  if (!handler) throw new Error(`No handler for kind ${job.kind}`);
+  const result = await handler();
+  const now = new Date();
+  let next: Date | undefined;
+  try { next = nextRun(job.cron, now); } catch {}
+  await db
+    .update(scheduledJobs)
+    .set({ lastRunAt: now, lastResult: JSON.stringify(result).slice(0, 4000), nextRunAt: next })
+    .where(eq(scheduledJobs.id, id));
+  return result;
+}
