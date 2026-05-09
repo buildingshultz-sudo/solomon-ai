@@ -25,10 +25,13 @@ export async function getDb() {
 
   if (process.env.DATABASE_URL) {
     try {
-      // Lazy-load the mysql2 driver only when a DATABASE_URL is set, so local
-      // (sql.js) mode does not require the `mysql2` package to be installed.
-      const { drizzle } = await import("drizzle-orm/mysql2");
-      _db = drizzle(process.env.DATABASE_URL);
+      // Lazy-load the mysql2 driver only when a DATABASE_URL is set. We hide
+      // the specifier behind a dynamic string so the bundler does not try to
+      // pre-resolve `drizzle-orm/mysql2` (and transitively `mysql2`) at build
+      // time. In local (sql.js) mode this branch never executes.
+      const mysqlSpec = ["drizzle-orm", "mysql2"].join("/");
+      const mod: any = await import(/* @vite-ignore */ mysqlSpec);
+      _db = mod.drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

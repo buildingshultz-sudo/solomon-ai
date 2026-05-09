@@ -1,14 +1,37 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Express } from "express";
 import { createServer } from "http";
 import net from "net";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
 import { startScheduler } from "../solomon/scheduler";
+
+// Production static-file server. Inlined here (instead of imported from
+// ./vite.ts) so the production bundle never references the `vite` package.
+function serveStatic(app: Express) {
+  // Bundle is at <portable>/dist/index.js, static assets at <portable>/dist/public.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const distPath =
+    process.env.NODE_ENV === "development"
+      ? path.resolve(here, "../..", "dist", "public")
+      : path.resolve(here, "public");
+  if (!fs.existsSync(distPath)) {
+    console.error(
+      `Could not find the build directory: ${distPath}, make sure to build the client first`
+    );
+  }
+  app.use(express.static(distPath));
+  // SPA fallback — anything we haven't handled returns index.html.
+  app.use("*", (_req, res) => {
+    res.sendFile(path.resolve(distPath, "index.html"));
+  });
+}
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -56,9 +79,14 @@ async function startServer() {
       createContext,
     })
   );
-  // development mode uses Vite, production mode uses static files
+  // development mode uses Vite, production mode uses static files.
+  // The vite-based dev middleware is loaded via a dynamic import string so
+  // esbuild does not include `./vite.ts` (and its `import "vite"`) in the
+  // production bundle. In production builds this branch never executes.
   if (process.env.NODE_ENV === "development") {
-    await setupVite(app, server);
+    const viteModulePath = "./" + "vite.js";
+    const viteModule: any = await import(/* @vite-ignore */ viteModulePath);
+    await viteModule.setupVite(app, server);
   } else {
     serveStatic(app);
   }
