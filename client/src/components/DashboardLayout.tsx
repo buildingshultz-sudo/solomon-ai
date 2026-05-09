@@ -28,6 +28,7 @@ import {
   Flame,
   Hammer,
   ListChecks,
+  Upload,
   LogOut,
   MessageSquare,
   PanelLeft,
@@ -46,6 +47,7 @@ const menuItems = [
   { icon: Wrench, label: "Tools", path: "/tools" },
   { icon: Coins, label: "Finance", path: "/finance" },
   { icon: CalendarClock, label: "Scheduler", path: "/scheduler" },
+  { icon: Upload, label: "Manus Import", path: "/import" },
   { icon: SettingsIcon, label: "Settings", path: "/settings" },
 ];
 
@@ -79,7 +81,7 @@ export default function DashboardLayout({
             <div className="size-14 rounded-md bg-primary/15 border border-primary/30 flex items-center justify-center">
               <Flame className="size-7 text-primary" />
             </div>
-            <div className="solomon-stencil text-xs text-muted-foreground">SOLOMON / SHULTZ ENTERPRISES</div>
+            <div className="solomon-stencil text-xs text-muted-foreground">SOLOMON FORGE / SHULTZ ENTERPRISES</div>
             <h1 className="text-2xl font-semibold tracking-tight text-center">Sign in to the shop floor</h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
               Solomon runs the back office. Sign in to start a conversation, check tasks, and review the books.
@@ -161,7 +163,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: Props) {
                     <Flame className="size-4 text-primary" />
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="font-semibold tracking-tight truncate">Solomon</span>
+                    <span className="font-semibold tracking-tight truncate">Solomon Forge</span>
                     <span className="solomon-stencil text-[10px] text-muted-foreground">SHULTZ ENT.</span>
                   </div>
                 </div>
@@ -199,7 +201,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: Props) {
                   <span className="solomon-stencil text-[10px]">STATUS</span>
                 </div>
                 <p className="text-xs mt-2 text-foreground/80 leading-relaxed">
-                  Self-hosted. Scheduler ticks once a minute. Falls back to built-in LLM if no OpenAI key is set.
+                  Local-first. Scheduler ticks once a minute. Switch to Ollama in Settings for 100% free, offline operation.
                 </p>
               </div>
             )}

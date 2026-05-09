@@ -1,4 +1,6 @@
 import { ENV } from "./env";
+import { getDb } from "../db";
+import { settings } from "../../drizzle/schema";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -209,16 +211,74 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider resolution.
+//
+// Solomon Forge supports two LLM backends:
+//   - "openai"  : the original OpenAI-compatible endpoint (cloud, paid)
+//   - "ollama"  : a local Ollama server speaking its OpenAI-compat /v1 API
+//                 (free, fully offline, runs on the user's PC)
+//
+// The active provider, base URL, model name and (optional) API key are read
+// from the settings table at request time so the user can flip modes from the
+// Settings page without restarting the server. Environment variables provide
+// the boot defaults so the very first request also works.
+// ─────────────────────────────────────────────────────────────────────────────
 
-const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
+export type ProviderConfig = {
+  provider: "openai" | "ollama";
+  baseUrl: string;
+  apiKey: string;
+  model: string;
 };
+
+async function loadProviderConfig(): Promise<ProviderConfig> {
+  // Boot defaults from env.
+  const envProvider = (process.env.MODEL_PROVIDER || "openai").toLowerCase();
+  const envOllamaBase = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
+  const envOllamaModel = process.env.OLLAMA_MODEL || "llama3.1:8b";
+
+  let provider: "openai" | "ollama" = envProvider === "ollama" ? "ollama" : "openai";
+  let baseUrl =
+    provider === "ollama"
+      ? envOllamaBase
+      : ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+        ? ENV.forgeApiUrl
+        : "https://forge.manus.im";
+  let apiKey = ENV.forgeApiKey || "";
+  let model = provider === "ollama" ? envOllamaModel : "gpt-4o-mini";
+
+  // Live overrides from settings (set by the Settings page).
+  try {
+    const db = await getDb();
+    if (db) {
+      const rows = await db.select().from(settings);
+      const map = new Map(rows.map((r) => [r.key, r.value]));
+      const provSetting = (map.get("provider.kind") || "").toLowerCase();
+      if (provSetting === "ollama" || provSetting === "openai") {
+        provider = provSetting;
+      }
+      if (provider === "ollama") {
+        baseUrl = map.get("provider.ollama_base") || baseUrl;
+        model = map.get("provider.ollama_model") || model;
+      } else {
+        baseUrl = map.get("provider.openai_base") || baseUrl;
+        model = map.get("provider.openai_model") || model;
+        apiKey = map.get("apikey.openai") || apiKey;
+      }
+    }
+  } catch {
+    // Settings table may not exist yet on first boot; fall through to env.
+  }
+
+  return { provider, baseUrl, apiKey, model };
+}
+
+function buildChatUrl(cfg: ProviderConfig): string {
+  // Ollama exposes /v1/chat/completions on its base URL (port 11434).
+  // OpenAI uses the same path. Strip trailing slash and append.
+  return `${cfg.baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
+}
 
 const normalizeResponseFormat = ({
   responseFormat,
@@ -266,7 +326,13 @@ const normalizeResponseFormat = ({
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+  const cfg = await loadProviderConfig();
+
+  if (cfg.provider === "openai" && !cfg.apiKey) {
+    throw new Error(
+      "OpenAI provider selected but no API key configured. Either set apikey.openai in Settings or switch the provider to Ollama (free, local)."
+    );
+  }
 
   const {
     messages,
@@ -280,7 +346,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   } = params;
 
   const payload: Record<string, unknown> = {
-    model: "gemini-2.5-flash",
+    model: cfg.model,
     messages: messages.map(normalizeMessage),
   };
 
@@ -296,9 +362,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  payload.max_tokens = 32768
-  payload.thinking = {
-    "budget_tokens": 128
+  // Ollama doesn't accept the proprietary `thinking` field; only set it for the
+  // hosted forge endpoint.
+  if (cfg.provider === "openai") {
+    payload.max_tokens = 32768;
+    payload.thinking = { budget_tokens: 128 };
   }
 
   const normalizedResponseFormat = normalizeResponseFormat({
@@ -312,19 +380,36 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+  };
+  if (cfg.apiKey) {
+    headers.authorization = `Bearer ${cfg.apiKey}`;
+  }
+
+  const url = buildChatUrl(cfg);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    if (cfg.provider === "ollama") {
+      throw new Error(
+        `Cannot reach local Ollama at ${cfg.baseUrl}. Make sure Ollama is running ` +
+          `("ollama serve") and the model "${cfg.model}" is pulled ("ollama pull ${cfg.model}"). ` +
+          `Underlying error: ${String(err)}`
+      );
+    }
+    throw err;
+  }
 
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+      `LLM invoke failed [${cfg.provider} → ${cfg.model}]: ${response.status} ${response.statusText} – ${errorText}`
     );
   }
 

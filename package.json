@@ -1,6 +1,7 @@
 {
-  "name": "solomon-ai",
-  "version": "1.0.0",
+  "name": "solomon-forge",
+  "version": "2.0.0",
+  "description": "Solomon Forge \u2014 local-first builder/tradesman AI desktop app",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -10,7 +11,11 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate"
+    "db:push": "drizzle-kit generate && drizzle-kit migrate",
+    "start:local": "NODE_ENV=production SOLOMON_LOCAL=1 node dist/index.js",
+    "electron:dev": "electron electron/main.cjs",
+    "electron:build": "electron-builder --win --x64 -c.extraMetadata.main=electron/main.cjs",
+    "package:windows": "node desktop/build-installer.cjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",
@@ -61,6 +66,7 @@
     "jose": "6.1.0",
     "lucide-react": "^0.453.0",
     "mysql2": "^3.15.0",
+    "better-sqlite3": "^11.3.0",
     "nanoid": "^5.1.5",
     "next-themes": "^0.4.6",
     "react": "^19.2.1",
@@ -101,7 +107,32 @@
     "typescript": "5.9.3",
     "vite": "^7.1.7",
     "vite-plugin-manus-runtime": "^0.0.57",
-    "vitest": "^2.1.4"
+    "vitest": "^2.1.4",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.shultzenterprises.solomonforge",
+    "productName": "Solomon Forge",
+    "directories": { "buildResources": "electron", "output": "release" },
+    "files": [
+      "dist/**",
+      "electron/**",
+      "package.json"
+    ],
+    "asar": false,
+    "win": {
+      "target": ["nsis"],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Solomon Forge"
+    }
   },
   "packageManager": "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679aa834db094987129aa4d488b86df57f7b634981b2f827cdcacc698cc0cfb88af",
   "pnpm": {

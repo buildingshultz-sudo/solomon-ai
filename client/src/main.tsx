@@ -15,8 +15,12 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (typeof window === "undefined") return;
 
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
-
   if (!isUnauthorized) return;
+
+  // Desktop mode (Solomon Forge) runs on loopback with no auth — do not
+  // redirect to a remote OAuth portal that doesn't apply here.
+  const host = window.location.hostname;
+  if (host === "127.0.0.1" || host === "localhost" || host === "::1") return;
 
   window.location.href = getLoginUrl();
 };

@@ -3,6 +3,15 @@ import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { useCallback, useEffect, useMemo } from "react";
 
+// Solomon Forge desktop mode: the server bypasses auth, so the client's
+// "redirect to login" behaviour must be a no-op. We sniff the host — anything
+// loopback is treated as local.
+function isLocalDesktop(): boolean {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname;
+  return h === "127.0.0.1" || h === "localhost" || h === "::1";
+}
+
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
   redirectPath?: string;
@@ -65,6 +74,7 @@ export function useAuth(options?: UseAuthOptions) {
     if (meQuery.isLoading || logoutMutation.isPending) return;
     if (state.user) return;
     if (typeof window === "undefined") return;
+    if (isLocalDesktop()) return; // no login screen in desktop mode
     if (window.location.pathname === redirectPath) return;
 
     window.location.href = redirectPath

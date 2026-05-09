@@ -16,6 +16,7 @@ import {
 import { runSolomon } from "./solomon/agent";
 import { decideRoute } from "./solomon/router";
 import { listMemories, upsertMemory, deleteMemory, searchMemories } from "./solomon/memory";
+import { importManusFiles } from "./solomon/manusImport";
 import { SOLOMON_TOOL_SCHEMAS, runTool, recentToolRuns } from "./solomon/tools";
 import { listScheduledJobs, runJobNow, tickScheduler } from "./solomon/scheduler";
 import { notifyOwner } from "./_core/notification";
@@ -330,7 +331,26 @@ export const appRouter = router({
     recentRuns: protectedProcedure.query(() => recentToolRuns(50)),
   }),
 
-  // ─── Solomon: settings ────────────────────────────────────────────────────
+  // ─── Solomon: Manus Import ─────────────────────────────────────
+  manusImport: router({
+    ingest: protectedProcedure
+      .input(
+        z.object({
+          files: z
+            .array(
+              z.object({
+                path: z.string(),
+                name: z.string(),
+                content: z.string(),
+              })
+            )
+            .max(2000),
+        })
+      )
+      .mutation(async ({ input }) => importManusFiles(input.files)),
+  }),
+
+  // ─── Solomon: settings ───────────────────────────────────────────────
   settings: router({
     list: protectedProcedure.query(async () => {
       const db = await getDb();

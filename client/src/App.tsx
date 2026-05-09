@@ -12,6 +12,7 @@ import Tools from "./pages/Tools";
 import Finance from "./pages/Finance";
 import Scheduler from "./pages/Scheduler";
 import Settings from "./pages/Settings";
+import ManusImport from "./pages/ManusImport";
 
 function Router() {
   return (
@@ -24,6 +25,7 @@ function Router() {
         <Route path="/finance" component={Finance} />
         <Route path="/scheduler" component={Scheduler} />
         <Route path="/settings" component={Settings} />
+        <Route path="/import" component={ManusImport} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

@@ -3,11 +3,28 @@ import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
-let _db: ReturnType<typeof drizzle> | null = null;
+let _db: any | null = null;
+let _localShim: any | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
+function isLocalMode(): boolean {
+  return process.env.SOLOMON_LOCAL === "1" || process.env.SOLOMON_LOCAL === "true";
+}
+
+// Lazily create the drizzle instance (or local SQLite shim) so local tooling
+// can run without a network DB.
 export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
+  if (_db) return _db;
+
+  if (isLocalMode()) {
+    // Desktop / Solomon Forge mode — single-file SQLite.
+    const { openLocalDb } = await import("./db.local");
+    const { drizzleShim } = openLocalDb();
+    _localShim = drizzleShim;
+    _db = drizzleShim;
+    return _db;
+  }
+
+  if (process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
