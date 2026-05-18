@@ -138,7 +138,7 @@ const normalizeContentPart = (
   throw new Error("Unsupported message content part");
 };
 
-const normalizeMessage = (message: Message) => {
+export const normalizeMessage = (message: Message) => {
   const { role, name, tool_call_id } = message;
 
   if (role === "tool" || role === "function") {
@@ -172,7 +172,7 @@ const normalizeMessage = (message: Message) => {
   };
 };
 
-const normalizeToolChoice = (
+export const normalizeToolChoice = (
   toolChoice: ToolChoice | undefined,
   tools: Tool[] | undefined
 ): "none" | "auto" | ToolChoiceExplicit | undefined => {
@@ -274,13 +274,13 @@ async function loadProviderConfig(): Promise<ProviderConfig> {
   return { provider, baseUrl, apiKey, model };
 }
 
-function buildChatUrl(cfg: ProviderConfig): string {
+export function buildChatUrl(cfg: ProviderConfig): string {
   // Ollama exposes /v1/chat/completions on its base URL (port 11434).
   // OpenAI uses the same path. Strip trailing slash and append.
   return `${cfg.baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
 }
 
-const normalizeResponseFormat = ({
+export const normalizeResponseFormat = ({
   responseFormat,
   response_format,
   outputSchema,
