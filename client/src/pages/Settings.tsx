@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Cloud, Cpu, Eye, EyeOff, KeyRound, Save, Settings as SettingsIcon, Sparkles, Zap, Send, Plug, Globe, Power, PowerOff, Loader2 } from "lucide-react";
+import { Cloud, Cpu, Eye, EyeOff, KeyRound, Save, Settings as SettingsIcon, Sparkles, Zap, Send, Plug, Globe, Power, PowerOff, Loader2, Network } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -19,6 +19,11 @@ const PROVIDER_FIELDS_OLLAMA = [
   { key: "provider.ollama_model", label: "Ollama model", placeholder: "llama3.1:8b", help: "Pull with `ollama pull llama3.1:8b` first." },
 ];
 
+const PROVIDER_FIELDS_OPENROUTER = [
+  { key: "provider.openrouter_base", label: "OpenRouter base URL", placeholder: "https://openrouter.ai/api", help: "Leave blank to use the default." },
+  { key: "provider.openrouter_model", label: "Model", placeholder: "anthropic/claude-3.5-sonnet", help: "Any model on openrouter.ai/models — e.g. google/gemini-2.0-flash-001, deepseek/deepseek-chat-v3-0324:free" },
+];
+
 const ROUTING_KEYS = [
   { key: "routing.fast_model", label: "Fast model", placeholder: "gpt-4o-mini", help: "Used for cheap / quick tasks." },
   { key: "routing.smart_model", label: "Smart model", placeholder: "gpt-4o or gpt-5", help: "Used for complex reasoning." },
@@ -26,6 +31,7 @@ const ROUTING_KEYS = [
 ];
 
 const API_KEYS = [
+  { key: "apikey.openrouter", label: "OpenRouter API key" },
   { key: "apikey.openai", label: "OpenAI API key" },
   { key: "apikey.youtube", label: "YouTube Data API key" },
   { key: "apikey.gmail_oauth", label: "Gmail OAuth refresh token" },
@@ -174,9 +180,14 @@ export default function Settings() {
 }
 
 function ProviderTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
-  const current = (map.get("provider.kind")?.value || "openai") as "openai" | "ollama";
-  const [provider, setProvider] = useState<"openai" | "ollama">(current);
+  const current = (map.get("provider.kind")?.value || "openai") as "openai" | "ollama" | "openrouter";
+  const [provider, setProvider] = useState<"openai" | "ollama" | "openrouter">(current);
   useEffect(() => setProvider(current), [current]);
+
+  function selectProvider(p: "openai" | "ollama" | "openrouter") {
+    setProvider(p);
+    upsert.mutate({ key: "provider.kind", value: p, category: "provider", isSecret: false });
+  }
 
   return (
     <div className="space-y-4">
@@ -186,15 +197,23 @@ function ProviderTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-xs text-muted-foreground">
-            Choose where Solomon does its thinking. <strong>Ollama</strong> runs Llama 3 / Mistral / Qwen locally on this PC — free, offline, zero API cost. <strong>OpenAI</strong> uses the cloud API and charges per token.
+            Choose where Solomon does its thinking. <strong>OpenRouter</strong> is the easiest cloud option — one API key, access to Claude, GPT-4o, Gemini, and more.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <button
               type="button"
-              onClick={() => {
-                setProvider("ollama");
-                upsert.mutate({ key: "provider.kind", value: "ollama", category: "provider", isSecret: false });
-              }}
+              onClick={() => selectProvider("openrouter")}
+              className={`flex items-start gap-3 rounded-md border p-4 text-left transition-colors ${provider === "openrouter" ? "border-primary bg-primary/10" : "border-border hover:bg-accent/40"}`}
+            >
+              <Network className="size-5 text-primary shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-sm">OpenRouter ✦ recommended</div>
+                <div className="text-xs text-muted-foreground mt-0.5">One key, 300+ models. Claude, GPT-4o, Gemini, DeepSeek.</div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => selectProvider("ollama")}
               className={`flex items-start gap-3 rounded-md border p-4 text-left transition-colors ${provider === "ollama" ? "border-primary bg-primary/10" : "border-border hover:bg-accent/40"}`}
             >
               <Cpu className="size-5 text-primary shrink-0 mt-0.5" />
@@ -205,21 +224,43 @@ function ProviderTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setProvider("openai");
-                upsert.mutate({ key: "provider.kind", value: "openai", category: "provider", isSecret: false });
-              }}
+              onClick={() => selectProvider("openai")}
               className={`flex items-start gap-3 rounded-md border p-4 text-left transition-colors ${provider === "openai" ? "border-primary bg-primary/10" : "border-border hover:bg-accent/40"}`}
             >
               <Cloud className="size-5 text-primary shrink-0 mt-0.5" />
               <div>
                 <div className="font-semibold text-sm">OpenAI (cloud, paid)</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Best quality. Requires API key. Costs per request.</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Direct OpenAI or compatible gateway.</div>
               </div>
             </button>
           </div>
 
-          {provider === "ollama" ? (
+          {provider === "openrouter" && (
+            <div className="space-y-3 pt-3 border-t">
+              {PROVIDER_FIELDS_OPENROUTER.map((k) => (
+                <SettingRow
+                  key={k.key}
+                  label={k.label}
+                  help={k.help}
+                  placeholder={k.placeholder}
+                  initial={map.get(k.key)?.value ?? ""}
+                  onSave={(value) =>
+                    upsert.mutate({ key: k.key, value, category: "provider", isSecret: false })
+                  }
+                />
+              ))}
+              <div className="rounded-md bg-muted/50 p-3 text-xs leading-relaxed space-y-1">
+                <p className="font-semibold">Setup (2 steps):</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+                  <li>Go to <strong>openrouter.ai</strong> → sign up → Keys → Create key → copy it.</li>
+                  <li>Paste it into <strong>Settings → API Keys → OpenRouter API key</strong> and hit Save.</li>
+                </ol>
+                <p className="text-muted-foreground pt-1">Default model: <code>anthropic/claude-3.5-sonnet</code>. Change the model above to any ID from openrouter.ai/models.</p>
+              </div>
+            </div>
+          )}
+
+          {provider === "ollama" && (
             <div className="space-y-3 pt-3 border-t">
               {PROVIDER_FIELDS_OLLAMA.map((k) => (
                 <SettingRow
@@ -242,7 +283,9 @@ function ProviderTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
                 </ol>
               </div>
             </div>
-          ) : (
+          )}
+
+          {provider === "openai" && (
             <div className="space-y-3 pt-3 border-t">
               {PROVIDER_FIELDS_OPENAI.map((k) => (
                 <SettingRow
@@ -257,7 +300,7 @@ function ProviderTab({ map, upsert }: { map: Map<string, any>; upsert: any }) {
                 />
               ))}
               <p className="text-xs text-muted-foreground">
-                Set your <code>apikey.openai</code> on the <strong>API keys</strong> tab.
+                Set your API key on the <strong>API Keys</strong> tab.
               </p>
             </div>
           )}
