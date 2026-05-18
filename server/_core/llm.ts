@@ -226,7 +226,7 @@ export const normalizeToolChoice = (
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type ProviderConfig = {
-  provider: "openai" | "ollama";
+  provider: "openai" | "ollama" | "openrouter";
   baseUrl: string;
   apiKey: string;
   model: string;
@@ -238,15 +238,19 @@ async function loadProviderConfig(): Promise<ProviderConfig> {
   const envOllamaBase = process.env.OLLAMA_BASE_URL || "http://127.0.0.1:11434";
   const envOllamaModel = process.env.OLLAMA_MODEL || "llama3.1:8b";
 
-  let provider: "openai" | "ollama" = envProvider === "ollama" ? "ollama" : "openai";
+  let provider: "openai" | "ollama" | "openrouter" =
+    envProvider === "ollama" ? "ollama" : envProvider === "openrouter" ? "openrouter" : "openai";
   let baseUrl =
     provider === "ollama"
       ? envOllamaBase
-      : ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-        ? ENV.forgeApiUrl
-        : "https://forge.manus.im";
-  let apiKey = ENV.forgeApiKey || "";
-  let model = provider === "ollama" ? envOllamaModel : "gpt-4o-mini";
+      : provider === "openrouter"
+        ? "https://openrouter.ai/api"
+        : ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
+          ? ENV.forgeApiUrl
+          : "https://forge.manus.im";
+  let apiKey = provider === "openrouter" ? (process.env.OPENROUTER_API_KEY || "") : (ENV.forgeApiKey || "");
+  let model =
+    provider === "ollama" ? envOllamaModel : provider === "openrouter" ? "anthropic/claude-3.5-sonnet" : "gpt-4o-mini";
 
   // Live overrides from settings (set by the Settings page).
   try {
@@ -255,12 +259,16 @@ async function loadProviderConfig(): Promise<ProviderConfig> {
       const rows = await db.select().from(settings);
       const map = new Map(rows.map((r) => [r.key, r.value]));
       const provSetting = (map.get("provider.kind") || "").toLowerCase();
-      if (provSetting === "ollama" || provSetting === "openai") {
+      if (provSetting === "ollama" || provSetting === "openai" || provSetting === "openrouter") {
         provider = provSetting;
       }
       if (provider === "ollama") {
         baseUrl = map.get("provider.ollama_base") || baseUrl;
         model = map.get("provider.ollama_model") || model;
+      } else if (provider === "openrouter") {
+        baseUrl = map.get("provider.openrouter_base") || baseUrl;
+        model = map.get("provider.openrouter_model") || model;
+        apiKey = map.get("apikey.openrouter") || apiKey;
       } else {
         baseUrl = map.get("provider.openai_base") || baseUrl;
         model = map.get("provider.openai_model") || model;
@@ -334,6 +342,12 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     );
   }
 
+  if (cfg.provider === "openrouter" && !cfg.apiKey) {
+    throw new Error(
+      "OpenRouter provider selected but no API key configured. Set apikey.openrouter in Settings → API Keys."
+    );
+  }
+
   const {
     messages,
     tools,
@@ -362,8 +376,7 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.tool_choice = normalizedToolChoice;
   }
 
-  // Ollama doesn't accept the proprietary `thinking` field; only set it for the
-  // hosted forge endpoint.
+  // Ollama and OpenRouter don't accept the proprietary `thinking` field.
   if (cfg.provider === "openai") {
     payload.max_tokens = 32768;
     payload.thinking = { budget_tokens: 128 };
@@ -385,6 +398,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   };
   if (cfg.apiKey) {
     headers.authorization = `Bearer ${cfg.apiKey}`;
+  }
+  if (cfg.provider === "openrouter") {
+    headers["HTTP-Referer"] = "https://solomonsforge.app";
+    headers["X-Title"] = "Solomon's Forge";
   }
 
   const url = buildChatUrl(cfg);
@@ -416,6 +433,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
           `("ollama serve") and the model "${cfg.model}" is pulled ("ollama pull ${cfg.model}"). ` +
           `Underlying error: ${String(err)}`
       );
+    }
+    if (cfg.provider === "openrouter") {
+      throw new Error(`Cannot reach OpenRouter at ${cfg.baseUrl}. Check your internet connection. Underlying error: ${String(err)}`);
     }
     throw err;
   }
