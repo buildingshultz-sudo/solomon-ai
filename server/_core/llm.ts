@@ -240,17 +240,33 @@ async function loadProviderConfig(): Promise<ProviderConfig> {
 
   let provider: "openai" | "ollama" | "openrouter" =
     envProvider === "ollama" ? "ollama" : envProvider === "openrouter" ? "openrouter" : "openai";
+
+  // For the openai provider, prefer standard OPENAI_BASE_URL env vars, then
+  // fall back to the legacy BUILT_IN_FORGE_* vars so existing deployments keep working.
+  const envOpenAiBase =
+    ENV.openaiBaseUrl ||
+    (ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0 ? ENV.forgeApiUrl : "https://forge.manus.im");
+  const envOpenAiKey = ENV.openaiApiKey || ENV.forgeApiKey || "";
+  const envOpenAiModel = ENV.openaiModel || "gpt-4o-mini";
+
   let baseUrl =
     provider === "ollama"
       ? envOllamaBase
       : provider === "openrouter"
         ? "https://openrouter.ai/api"
-        : ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-          ? ENV.forgeApiUrl
-          : "https://forge.manus.im";
-  let apiKey = provider === "openrouter" ? (process.env.OPENROUTER_API_KEY || "") : (ENV.forgeApiKey || "");
+        : envOpenAiBase;
+  let apiKey =
+    provider === "openrouter"
+      ? (ENV.openrouterApiKey || "")
+      : provider === "ollama"
+        ? ""
+        : envOpenAiKey;
   let model =
-    provider === "ollama" ? envOllamaModel : provider === "openrouter" ? "anthropic/claude-3.5-sonnet" : "gpt-4o-mini";
+    provider === "ollama"
+      ? envOllamaModel
+      : provider === "openrouter"
+        ? (ENV.openrouterModel || "anthropic/claude-3.5-sonnet")
+        : envOpenAiModel;
 
   // Live overrides from settings (set by the Settings page).
   try {
