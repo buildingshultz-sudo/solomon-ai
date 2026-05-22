@@ -3,6 +3,13 @@
 .env.local
 .env.production
 
+# YouTube OAuth credentials (NEVER commit these)
+youtube/client_secrets.json
+youtube/youtube_token.json
+credentials/
+*_token.json
+client_secrets.json
+
 # Dependencies
 node_modules/
 venv/
