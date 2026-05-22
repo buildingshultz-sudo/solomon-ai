@@ -155,10 +155,10 @@ function executeCommand(command, type) {
       child = spawn("powershell.exe", [
         "-NonInteractive", "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-OutputFormat", "Text", "-Command", psCommand
-      ], { cwd: "C:\\Users\\Ashle\\Desktop\\FINAL FIX", windowsHide: true, env: Object.assign({}, process.env) });
+      ], { cwd: "C:\\Users\\Ashle\\Desktop", windowsHide: true, env: Object.assign({}, process.env) });
     } else {
       child = spawn("cmd.exe", ["/c", "chcp 65001 > nul & mode con cols=500 2>nul & " + cleanCommand], {
-        cwd: "C:\\Users\\Ashle\\Desktop\\FINAL FIX", windowsHide: true, env: Object.assign({}, process.env)
+        cwd: "C:\\Users\\Ashle\\Desktop", windowsHide: true, env: Object.assign({}, process.env)
       });
     }
 
