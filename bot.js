@@ -540,6 +540,71 @@ process.on('unhandledRejection', (reason) => {
   console.error('[BOT] Unhandled rejection:', reason);
 });
 
+
+// ── INTERNAL CALLBACK SERVER (for Python CrewAI backend) ──────────────────
+// Listens on port 4000 for proactive notifications from the CrewAI backend
+const http = require('http');
+const internalServer = http.createServer(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.writeHead(405); res.end('Method Not Allowed'); return;
+  }
+  let body = '';
+  req.on('data', chunk => body += chunk);
+  req.on('end', async () => {
+    try {
+      const data = JSON.parse(body);
+      const { type, message, title, pdf_path, md_path, task_id } = data;
+      const chatId = OWNER_ID;
+
+      if (req.url === '/notify/complete') {
+        // Task completed — send PDF if available
+        const caption = `✅ *${title || 'Task Complete'}*
+
+${(message || '').slice(0, 900)}`;
+        if (pdf_path && fs.existsSync(pdf_path)) {
+          await bot.sendDocument(chatId, pdf_path, { caption, parse_mode: 'Markdown' });
+        } else if (md_path && fs.existsSync(md_path)) {
+          await bot.sendDocument(chatId, md_path, { caption: caption + '\n_(PDF unavailable, sending markdown)_', parse_mode: 'Markdown' });
+        } else {
+          await bot.sendMessage(chatId, caption, { parse_mode: 'Markdown' });
+        }
+      } else if (req.url === '/notify/question') {
+        // Sol needs Jed's input
+        await bot.sendMessage(chatId,
+          `❓ *Sol needs your input:*\n\n${message || 'Please respond to continue.'}`,
+          { parse_mode: 'Markdown' });
+      } else if (req.url === '/notify/milestone') {
+        // Significant milestone reached
+        await bot.sendMessage(chatId,
+          `🏆 *Milestone:* ${title || ''}\n\n${message || ''}`,
+          { parse_mode: 'Markdown' });
+      } else if (req.url === '/notify/error') {
+        // Error requiring human intervention
+        await bot.sendMessage(chatId,
+          `🚨 *Action needed:* ${title || 'Error'}\n\n${message || ''}\n\nPlease advise.`,
+          { parse_mode: 'Markdown' });
+      } else if (req.url === '/notify/blocked') {
+        // Task is blocked
+        await bot.sendMessage(chatId,
+          `🚫 *Blocked: ${title || 'Task'}*\n\n${message || ''}\n\nThis task needs your input to proceed.`,
+          { parse_mode: 'Markdown' });
+      } else {
+        // Generic notification
+        await bot.sendMessage(chatId, message || 'Notification from Sol.', { parse_mode: 'Markdown' });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      console.error('[INTERNAL-SERVER] Error:', e.message);
+      res.writeHead(500); res.end(JSON.stringify({ ok: false, error: e.message }));
+    }
+  });
+});
+internalServer.listen(4000, '127.0.0.1', () => {
+  console.log('[BOT] Internal callback server listening on port 4000');
+});
+// ── END INTERNAL CALLBACK SERVER ───────────────────────────────────────────
+
 console.log('[BOT] Solomon v6.0 fully initialized. Awaiting commands.');
 
 // ── STARTUP RECOVERY ───────────────────────────────────────────────────────

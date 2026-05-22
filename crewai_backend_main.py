@@ -640,6 +640,32 @@ context_compression.register_routes(app)
 def get_costs():
     return jsonify(get_monthly_spend())
 
+
+@app.route('/proactive/notify', methods=['POST'])
+def proactive_notify():
+    """
+    Send a proactive notification to Jed via the bot's internal callback server.
+    Body: { type: 'complete'|'question'|'milestone'|'error'|'blocked', 
+            title: str, message: str, pdf_path: str, md_path: str }
+    """
+    import requests as req_lib
+    data = request.get_json() or {}
+    notify_type = data.get('type', 'generic')
+    url_map = {
+        'complete': 'http://127.0.0.1:4000/notify/complete',
+        'question': 'http://127.0.0.1:4000/notify/question',
+        'milestone': 'http://127.0.0.1:4000/notify/milestone',
+        'error': 'http://127.0.0.1:4000/notify/error',
+        'blocked': 'http://127.0.0.1:4000/notify/blocked',
+    }
+    target_url = url_map.get(notify_type, 'http://127.0.0.1:4000/notify/generic')
+    try:
+        resp = req_lib.post(target_url, json=data, timeout=10)
+        return jsonify({'ok': True, 'delivered': resp.status_code == 200})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print(f"[CREWAI] Solomon CrewAI Backend v1.0.0 starting...")
     print(f"[CREWAI] Memory loaded: {len(BUSINESS_CONTEXT)} chars")
