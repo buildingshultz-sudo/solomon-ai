@@ -33,6 +33,30 @@ module.exports = {
       min_uptime: '5s',
       kill_timeout: 5000
     },
+
+    // ── CREWAI BACKEND (starts before bot — provides autonomous task execution) ──
+    {
+      name: 'solomon-crewai',
+      script: '/root/solomon-bot/crewai_backend_main.py',
+      interpreter: 'python3',
+      cwd: '/root/solomon-bot',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '512M',
+      env: {
+        NODE_ENV: 'production',
+        PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
+      },
+      error_file: '/root/solomon-bot/logs/crewai-error.log',
+      out_file: '/root/solomon-bot/logs/crewai-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      restart_delay: 3000,
+      max_restarts: 50,
+      min_uptime: '10s',
+      kill_timeout: 10000
+    },
     // ── BOT (starts after relay) ─────────────────────────────────────────
     {
       name: 'solomon-bot',

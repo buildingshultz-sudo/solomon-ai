@@ -465,15 +465,25 @@ const workerAdapter = require('./worker-adapter');
 const CrewAIBridge = require('./crewai-bridge');
 const crewai = new CrewAIBridge(bot, config.OWNER_CHAT_ID || '8762434280');
 
-// Health check CrewAI on startup
+// Health check CrewAI on startup — retry for up to 30s (handles race condition)
 (async () => {
-  const h = await crewai.health();
-  if (h.status === 'healthy') {
-    console.log('[CREWAI] Backend connected. Agents:', h.agents.join(', '));
-  } else {
-    console.log('[CREWAI] Backend offline — falling back to old worker. Error:', h.error);
+  const MAX_WAIT = 30000;
+  const INTERVAL = 3000;
+  let elapsed = 0;
+  while (elapsed < MAX_WAIT) {
+    const h = await crewai.health();
+    if (h.status === 'healthy') {
+      console.log('[CREWAI] Backend connected. Agents:', h.agents.join(', '));
+      return;
+    }
+    elapsed += INTERVAL;
+    if (elapsed < MAX_WAIT) {
+      console.log('[CREWAI] Backend not ready yet, retrying in 3s... (' + elapsed/1000 + 's elapsed)');
+      await new Promise(r => setTimeout(r, INTERVAL));
+    }
   }
-})();
+  console.log('[CREWAI] Backend did not respond within 30s — falling back to old worker.');
+})()
 // OLD WORKER DISABLED — CrewAI is now the primary task processor
 // workerAdapter.start(config, { bot, memory, taskQueue, pluginLoader, callLLM, executeTool, OWNER_ID });
 // To re-enable old worker as fallback, uncomment the line above.
