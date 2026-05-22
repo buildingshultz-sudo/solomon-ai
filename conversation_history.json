@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Test context compression",
+      "timestamp": "2026-05-22T12:55:28.421475",
+      "task_id": null
+    }
+  ],
+  "total_processed": 1
+}

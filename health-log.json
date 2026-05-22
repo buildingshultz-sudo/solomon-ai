@@ -5388,5 +5388,54 @@
         "tabs": 0
       }
     }
+  },
+  {
+    "timestamp": "2026-05-22T12:56:09.452Z",
+    "overall": "healthy",
+    "checks": {
+      "memory": {
+        "totalMB": 1968,
+        "usedMB": 593,
+        "freeMB": 1375,
+        "percentUsed": 30
+      },
+      "disk": {
+        "total": "48G",
+        "used": "7.6G",
+        "available": "40G",
+        "percentUsed": 16
+      },
+      "queue": {
+        "ok": true,
+        "issues": [],
+        "stats": {
+          "total": 73,
+          "pending": 0,
+          "active": 0,
+          "completed": 68,
+          "failed": 0,
+          "blocked": 5
+        }
+      },
+      "pdf": {
+        "manus-md-to-pdf": "exists but may not work",
+        "weasyprint": "available"
+      },
+      "telegram": {
+        "ok": true,
+        "botName": "Shultz_Solomon_bot"
+      },
+      "openrouter": {
+        "ok": true,
+        "response": "OK"
+      },
+      "pcAgent": {
+        "ok": true,
+        "stale": false,
+        "version": "4.1.0",
+        "ageSeconds": 2,
+        "tabs": 0
+      }
+    }
   }
 ]
