@@ -159,6 +159,7 @@ const server = http.createServer(async (req, res) => {
     // ── AGENT HEARTBEAT (accepts both v4 and v5 format) ─────────────
     if (pathname === '/agent/heartbeat' && method === 'POST') {
       const body = await parseBody(req);
+      log('INFO', 'Heartbeat from ' + req.socket.remoteAddress + ' agentId=' + body.agentId);
       // v5 sends secret, v4 does not — accept both
       // Only reject if a secret IS provided but is wrong
       if (body.secret && body.secret !== SHARED_SECRET) {
@@ -183,6 +184,7 @@ const server = http.createServer(async (req, res) => {
 
     // ── AGENT POLL (v4 compatibility — agent polls for commands) ─────
     if (pathname === '/agent/poll' && method === 'GET') {
+      log('INFO', `Agent poll hit from ${req.socket.remoteAddress} - ${pendingCommands.length} cmds pending`);
       const commands = pendingCommands.splice(0, 5);
       if (commands.length === 0) {
         res.writeHead(204);
@@ -194,7 +196,15 @@ const server = http.createServer(async (req, res) => {
 
     // ── AGENT RESULT (v4 compatibility — agent posts results) ────────
     if (pathname === '/agent/result' && method === 'POST') {
-      const body = await parseBody(req);
+      const rawBody = await new Promise((resolve) => {
+        let data = '';
+        req.on('data', chunk => data += chunk);
+        req.on('end', () => resolve(data));
+      });
+      log('INFO', 'RAW Result POST from ' + req.socket.remoteAddress + ': ' + rawBody.slice(0, 500));
+      let body = {};
+      try { body = JSON.parse(rawBody); } catch(e) { log('ERROR', 'Result parse error: ' + e.message); }
+      log('INFO', 'Result POST received: ' + JSON.stringify(body).slice(0, 200));
       if (body.id) {
         completedResults.set(body.id, {
           status: 'completed',
@@ -239,6 +249,7 @@ const server = http.createServer(async (req, res) => {
 
     // ── GET PENDING COMMANDS (v5 agent or bot polls this) ────────────
     if (pathname === '/command/pending' && method === 'GET') {
+      log('INFO', `/command/pending hit from ${req.socket.remoteAddress} - ${pendingCommands.length} cmds`);
       const commands = pendingCommands.splice(0, 5);
       return sendJSON(res, 200, { commands });
     }
@@ -270,9 +281,20 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, { status: 'unknown' });
     }
 
+    // ── SERVE FIXED V4 AGENT SCRIPT ─────────────────────────────────
+    if (pathname === '/agent/script-v4-fixed' && method === 'GET') {
+      const fixedPath = path.join(__dirname, 'solomon-agent-v4-fixed.js');
+      if (fs.existsSync(fixedPath)) {
+        const content2 = fs.readFileSync(fixedPath, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/javascript' });
+        res.end(content2);
+        return;
+      }
+      return sendJSON(res, 404, { error: 'Fixed agent not found' });
+    }
     // ── SERVE PC AGENT SCRIPT ───────────────────────────────────────
     if (pathname === '/agent/script' && method === 'GET') {
-      const agentPath = path.join(__dirname, 'solomon_agent_v5.js');
+      const agentPath = path.join(__dirname, 'solomon-agent.js');
       if (fs.existsSync(agentPath)) {
         const content = fs.readFileSync(agentPath, 'utf8');
         res.writeHead(200, { 'Content-Type': 'application/javascript' });
@@ -285,7 +307,7 @@ const server = http.createServer(async (req, res) => {
     // ── PUSH UPGRADE TO AGENT ───────────────────────────────────────
     if (pathname === '/agent/upgrade' && method === 'POST') {
       // Queue a special upgrade command that the agent will recognize
-      const upgradeScript = fs.readFileSync(path.join(__dirname, 'solomon_agent_v5.js'), 'utf8');
+      const upgradeScript = fs.readFileSync(path.join(__dirname, 'solomon-agent.js'), 'utf8');
       const id = generateId();
       pendingCommands.push({
         id,
