@@ -1,0 +1,90 @@
+{
+  "facts": [
+    {
+      "text": "Sounds good! Now log into vidIQ and if you need credentials let me know. The log in email is buildingshultz@gmail.com password should be saved via google browser. Once logged in let me know exactly ho",
+      "date": "2026-05-20T13:01:02.065Z"
+    }
+  ],
+  "decisions": [
+    {
+      "text": "no worreis! what do you think hw next 5 steps are that we need to execute to keep moving forward wih ironedit and get it to the point where i can use it and we can safely get it to market?",
+      "date": "2026-05-20T10:03:26.603Z"
+    },
+    {
+      "text": "Awesome, thank you I need you to figure out how to write into your tasks and to list how to generate images to learn that skill yourself. You have permission to implement. Dall-e to continue moving fo",
+      "date": "2026-05-20T17:54:11.789Z"
+    },
+    {
+      "text": "What all did you just fix? Keep the list short and sweet. Don’t spam my messages. And what are the next few steps for moving forward and building Shultz and Shultz enterprise again keep it short and s",
+      "date": "2026-05-21T14:07:05.726Z"
+    },
+    {
+      "text": "What all did you just fix? Keep the list short and sweet. Don’t spam my messages. And what are the next few steps for moving forward and building Shultz and Shultz enterprise again keep it short and s",
+      "date": "2026-05-21T14:13:18.057Z"
+    }
+  ],
+  "updated": "2026-05-21T14:13:18.057Z",
+  "lessons_learned": [
+    {
+      "date": "2026-05-20T17:13:00.226Z",
+      "category": "pc_agent_architecture",
+      "lesson": "PC Agent relay result format: POST /agent/result with body { id, stdout, stderr, exitCode }. NOT { agentId, commandId, result: {...} }. The id field must match the command UUID from /agent/poll. Wrong field names cause silent failures — relay returns 400 Missing id and result is never stored."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "pc_agent_architecture",
+      "lesson": "Task type matters critically. Tasks typed as \"research\" run web searches, not PC commands. Tasks that require PC access must be typed as \"pc_command\" with requiresPCAgent: true. The worker checks agent status before executing pc_command tasks — if offline, task stays pending."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "pc_agent_architecture",
+      "lesson": "The relay uses a single shared in-memory pendingCommands array. /command/queue pushes to it, /agent/poll splices from it. Both run in the same relay.js process. The bot (bot.js) and relay (relay.js) are separate PM2 processes but communicate via HTTP on 127.0.0.1:3001."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "self_update_rules",
+      "lesson": "NEVER send a kill node.exe command to the PC agent — that kills my own connection. Self-update works by: (1) write new solomon-agent.js via file_write/devWriteFile, (2) watchdog detects file change within 30s, (3) watchdog kills old agent and starts new one, (4) wait 15s then check /agent/status. If agent does not come back online, alert Jed and do NOT retry more than once."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "self_update_rules",
+      "lesson": "Watchdog (solomon-watchdog.vbs) runs as a separate wscript.exe process. It monitors solomon-agent.js modification timestamp every 30s. It is registered in Task Scheduler as \"Solomon Agent Watchdog\" to auto-start on login. Killing node.exe does NOT kill the watchdog."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "anti_hallucination",
+      "lesson": "Zero fabrication rule: if web searches return 0 results, refuse to synthesize a report. The LLM will generate plausible-sounding statistics from training data if given an empty context — this is hallucination. Always check that findings.length > 0 before calling LLM for synthesis."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "anti_hallucination",
+      "lesson": "PC-dependent tasks (IronEdit, file access, browser automation) cannot be completed when the PC agent is offline. Never mark them complete or generate fake results. Report honestly: \"Task queued — waiting for PC Agent to reconnect.\""
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "debugging_history",
+      "lesson": "Debugging session 2026-05-20: PC agent was online (heartbeats confirmed) but commands timed out. Root cause: agent was posting results with wrong body format { agentId, commandId, result } instead of { id, stdout, stderr, exitCode }. Relay returned 400 Missing id silently. Fix: deploy correct solomon-agent.js from VPS /root/solomon-bot/pc-agent/solomon-agent.js."
+    },
+    {
+      "date": "2026-05-20T17:13:00.227Z",
+      "category": "debugging_history",
+      "lesson": "Debugging session 2026-05-20: Judas Hammer IronEdit task was typed as \"research\" instead of \"pc_command\". Worker ran DuckDuckGo searches (0 results), then GPT-4o fabricated a plausible report with fake statistics. Fix: changed task type to pc_command, added zero-fabrication guard, added PC agent gate check before executing pc_command tasks."
+    }
+  ],
+  "business_context": {
+    "pc_agent_relay_url": "http://167.99.237.26:3001",
+    "pc_agent_shared_secret": "0d029fb2-4feb-44d1-b2ad-a90521f0c264",
+    "pc_agent_result_format": "{ id, stdout, stderr, exitCode }",
+    "pc_agent_watchdog": "solomon-watchdog.vbs monitors file changes every 30s and auto-restarts agent",
+    "self_update_safe_method": "Write new code via devWriteFile, watchdog auto-restarts, wait 15s, check /agent/status",
+    "self_update_forbidden": "NEVER kill node.exe directly — kills own connection"
+  },
+  "active_projects": {
+    "judas_hammer_ironedit": {
+      "status": "pending_pc_agent",
+      "description": "Process Judas Hammer footage from Seagate 2TB drive via IronEdit pipeline. Save output to Desktop.",
+      "blocked_by": "PC agent result format mismatch — being fixed",
+      "next_step": "Once correct agent deployed, run drive discovery then IronEdit pipeline"
+    }
+  }
+}

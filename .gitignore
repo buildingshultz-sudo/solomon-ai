@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+.env.local
+.env.production
+
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Logs
+logs/
+*.log
+
+# Deliverables (generated output)
+deliverables/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PM2
+ecosystem.config.js.bak
+
+# Temp files
+*.tmp
+*.swp
+*.backup.*
+*.bak
+swap_to_crewai.js
+fix_*.js
+queue_tasks.js
+recovery_block.js
+task_recovery_patch.js

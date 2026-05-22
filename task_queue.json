@@ -1,0 +1,55 @@
+{
+  "tasks": [
+    {
+      "id": "e070d641-59cb-488f-a9c2-ad200240eb5d",
+      "type": "pc_command",
+      "priority": 1,
+      "status": "pending",
+      "requiresPCAgent": true,
+      "createdAt": 1779298301386,
+      "description": "IronEdit - Judas Hammer footage: Find Judas Hammer raw footage on Seagate 2TB portable drive, run full IronEdit pipeline (silence removal, jump cuts, color grading, audio normalization, thumbnail, SEO), save finished video to Desktop",
+      "command": "$drives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root\n$found = @()\nforeach ($drive in $drives) {\n  foreach ($sp in @(\"${drive}Unedited Videos\",\"${drive}unedited videos\",\"${drive}Videos\")) {\n    if (Test-Path $sp) {\n      $files = Get-ChildItem -Path $sp -Recurse -Include *.mp4,*.mov,*.avi,*.mkv,*.mts,*.m2ts -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"(?i)judas|hammer\" }\n      foreach ($f in $files) { $found += $f.FullName }\n    }\n  }\n}\nif ($found.Count -eq 0) {\n  foreach ($drive in $drives) {\n    try {\n      $files = Get-ChildItem -Path $drive -Recurse -Include *.mp4,*.mov,*.avi,*.mkv,*.mts,*.m2ts -ErrorAction SilentlyContinue -Depth 6 | Where-Object { $_.Name -match \"(?i)judas|hammer\" }\n      foreach ($f in $files) { $found += $f.FullName }\n    } catch {}\n  }\n}\nWrite-Output (\"DRIVES: \" + ($drives -join \", \"))\nWrite-Output (\"FOUND_FILES: \" + ($found -join \"|\"))\nWrite-Output (\"COUNT: \" + $found.Count)"
+    },
+    {
+      "id": "6c55f3a8-9c06-4886-8e6e-f214911318c6",
+      "type": "research",
+      "priority": 3,
+      "status": "pending",
+      "requiresPCAgent": false,
+      "createdAt": 1779298301386,
+      "description": "Solomon's Shop UI/UX: Research best AI interface designs (Manus AI, Claude, ChatGPT, Perplexity). Compile design brief for Solomon's Shop desktop app. Focus on navigation patterns, color schemes, typography, interaction design, what makes users want to keep using the interface.",
+      "steps": [
+        "Search: best AI interface design patterns 2025",
+        "Search: Manus AI interface design seamless UX",
+        "Search: Claude ChatGPT interface design comparison",
+        "Search: desktop app UI design trends 2025 dark mode",
+        "Compile design brief and send to Jed"
+      ]
+    },
+    {
+      "id": "44cc0b3d-3846-49ec-b842-45b0d45b1671",
+      "type": "research",
+      "priority": 4,
+      "status": "pending",
+      "requiresPCAgent": false,
+      "createdAt": 1779298301386,
+      "description": "Solomon Logo Design: Research AI brand logos with high CTR. Generate DALL-E 3 logo for Solomon — bold, memorable, dark/gold/tech aesthetic. Make someone want to click it. Create desktop icon.",
+      "steps": [
+        "Search: best AI company logos 2025 design analysis",
+        "Search: high CTR logo design principles tech brands",
+        "Generate Solomon logo via DALL-E 3",
+        "Send options to Jed"
+      ]
+    },
+    {
+      "id": "6d55adbe-d042-40f6-b980-19ded49dd7be",
+      "type": "pc_command",
+      "priority": 5,
+      "status": "pending",
+      "requiresPCAgent": true,
+      "createdAt": 1779298301386,
+      "description": "IronEdit Shortcut: Verify IronEdit location on PC and create a desktop shortcut.",
+      "command": "$ironEditPaths = @(\"C:\\Users\\Ashle\\IronEdit\",\"C:\\Users\\Ashle\\Desktop\\IronEdit\",\"C:\\IronEdit\")\n$found = $null\nforeach ($p in $ironEditPaths) { if (Test-Path $p) { $found = $p; break } }\nif ($found) {\n  Write-Output (\"IRONEDIT_PATH: \" + $found)\n  $exeFiles = Get-ChildItem -Path $found -Include *.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1\n  if ($exeFiles) {\n    $WshShell = New-Object -ComObject WScript.Shell\n    $Shortcut = $WshShell.CreateShortcut(\"C:\\Users\\Ashle\\Desktop\\IronEdit.lnk\")\n    $Shortcut.TargetPath = $exeFiles.FullName\n    $Shortcut.WorkingDirectory = $found\n    $Shortcut.Description = \"IronEdit - AI Video Editor\"\n    $Shortcut.Save()\n    Write-Output \"SHORTCUT_CREATED: C:\\Users\\Ashle\\Desktop\\IronEdit.lnk\"\n  } else {\n    Write-Output \"IRONEDIT_STATUS: Found source only. Run npm install && npm start\"\n  }\n} else {\n  Write-Output \"IRONEDIT_STATUS: Not found in standard locations\"\n}"
+    }
+  ]
+}

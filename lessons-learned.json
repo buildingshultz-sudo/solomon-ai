@@ -1,0 +1,15 @@
+{
+  "lessons": [
+    {
+      "timestamp": "2026-05-21T18:24:46.269Z",
+      "userMessage": "Nathan (the architect (: is ending you some task just a heads up",
+      "failure": "Told Jed the queue was empty and waited instead of starting work.",
+      "severity": "medium",
+      "count": 1
+    }
+  ],
+  "patternCounts": {
+    "idle_waiting": 1
+  },
+  "lastAnalyzed": "2026-05-22T01:41:11.857Z"
+}

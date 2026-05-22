@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-05-22T03:11:42.767Z",
+  "summary": {
+    "passed": 19,
+    "failed": 0,
+    "skipped": 0,
+    "total": 19
+  },
+  "results": [
+    {
+      "name": "Config loads without crash",
+      "status": "pass"
+    },
+    {
+      "name": "Plugin loader initializes",
+      "status": "pass"
+    },
+    {
+      "name": "Task queue CRUD operations",
+      "status": "pass"
+    },
+    {
+      "name": "Task queue deduplication",
+      "status": "pass"
+    },
+    {
+      "name": "Task queue file locking",
+      "status": "pass"
+    },
+    {
+      "name": "Memory module initializes",
+      "status": "pass"
+    },
+    {
+      "name": "Memory knowledge base",
+      "status": "pass"
+    },
+    {
+      "name": "Health monitor runs",
+      "status": "pass"
+    },
+    {
+      "name": "Plugin loader discovers all plugins",
+      "status": "pass"
+    },
+    {
+      "name": "Plugin loader loads plugins with config",
+      "status": "pass"
+    },
+    {
+      "name": "Web search plugin always active",
+      "status": "pass"
+    },
+    {
+      "name": "Self-upgrade plugin loads",
+      "status": "pass"
+    },
+    {
+      "name": "All tools collected from plugins",
+      "status": "pass"
+    },
+    {
+      "name": "PDF generation via weasyprint",
+      "status": "pass"
+    },
+    {
+      "name": "Task queue survives simulated restart",
+      "status": "pass"
+    },
+    {
+      "name": "Memory DB persists across reloads",
+      "status": "pass"
+    },
+    {
+      "name": "Relay health endpoint responds",
+      "status": "pass"
+    },
+    {
+      "name": "Relay agent status endpoint",
+      "status": "pass"
+    },
+    {
+      "name": "Relay command queue/result cycle",
+      "status": "pass"
+    }
+  ]
+}

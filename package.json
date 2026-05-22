@@ -1,0 +1,22 @@
+{
+  "name": "solomons-forge",
+  "version": "6.0.0",
+  "description": "Solomon's Forge — Autonomous Business Operating System",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "relay": "node relay.js",
+    "test": "node smoke-test.js",
+    "health": "node -e \"require('./health-monitor').runFullCheck(require('./core/config')).then(r => console.log(JSON.stringify(r, null, 2)))\""
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Solomon's Forge",
+  "license": "UNLICENSED",
+  "private": true
+}
