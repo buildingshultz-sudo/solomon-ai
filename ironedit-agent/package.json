@@ -1,0 +1,19 @@
+{
+  "name": "ironedit-ffmpeg-agent",
+  "version": "1.0.0",
+  "description": "IronEdit server-side FFmpeg rendering agent — connects to the IronEdit API via WebSocket and executes FFmpeg jobs on the server.",
+  "type": "module",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js",
+    "dev": "node --watch agent.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

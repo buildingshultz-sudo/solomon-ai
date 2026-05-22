@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IronEdit — AI Video Editor</title>
+  <style>
+    :root {
+      --bg: #0d0f14;
+      --surface: #161a22;
+      --surface2: #1e2330;
+      --border: #2a3040;
+      --accent: #e8a020;
+      --accent2: #f0c060;
+      --text: #e8eaf0;
+      --text2: #8a9ab0;
+      --success: #30c060;
+      --error: #e04040;
+      --warn: #e8a020;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+
+    .logo svg { width: 28px; height: 28px; }
+
+    .status-pill {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--text2);
+    }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text2);
+      transition: background 0.3s;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 6px var(--success); }
+    .status-dot.offline { background: var(--error); }
+
+    /* ── Layout ── */
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 680px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ── Form elements ── */
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--text2);
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+
+    label:first-child { margin-top: 0; }
+
+    input, select, textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+    }
+
+    select option { background: var(--surface2); }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: 6px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+    .btn-primary:active { transform: translateY(0); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-danger {
+      background: rgba(224,64,64,0.15);
+      color: var(--error);
+      border: 1px solid rgba(224,64,64,0.3);
+    }
+    .btn-danger:hover { background: rgba(224,64,64,0.25); }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* ── Clips list ── */
+    .clips-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .clip-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+
+    .clip-item input {
+      flex: 1;
+      margin: 0;
+    }
+
+    .clip-item .remove-btn {
+      background: none;
+      border: none;
+      color: var(--text2);
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 16px;
+      line-height: 1;
+    }
+    .clip-item .remove-btn:hover { color: var(--error); background: rgba(224,64,64,0.1); }
+
+    /* ── Progress ── */
+    .progress-section {
+      margin-top: 20px;
+    }
+
+    .progress-bar-wrap {
+      background: var(--surface2);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 4px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .progress-label {
+      font-size: 12px;
+      color: var(--text2);
+      margin-top: 6px;
+    }
+
+    /* ── Jobs table ── */
+    .jobs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .jobs-table th {
+      text-align: left;
+      padding: 8px 10px;
+      color: var(--text2);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .jobs-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(42,48,64,0.5);
+      vertical-align: middle;
+    }
+
+    .jobs-table tr:last-child td { border-bottom: none; }
+    .jobs-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-complete { background: rgba(48,192,96,0.15); color: var(--success); }
+    .badge-running  { background: rgba(232,160,32,0.15); color: var(--warn); }
+    .badge-error    { background: rgba(224,64,64,0.15); color: var(--error); }
+    .badge-queued   { background: rgba(138,154,176,0.15); color: var(--text2); }
+    .badge-dispatched { background: rgba(100,150,255,0.15); color: #6496ff; }
+    .badge-cancelled { background: rgba(138,154,176,0.1); color: var(--text2); }
+
+    .job-kind {
+      font-family: 'Consolas', monospace;
+      font-size: 11px;
+      color: var(--accent);
+    }
+
+    .job-id {
+      font-family: 'Consolas', monospace;
+      font-size: 10px;
+      color: var(--text2);
+    }
+
+    /* ── Log console ── */
+    .log-console {
+      background: #0a0c10;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      max-height: 200px;
+      overflow-y: auto;
+      color: #8af;
+    }
+
+    .log-line { margin: 0; }
+    .log-line.error { color: #f88; }
+    .log-line.warn  { color: #fa8; }
+    .log-line.success { color: #8f8; }
+    .log-line.info  { color: #8af; }
+
+    /* ── EDL viewer ── */
+    .edl-viewer {
+      background: #0a0c10;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 11px;
+      max-height: 300px;
+      overflow: auto;
+      color: #c8d8f0;
+      white-space: pre;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 3px;
+      margin-bottom: 20px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 8px 12px;
+      border: none;
+      background: none;
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+
+    .tab.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Section header ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .section-sub {
+      font-size: 13px;
+      color: var(--text2);
+      margin-top: 4px;
+    }
+
+    /* ── Alert ── */
+    .alert {
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    .alert-success { background: rgba(48,192,96,0.1); border: 1px solid rgba(48,192,96,0.3); color: var(--success); }
+    .alert-error   { background: rgba(224,64,64,0.1); border: 1px solid rgba(224,64,64,0.3); color: var(--error); }
+    .alert-info    { background: rgba(100,150,255,0.1); border: 1px solid rgba(100,150,255,0.3); color: #6496ff; }
+
+    /* ── Spinner ── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    /* ── Misc ── */
+    .mt8 { margin-top: 8px; }
+    .mt16 { margin-top: 16px; }
+    .full-width { grid-column: 1 / -1; }
+    .text-small { font-size: 12px; color: var(--text2); }
+    .mono { font-family: 'Consolas', monospace; }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px;
+      color: var(--text2);
+      font-size: 13px;
+    }
+
+    .empty-state svg {
+      opacity: 0.3;
+      margin-bottom: 12px;
+    }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    .artifact-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-family: monospace;
+      font-size: 11px;
+      word-break: break-all;
+    }
+    .artifact-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="28" height="28" rx="6" fill="#e8a020" fill-opacity="0.15"/>
+      <path d="M6 14L12 8L18 14L12 20L6 14Z" fill="#e8a020"/>
+      <path d="M14 8L20 14L22 12L16 6L14 8Z" fill="#f0c060" fill-opacity="0.7"/>
+      <rect x="19" y="11" width="3" height="6" rx="1.5" fill="#e8a020"/>
+    </svg>
+    IronEdit
+  </div>
+  <span style="color:var(--text2); font-size:12px; margin-left:8px;">AI Video Editor</span>
+  <div class="status-pill">
+    <div class="status-dot" id="apiDot"></div>
+    <span id="apiStatusText">checking...</span>
+  </div>
+</header>
+
+<div class="container">
+  <div class="section-header">
+    <div>
+      <div class="section-title">Video Pipeline</div>
+      <div class="section-sub">AI-powered EDL synthesis + FFmpeg rendering on the server</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('analyze')">🎬 AI Analyze + Render</button>
+    <button class="tab" onclick="switchTab('render')">⚙️ Execute Render (EDL)</button>
+    <button class="tab" onclick="switchTab('jobs')">📋 Jobs</button>
+    <button class="tab" onclick="switchTab('agents')">🤖 Agents</button>
+  </div>
+
+  <!-- ── Tab: AI Analyze + Render ── -->
+  <div id="tab-analyze" class="tab-content active">
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1L13 4V10L7 13L1 10V4L7 1Z"/></svg>
+          Clip Sources
+        </div>
+
+        <label>Brief / Edit Goal</label>
+        <input type="text" id="brief" placeholder="e.g. 20s YouTube hook reel, high energy" value="YouTube hook reel — high retention" />
+
+        <label>Output Path (on server)</label>
+        <input type="text" id="outputPath" placeholder="/root/ironedit-renders/output.mp4" value="/root/ironedit-renders/output.mp4" />
+
+        <label>Edit Style</label>
+        <select id="editStyle">
+          <option value="high_retention">High Retention (YouTube)</option>
+          <option value="default">Default</option>
+          <option value="sizzle">Sizzle Reel</option>
+          <option value="long_form">Long Form</option>
+        </select>
+
+        <label>Target Runtime (seconds, 0 = auto)</label>
+        <input type="number" id="targetRuntime" value="30" min="0" max="600" />
+
+        <label>Audio Normalize (LUFS, 0 = skip)</label>
+        <input type="number" id="audioLufs" value="-14" min="-40" max="0" step="0.5" />
+
+        <label>Canvas</label>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+          <div>
+            <label style="margin-top:0">Width</label>
+            <input type="number" id="width" value="1920" />
+          </div>
+          <div>
+            <label style="margin-top:0">Height</label>
+            <input type="number" id="height" value="1080" />
+          </div>
+          <div>
+            <label style="margin-top:0">FPS</label>
+            <input type="number" id="fps" value="30" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><rect x="1" y="3" width="12" height="8" rx="1"/><path d="M5 6L9 8L5 10V6Z" fill="#000"/></svg>
+          Video Clips
+        </div>
+
+        <div class="text-small">Add the server-side paths to your video clips. The FFmpeg agent will analyze and render them.</div>
+
+        <div class="clips-list" id="clipsList">
+          <div class="clip-item">
+            <input type="text" placeholder="/path/to/clip.mp4" value="" />
+            <button class="remove-btn" onclick="removeClip(this)" title="Remove">×</button>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="addClip()">+ Add Clip</button>
+          <button class="btn btn-secondary" onclick="addSampleClips()">Load Sample Paths</button>
+        </div>
+
+        <hr />
+
+        <div class="card-title" style="margin-top:0">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><circle cx="7" cy="7" r="6"/><path d="M5 4L10 7L5 10V4Z" fill="#000"/></svg>
+          Auto Render
+        </div>
+
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin-top:0">
+          <input type="checkbox" id="autoRender" checked style="width:auto" />
+          <span>Automatically render after AI EDL synthesis</span>
+        </label>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" id="analyzeBtn" onclick="submitAnalyze()">
+            <span class="spinner" id="analyzeSpinner" style="display:none"></span>
+            ✨ Analyze + Generate EDL
+          </button>
+        </div>
+
+        <div id="analyzeResult"></div>
+      </div>
+
+      <!-- EDL Preview (full width) -->
+      <div class="card full-width" id="edlPreviewCard" style="display:none">
+        <div class="card-title">📄 Generated EDL</div>
+        <div class="edl-viewer" id="edlViewer"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="renderFromEDL()" id="renderEdlBtn">⚙️ Render this EDL</button>
+          <button class="btn btn-secondary" onclick="copyEDL()">📋 Copy EDL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Execute Render ── -->
+  <div id="tab-render" class="tab-content">
+    <div class="grid">
+      <div class="card full-width">
+        <div class="card-title">⚙️ Execute Render from EDL JSON</div>
+        <div class="text-small">Paste an EDL JSON directly to dispatch a render job to the FFmpeg agent.</div>
+
+        <label>EDL JSON</label>
+        <textarea id="edlJson" rows="12" placeholder='{"version":1,"output":"/root/ironedit-renders/out.mp4","width":1920,"height":1080,"fps":30,"cuts":[{"source":"/path/to/clip.mp4","in_seconds":0,"out_seconds":5}]}'></textarea>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="submitRender()">
+            <span class="spinner" id="renderSpinner" style="display:none"></span>
+            ▶ Dispatch Render Job
+          </button>
+          <button class="btn btn-secondary" onclick="loadSampleEDL()">Load Sample EDL</button>
+        </div>
+
+        <div id="renderResult"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Jobs ── -->
+  <div id="tab-jobs" class="tab-content">
+    <div class="card">
+      <div class="card-title" style="justify-content:space-between">
+        <span>📋 Job History</span>
+        <button class="btn btn-secondary" style="padding:4px 10px; font-size:11px" onclick="refreshJobs()">↻ Refresh</button>
+      </div>
+
+      <div id="jobsContainer">
+        <div class="empty-state">Loading jobs...</div>
+      </div>
+    </div>
+
+    <!-- Job detail -->
+    <div class="card mt16" id="jobDetailCard" style="display:none">
+      <div class="card-title">Job Detail</div>
+      <div id="jobDetail"></div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Agents ── -->
+  <div id="tab-agents" class="tab-content">
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">🤖 Connected Agents</div>
+        <div id="agentsContainer">
+          <div class="empty-state">Loading...</div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="refreshHealth()">↻ Refresh</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔑 API Configuration</div>
+
+        <label>API Base URL</label>
+        <input type="text" id="apiBase" value="" placeholder="http://167.99.237.26:8080" />
+
+        <label>Control API Key</label>
+        <input type="password" id="controlKey" value="dev-control-key-please-rotate" />
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="saveConfig()">💾 Save Config</button>
+          <button class="btn btn-secondary" onclick="testConnection()">🔗 Test Connection</button>
+        </div>
+
+        <div id="configResult"></div>
+      </div>
+
+      <div class="card full-width">
+        <div class="card-title">📡 Activity Log</div>
+        <div class="log-console" id="logConsole">
+          <p class="log-line info">IronEdit UI initialized.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const DEFAULT_API = window.location.origin.includes('localhost')
+  ? 'http://localhost:8080'
+  : `http://${window.location.hostname}:8080`;
+
+let cfg = {
+  apiBase: localStorage.getItem('ironedit_api') || DEFAULT_API,
+  controlKey: localStorage.getItem('ironedit_key') || 'dev-control-key-please-rotate',
+};
+
+let currentEDL = null;
+let jobPollInterval = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('apiBase').value = cfg.apiBase;
+  document.getElementById('controlKey').value = cfg.controlKey;
+  checkHealth();
+  setInterval(checkHealth, 15000);
+  refreshJobs();
+  setInterval(refreshJobs, 8000);
+});
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['analyze', 'render', 'jobs', 'agents'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'jobs') refreshJobs();
+  if (name === 'agents') refreshHealth();
+}
+
+// ── Health check ──────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const r = await fetch(`${cfg.apiBase}/health`, { signal: AbortSignal.timeout(5000) });
+    const data = await r.json();
+    const dot = document.getElementById('apiDot');
+    const txt = document.getElementById('apiStatusText');
+    dot.className = 'status-dot online';
+    txt.textContent = `API online · ${data.agents_connected} agent${data.agents_connected !== 1 ? 's' : ''} · ${data.jobs_total} jobs`;
+  } catch (e) {
+    const dot = document.getElementById('apiDot');
+    const txt = document.getElementById('apiStatusText');
+    dot.className = 'status-dot offline';
+    txt.textContent = 'API unreachable';
+  }
+}
+
+// ── Clips management ──────────────────────────────────────────────────────────
+function addClip() {
+  const list = document.getElementById('clipsList');
+  const item = document.createElement('div');
+  item.className = 'clip-item';
+  item.innerHTML = `
+    <input type="text" placeholder="/path/to/clip.mp4" />
+    <button class="remove-btn" onclick="removeClip(this)" title="Remove">×</button>
+  `;
+  list.appendChild(item);
+}
+
+function removeClip(btn) {
+  const list = document.getElementById('clipsList');
+  if (list.children.length > 1) {
+    btn.closest('.clip-item').remove();
+  } else {
+    btn.closest('.clip-item').querySelector('input').value = '';
+  }
+}
+
+function addSampleClips() {
+  const list = document.getElementById('clipsList');
+  list.innerHTML = '';
+  const samples = [
+    '/root/ironedit-renders/sample_a.mp4',
+    '/root/ironedit-renders/sample_b.mp4',
+  ];
+  samples.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'clip-item';
+    item.innerHTML = `
+      <input type="text" value="${s}" />
+      <button class="remove-btn" onclick="removeClip(this)" title="Remove">×</button>
+    `;
+    list.appendChild(item);
+  });
+  addLog('Loaded sample clip paths. Replace with real server paths.', 'warn');
+}
+
+function getClips() {
+  return [...document.querySelectorAll('#clipsList .clip-item input')]
+    .map(i => i.value.trim())
+    .filter(v => v.length > 0);
+}
+
+// ── Submit Analyze ────────────────────────────────────────────────────────────
+async function submitAnalyze() {
+  const clips = getClips();
+  if (clips.length === 0) {
+    showResult('analyzeResult', 'error', 'Add at least one clip path.');
+    return;
+  }
+
+  const brief = document.getElementById('brief').value.trim() || 'Auto edit';
+  const outputPath = document.getElementById('outputPath').value.trim() || '/root/ironedit-renders/output.mp4';
+  const style = document.getElementById('editStyle').value;
+  const targetRuntime = parseInt(document.getElementById('targetRuntime').value) || 0;
+  const audioLufs = parseFloat(document.getElementById('audioLufs').value) || 0;
+  const width = parseInt(document.getElementById('width').value) || 1920;
+  const height = parseInt(document.getElementById('height').value) || 1080;
+  const fps = parseInt(document.getElementById('fps').value) || 30;
+  const autoRender = document.getElementById('autoRender').checked;
+
+  const payload = {
+    kind: 'analyze',
+    brief,
+    output_path: outputPath,
+    width, height, fps,
+    clips: clips.map(c => ({ source: c })),
+    style,
+    auto_render: autoRender,
+  };
+
+  if (targetRuntime > 0) payload.target_runtime_seconds = targetRuntime;
+  if (audioLufs !== 0) payload.audio_normalize_lufs = audioLufs;
+
+  setLoading('analyzeBtn', 'analyzeSpinner', true);
+  showResult('analyzeResult', 'info', 'Sending to AI for EDL synthesis...');
+  addLog(`Submitting analyze job: ${brief}`, 'info');
+
+  try {
+    const r = await apiFetch('/api/jobs', 'POST', payload);
+    const data = await r.json();
+
+    if (!r.ok) {
+      throw new Error(data.error || `HTTP ${r.status}`);
+    }
+
+    const job = data.job;
+    addLog(`Job created: ${job.id} (${job.kind})`, 'success');
+
+    if (job.edl) {
+      currentEDL = job.edl;
+      showEDLPreview(job.edl);
+      showResult('analyzeResult', 'success', `EDL synthesized! ${job.edl.cuts.length} cuts. ${autoRender ? 'Render job dispatched.' : ''}`);
+    } else {
+      showResult('analyzeResult', 'info', `Job ${job.id} queued. Check Jobs tab for status.`);
+    }
+
+    if (data.render) {
+      addLog(`Render job dispatched: ${data.render.id}`, 'info');
+    }
+
+    refreshJobs();
+  } catch (e) {
+    showResult('analyzeResult', 'error', e.message);
+    addLog(`Error: ${e.message}`, 'error');
+  } finally {
+    setLoading('analyzeBtn', 'analyzeSpinner', false);
+  }
+}
+
+// ── Submit Render ─────────────────────────────────────────────────────────────
+async function submitRender() {
+  let edl;
+  try {
+    edl = JSON.parse(document.getElementById('edlJson').value.trim());
+  } catch (e) {
+    showResult('renderResult', 'error', 'Invalid JSON: ' + e.message);
+    return;
+  }
+
+  setLoading('renderEdlBtn', 'renderSpinner', true);
+  showResult('renderResult', 'info', 'Dispatching render job...');
+
+  try {
+    const r = await apiFetch('/api/jobs', 'POST', { kind: 'execute_render', edl });
+    const data = await r.json();
+
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+
+    showResult('renderResult', 'success', `Render job dispatched: ${data.job.id}`);
+    addLog(`Render job: ${data.job.id}`, 'success');
+    refreshJobs();
+    switchTab('jobs');
+  } catch (e) {
+    showResult('renderResult', 'error', e.message);
+    addLog(`Render error: ${e.message}`, 'error');
+  } finally {
+    setLoading('renderEdlBtn', 'renderSpinner', false);
+  }
+}
+
+function renderFromEDL() {
+  if (!currentEDL) return;
+  document.getElementById('edlJson').value = JSON.stringify(currentEDL, null, 2);
+  switchTab('render');
+}
+
+function copyEDL() {
+  if (!currentEDL) return;
+  navigator.clipboard.writeText(JSON.stringify(currentEDL, null, 2));
+  addLog('EDL copied to clipboard.', 'info');
+}
+
+function loadSampleEDL() {
+  const sample = {
+    version: 1,
+    output: '/root/ironedit-renders/sample_output.mp4',
+    width: 1920, height: 1080, fps: 30,
+    cuts: [
+      { source: '/root/ironedit-renders/sample_a.mp4', in_seconds: 0, out_seconds: 5, scale: '1920:1080', eq: { brightness: 0, contrast: 1.05, saturation: 1.1, gamma: 1 } },
+      { source: '/root/ironedit-renders/sample_b.mp4', in_seconds: 2, out_seconds: 8, scale: '1920:1080' },
+    ],
+    audio_normalize: { target_lufs: -14 },
+  };
+  document.getElementById('edlJson').value = JSON.stringify(sample, null, 2);
+}
+
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+async function refreshJobs() {
+  try {
+    const r = await apiFetch('/api/jobs', 'GET');
+    if (!r.ok) return;
+    const data = await r.json();
+    renderJobsTable(data.jobs || []);
+  } catch (e) {
+    // silently fail
+  }
+}
+
+function renderJobsTable(jobs) {
+  const container = document.getElementById('jobsContainer');
+  if (!jobs.length) {
+    container.innerHTML = '<div class="empty-state">No jobs yet. Submit a job from the Analyze tab.</div>';
+    return;
+  }
+
+  const rows = jobs.slice(0, 50).map(j => {
+    const created = new Date(j.created_at).toLocaleTimeString();
+    const artifact = j.artifact ? `<a class="artifact-link" href="#" onclick="showJobDetail('${j.id}'); return false;">${j.artifact.length > 40 ? '…' + j.artifact.slice(-40) : j.artifact}</a>` : '—';
+    const progress = j.progress > 0 && j.progress < 1 ? ` (${Math.round(j.progress * 100)}%)` : '';
+    return `
+      <tr>
+        <td><span class="job-id">${j.id.slice(0, 8)}</span></td>
+        <td><span class="job-kind">${j.kind}</span></td>
+        <td><span class="badge badge-${j.status}">${j.status}${progress}</span></td>
+        <td>${artifact}</td>
+        <td>${created}</td>
+        <td><button class="btn btn-secondary" style="padding:3px 8px;font-size:11px" onclick="showJobDetail('${j.id}')">View</button></td>
+      </tr>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <table class="jobs-table">
+      <thead><tr><th>ID</th><th>Kind</th><th>Status</th><th>Artifact</th><th>Created</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+async function showJobDetail(jobId) {
+  try {
+    const r = await apiFetch(`/api/jobs/${jobId}`, 'GET');
+    const data = await r.json();
+    const job = data.job;
+    const card = document.getElementById('jobDetailCard');
+    const detail = document.getElementById('jobDetail');
+
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth' });
+
+    const edlSection = job.edl ? `
+      <div style="margin-top:12px">
+        <div class="card-title" style="margin-bottom:8px">EDL</div>
+        <div class="edl-viewer">${JSON.stringify(job.edl, null, 2)}</div>
+      </div>
+    ` : '';
+
+    const historySection = job.history && job.history.length ? `
+      <div style="margin-top:12px">
+        <div class="card-title" style="margin-bottom:8px">Progress History</div>
+        ${job.history.map(h => `<div class="text-small">${new Date(h.at).toLocaleTimeString()} — ${Math.round(h.progress * 100)}% ${h.message || ''}</div>`).join('')}
+      </div>
+    ` : '';
+
+    detail.innerHTML = `
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:12px">
+        <div><span class="text-small">ID</span><br><span class="mono">${job.id}</span></div>
+        <div><span class="text-small">Kind</span><br><span class="job-kind">${job.kind}</span></div>
+        <div><span class="text-small">Status</span><br><span class="badge badge-${job.status}">${job.status}</span></div>
+        <div><span class="text-small">Progress</span><br>${Math.round(job.progress * 100)}%</div>
+        <div><span class="text-small">Created</span><br>${new Date(job.created_at).toLocaleString()}</div>
+        <div><span class="text-small">Updated</span><br>${new Date(job.updated_at).toLocaleString()}</div>
+        ${job.artifact ? `<div style="grid-column:1/-1"><span class="text-small">Artifact</span><br><span class="mono">${job.artifact}</span></div>` : ''}
+        ${job.error ? `<div style="grid-column:1/-1"><span class="text-small">Error</span><br><span style="color:var(--error)">${job.error}</span></div>` : ''}
+        ${job.message ? `<div style="grid-column:1/-1"><span class="text-small">Message</span><br>${job.message}</div>` : ''}
+      </div>
+      ${edlSection}
+      ${historySection}
+    `;
+  } catch (e) {
+    addLog(`Failed to load job detail: ${e.message}`, 'error');
+  }
+}
+
+// ── Health / Agents ───────────────────────────────────────────────────────────
+async function refreshHealth() {
+  try {
+    const r = await fetch(`${cfg.apiBase}/health`);
+    const data = await r.json();
+    const container = document.getElementById('agentsContainer');
+
+    if (data.agents_connected === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="currentColor"><circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 16h12M16 10v12" stroke="currentColor" stroke-width="2"/></svg>
+          <div>No agents connected</div>
+          <div style="margin-top:8px; font-size:11px">The FFmpeg rendering agent should connect automatically via PM2.</div>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="alert alert-success">✅ ${data.agents_connected} agent(s) connected and ready</div>
+        <div class="text-small mt8">Uptime: ${data.uptime_s}s · Jobs: ${data.jobs_total} · Version: ${data.version}</div>
+      `;
+    }
+  } catch (e) {
+    document.getElementById('agentsContainer').innerHTML = `<div class="alert alert-error">Cannot reach API: ${e.message}</div>`;
+  }
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+function saveConfig() {
+  cfg.apiBase = document.getElementById('apiBase').value.trim().replace(/\/$/, '');
+  cfg.controlKey = document.getElementById('controlKey').value.trim();
+  localStorage.setItem('ironedit_api', cfg.apiBase);
+  localStorage.setItem('ironedit_key', cfg.controlKey);
+  showResult('configResult', 'success', 'Config saved.');
+  checkHealth();
+}
+
+async function testConnection() {
+  saveConfig();
+  try {
+    const r = await fetch(`${cfg.apiBase}/health`, { signal: AbortSignal.timeout(5000) });
+    const data = await r.json();
+    showResult('configResult', 'success', `Connected! Status: ${data.status}, Agents: ${data.agents_connected}`);
+    addLog('Connection test successful.', 'success');
+  } catch (e) {
+    showResult('configResult', 'error', `Connection failed: ${e.message}`);
+    addLog(`Connection test failed: ${e.message}`, 'error');
+  }
+}
+
+// ── EDL Preview ───────────────────────────────────────────────────────────────
+function showEDLPreview(edl) {
+  const card = document.getElementById('edlPreviewCard');
+  const viewer = document.getElementById('edlViewer');
+  card.style.display = 'block';
+  viewer.textContent = JSON.stringify(edl, null, 2);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+async function apiFetch(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: {
+      'Authorization': `Bearer ${cfg.controlKey}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) {
+    opts.body = JSON.stringify(body);
+    if (body.kind) opts.headers['X-Job-Kind'] = body.kind;
+  }
+  return fetch(`${cfg.apiBase}${path}`, opts);
+}
+
+function showResult(elId, type, msg) {
+  const el = document.getElementById(elId);
+  el.innerHTML = `<div class="alert alert-${type === 'success' ? 'success' : type === 'error' ? 'error' : 'info'}">${msg}</div>`;
+}
+
+function setLoading(btnId, spinnerId, loading) {
+  const btn = document.getElementById(btnId);
+  const spinner = document.getElementById(spinnerId);
+  if (btn) btn.disabled = loading;
+  if (spinner) spinner.style.display = loading ? 'inline-block' : 'none';
+}
+
+function addLog(msg, level = 'info') {
+  const console_ = document.getElementById('logConsole');
+  const p = document.createElement('p');
+  p.className = `log-line ${level}`;
+  p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  console_.appendChild(p);
+  console_.scrollTop = console_.scrollHeight;
+  // Keep last 200 lines
+  while (console_.children.length > 200) console_.removeChild(console_.firstChild);
+}
+</script>
+</body>
+</html>
