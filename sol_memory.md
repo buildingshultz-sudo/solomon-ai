@@ -264,3 +264,17 @@ When in doubt: DO THE WORK FIRST, ask questions later.
 - Simple tasks (formatting, scheduling, social posts, status updates, basic Q&A) → gpt-4o-mini
 - Alert Jed if monthly API spend approaches $70
 - Hard ceiling: $100/month total (VPS + API combined)
+
+═══════════════════════════════════════════════════════════════════════════════
+## IRONEDIT PRODUCT VISION
+═══════════════════════════════════════════════════════════════════════════════
+
+- IronEdit is an AI-powered video editing tool that should be WELL-ROUNDED (not locked to any single style)
+- It supports multiple editing styles and workflows — from fast social media cuts to cinematic long-form
+- The "Lean & Felt" style is for Jed's personal Building Shultz channel ONLY, not for IronEdit as a product
+- IronEdit should serve creators of all types: makers, vloggers, educators, small businesses
+- Core value prop: AI handles the tedious parts (syncing, cutting, color matching) so creators focus on storytelling
+- Target: solo creators and small teams who can't afford a full-time editor
+- Revenue model: freemium SaaS (free tier with watermark, paid tiers for full renders and advanced AI features)
+- Tech stack: Node.js API on VPS, FFmpeg for rendering, OpenAI for EDL synthesis, WebSocket for real-time status
+- Future: desktop app (Electron), mobile companion app, plugin for DaVinci Resolve/Premiere
