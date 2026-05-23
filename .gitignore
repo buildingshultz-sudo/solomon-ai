@@ -1,43 +1,11 @@
-# Environment and secrets
-.env
-.env.local
-.env.production
-
-# YouTube OAuth credentials (NEVER commit these)
-youtube/client_secrets.json
-youtube/youtube_token.json
-credentials/
-*_token.json
-client_secrets.json
-
-# Dependencies
 node_modules/
-venv/
-__pycache__/
-*.pyc
-*.pyo
-
-# Logs
 logs/
-*.log
-
-# Deliverables (generated output)
-deliverables/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# PM2
-ecosystem.config.js.bak
-
-# Temp files
-*.tmp
-*.swp
-*.backup.*
-*.bak
-swap_to_crewai.js
-fix_*.js
-queue_tasks.js
-recovery_block.js
-task_recovery_patch.js
+*.db
+*.db-shm
+*.db-wal
+.env
+sol-config.json
+.agent_state.json
+health-log.json
+user_images/*.jpg
+user_images/*.png

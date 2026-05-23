@@ -1,5 +1,5 @@
 /**
- * Solomon's Forge Bot v6.0 — Autonomous Business Operating System
+ * Solomon's Forge Bot v6.1 — Autonomous Business Operating System
  *
  * Architecture:
  * - Plugin-based: all integrations are lazy-loaded modules
@@ -7,6 +7,7 @@
  * - Memory: SQLite-backed persistent context
  * - Health: deep functional checks, not just process status
  * - Self-upgrade: Sol can modify his own code and deploy
+ * - Image persistence: all user photos saved to disk with JSON index
  *
  * Core flow:
  * 1. User sends message via Telegram
@@ -14,6 +15,18 @@
  * 3. LLM decides: direct reply, tool call, or task queue
  * 4. Tools execute via plugin system
  * 5. Results verified and delivered
+ *
+ * v6.1 Changes:
+ * - Persistent image storage for all received photos
+ * - recall_user_images tool for LLM to reference saved photos
+ * - Removed startup notification spam
+ * - Fixed silent response bug (always responds)
+ * - Fixed summary call API 400 (fresh message array)
+ * - All LLM calls routed through OpenRouter (vision included)
+ * - Tools always available (including during vision calls)
+ * - generate_image and set_desktop_wallpaper as direct tools
+ * - Increased tool loop to 8 iterations
+ * - Proper assistant message formatting in tool loop
  */
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -24,8 +37,6 @@ const path = require('path');
 const config = require('./core/config');
 
 // ── PERSISTENT MEMORY FILE ─────────────────────────────────────────────────
-// This file contains Sol's complete context about Jed, the business, and history.
-// It survives all restarts and is ALWAYS included in the system prompt.
 const SOL_MEMORY_FILE = path.join(__dirname, 'sol_memory.md');
 function loadPersistentMemory() {
   try {
@@ -39,6 +50,81 @@ function loadPersistentMemory() {
 }
 const PERSISTENT_MEMORY = loadPersistentMemory();
 console.log('[BOT] Persistent memory loaded:', PERSISTENT_MEMORY.length, 'chars');
+
+// ── USER IMAGE STORE ───────────────────────────────────────────────────────
+// All images sent by Jed are saved here for persistent reference
+const USER_IMAGES_DIR = path.join(__dirname, 'user_images');
+const USER_IMAGES_INDEX = path.join(USER_IMAGES_DIR, 'index.json');
+
+function ensureImageDir() {
+  if (!fs.existsSync(USER_IMAGES_DIR)) {
+    fs.mkdirSync(USER_IMAGES_DIR, { recursive: true });
+    console.log('[IMAGES] Created user_images directory');
+  }
+}
+
+function loadImageIndex() {
+  try {
+    if (fs.existsSync(USER_IMAGES_INDEX)) {
+      return JSON.parse(fs.readFileSync(USER_IMAGES_INDEX, 'utf8'));
+    }
+  } catch (e) {
+    console.error('[IMAGES] Failed to load index:', e.message);
+  }
+  return [];
+}
+
+function saveImageIndex(index) {
+  try {
+    fs.writeFileSync(USER_IMAGES_INDEX, JSON.stringify(index, null, 2));
+  } catch (e) {
+    console.error('[IMAGES] Failed to save index:', e.message);
+  }
+}
+
+async function saveUserImage(buf, filePath, caption) {
+  try {
+    ensureImageDir();
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const tsShort = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const slug = caption
+      ? caption.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 40).replace(/^_|_$/g, '')
+      : 'photo';
+    const ext = filePath.endsWith('.png') ? 'png' : 'jpg';
+    const filename = `${tsShort}_${slug}.${ext}`;
+    const savePath = path.join(USER_IMAGES_DIR, filename);
+    fs.writeFileSync(savePath, buf);
+    const index = loadImageIndex();
+    const entry = {
+      filename,
+      path: savePath,
+      caption: caption || '',
+      timestamp: now.toISOString(),
+      size: buf.length
+    };
+    index.unshift(entry);
+    if (index.length > 200) index.splice(200);
+    saveImageIndex(index);
+    console.log(`[IMAGES] Saved: ${filename} (${buf.length} bytes)`);
+    return entry;
+  } catch (e) {
+    console.error('[IMAGES] Failed to save image:', e.message);
+    return null;
+  }
+}
+
+function searchImageIndex(query) {
+  const index = loadImageIndex();
+  if (!query) return index.slice(0, 20);
+  const q = query.toLowerCase();
+  return index.filter(e =>
+    e.caption.toLowerCase().includes(q) ||
+    e.filename.toLowerCase().includes(q)
+  ).slice(0, 20);
+}
+
+// ── CORE MODULES (continued) ──────────────────────────────────────────────
 const pluginLoader = require('./core/plugin-loader');
 const memory = require('./core/memory');
 const taskQueue = require('./task-queue');
@@ -55,7 +141,10 @@ if (missingCritical.length > 0) {
 const bot = new TelegramBot(config.TELEGRAM_TOKEN, { polling: true });
 const OWNER_ID = config.OWNER_CHAT_ID;
 
-console.log('[BOT] Solomon v6.0 starting...');
+// ── OPENAI DIRECT API KEY (used for Whisper, DALL-E, TTS only) ─────────────
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
+console.log('[BOT] Solomon v6.1 starting...');
 
 // ── LOAD PLUGINS ───────────────────────────────────────────────────────────
 const pluginResults = pluginLoader.loadAllPlugins(config, { bot, memory, taskQueue });
@@ -72,11 +161,16 @@ async function callLLM(messages, tools = null, model = null) {
   };
   if (tools && tools.length > 0) body.tools = tools;
 
+  // Route ALL LLM calls through OpenRouter (supports vision/image_url with gpt-4o model)
+  // Direct OpenAI calls are only used for Whisper, DALL-E, and TTS via openaiRequest()
+  const apiUrl = config.OPENROUTER_URL;
+  const authHeader = `Bearer ${config.OPENROUTER_API_KEY}`;
+
   try {
-    const res = await fetch(config.OPENROUTER_URL, {
+    const res = await fetch(apiUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://solomonsforge.com',
         'X-Title': 'Solomon Bot v6'
@@ -112,7 +206,7 @@ function getAvailableTools() {
     {
       type: 'function', function: {
         name: 'queue_task',
-        description: 'Add a task to the background work queue for autonomous execution',
+        description: 'Add a task to the background work queue for autonomous execution by CrewAI agents',
         parameters: { type: 'object', properties: {
           title: { type: 'string', description: 'Task title' },
           description: { type: 'string', description: 'Detailed task description' },
@@ -124,7 +218,7 @@ function getAvailableTools() {
     {
       type: 'function', function: {
         name: 'check_queue',
-        description: 'Check current task queue status',
+        description: 'Check current task queue status — shows pending, active, and completed tasks',
         parameters: { type: 'object', properties: {}, required: [] }
       }
     },
@@ -164,6 +258,34 @@ function getAvailableTools() {
         description: 'Run a full system health check',
         parameters: { type: 'object', properties: {}, required: [] }
       }
+    },
+    {
+      type: 'function', function: {
+        name: 'generate_image',
+        description: 'Generate an image using DALL-E 3. Use this for wallpapers, designs, artwork, thumbnails, or any visual content Jed requests. Returns an image URL. The image is also sent directly to Jed in Telegram.',
+        parameters: { type: 'object', properties: {
+          prompt: { type: 'string', description: 'Detailed image generation prompt describing the desired image' }
+        }, required: ['prompt'] }
+      }
+    },
+    {
+      type: 'function', function: {
+        name: 'set_desktop_wallpaper',
+        description: 'Download an image from a URL and set it as the Windows desktop wallpaper on Jed\'s PC. Use after generate_image to complete wallpaper requests.',
+        parameters: { type: 'object', properties: {
+          image_url: { type: 'string', description: 'URL of the image to download and set as wallpaper' },
+          filename: { type: 'string', description: 'Filename to save as (e.g. wallpaper.jpg)' }
+        }, required: ['image_url'] }
+      }
+    },
+    {
+      type: 'function', function: {
+        name: 'recall_user_images',
+        description: 'Search the saved images that Jed has previously sent via Telegram. Use this when Jed says "use the images I sent you" or references earlier photos. Returns file paths and captions of matching images.',
+        parameters: { type: 'object', properties: {
+          query: { type: 'string', description: 'Search term to filter images by caption or filename. Leave empty to get the most recent 20 images.' }
+        }, required: [] }
+      }
     }
   );
   return tools;
@@ -176,14 +298,37 @@ async function executeTool(toolName, args, chatId) {
   // Core tools
   switch (toolName) {
     case 'queue_task':
+      // For pc_task type: execute directly via PC Agent instead of queuing
+      if (args.type === 'pc_task') {
+        console.log('[TOOL] pc_task detected — routing directly to PC Agent:', args.title);
+        const pcPlugin = pluginLoader.getPlugin('pc-agent');
+        if (pcPlugin) {
+          const psMatch = args.description && args.description.match(/```(?:powershell|ps1)?\n?([\s\S]+?)```/);
+          const command = psMatch ? psMatch[1].trim() : args.description;
+          const result = await pcPlugin.executeTool('pc_execute', { command, timeout: 60000 });
+          return { executed: true, type: 'pc_task', title: args.title, result };
+        }
+        return { executed: false, error: 'PC Agent plugin not available' };
+      }
+      // For design type: execute DALL-E image generation directly
+      if (args.type === 'design') {
+        console.log('[TOOL] design task detected — generating image directly:', args.title);
+        try {
+          const imageUrl = await generateImage(args.description || args.title);
+          await bot.sendPhoto(chatId, imageUrl, { caption: `🎨 ${args.title}` });
+          return { executed: true, type: 'design', title: args.title, imageUrl, sent: true };
+        } catch (e) {
+          return { executed: false, error: e.message };
+        }
+      }
+      // For all other task types: queue via CrewAI
       const task = taskQueue.addTask(args);
       if (task.duplicate) return { queued: false, reason: task.message };
-      // Submit to CrewAI backend for processing
       const crewResult = await crewai.submitTask(args.title || args.description, args.description || args.title, { id: task.id, agent: args.agent });
       if (crewResult.success) {
         console.log('[CREWAI] Task routed to', crewResult.agent, 'agent:', task.id);
       } else {
-        console.log('[CREWAI] Submit failed, old worker will handle:', crewResult.error);
+        console.log('[CREWAI] Submit failed:', crewResult.error);
       }
       return { queued: true, taskId: task.id, position: 'queued', crewai_agent: crewResult.agent || 'fallback' };
 
@@ -203,9 +348,53 @@ async function executeTool(toolName, args, chatId) {
 
     case 'system_health':
       return await healthMonitor.runFullCheck(config);
+
+    case 'generate_image':
+      try {
+        console.log('[TOOL] Generating image:', args.prompt?.slice(0, 80));
+        const imgUrl = await generateImage(args.prompt);
+        await bot.sendPhoto(chatId, imgUrl, { caption: `🎨 Generated image` });
+        return { success: true, image_url: imgUrl, sent_to_chat: true };
+      } catch (e) {
+        console.error('[TOOL] Image generation failed:', e.message);
+        return { success: false, error: e.message };
+      }
+
+    case 'set_desktop_wallpaper':
+      try {
+        const fname = args.filename || 'wallpaper.jpg';
+        const wallpaperPath = `C:\\Users\\Ashle\\Pictures\\${fname}`;
+        const psCmd = [
+          `Invoke-WebRequest -Uri "${args.image_url}" -OutFile "${wallpaperPath}"`,
+          `Add-Type -TypeDefinition 'using System;using System.Runtime.InteropServices;public class Wallpaper{[DllImport("user32.dll",CharSet=CharSet.Auto)]public static extern int SystemParametersInfo(int uAction,int uParam,string lpvParam,int fuWinIni);}' -ErrorAction SilentlyContinue`,
+          `[Wallpaper]::SystemParametersInfo(20, 0, "${wallpaperPath}", 3)`,
+          `Write-Output "Wallpaper set to ${wallpaperPath}"`
+        ].join('; ');
+        const pcPlugin = pluginLoader.getPlugin('pc-agent');
+        if (pcPlugin) {
+          const result = await pcPlugin.executeTool('pc_execute', { command: psCmd, timeout: 30000 });
+          return { success: true, wallpaper_path: wallpaperPath, result };
+        }
+        return { success: false, error: 'PC Agent plugin not available' };
+      } catch (e) {
+        return { success: false, error: e.message };
+      }
+
+    case 'recall_user_images':
+      const images = searchImageIndex(args.query || '');
+      return {
+        found: images.length,
+        images: images.map(img => ({
+          filename: img.filename,
+          path: img.path,
+          caption: img.caption,
+          timestamp: img.timestamp,
+          size_kb: Math.round(img.size / 1024)
+        }))
+      };
   }
 
-  // Plugin tools
+  // Plugin tools (pc_execute, pc_status, pc_screenshot, web_search, fetch_url, etc.)
   const result = await pluginLoader.executePluginTool(toolName, args, { config, memory, bot });
   return result;
 }
@@ -218,7 +407,6 @@ async function generateAndSendPDF(title, markdown, chatId) {
   try {
     fs.writeFileSync(mdPath, `# ${title}\n\n${markdown}`);
 
-    // Try multiple PDF generation methods
     const { execSync } = require('child_process');
     let generated = false;
 
@@ -254,7 +442,6 @@ async function generateAndSendPDF(title, markdown, chatId) {
     }
 
     if (!generated || !fs.existsSync(pdfPath)) {
-      // Send as markdown file instead
       await bot.sendDocument(chatId, Buffer.from(`# ${title}\n\n${markdown}`), {
         caption: `📄 ${title} (PDF generation unavailable, sending as .md)`
       }, { filename: `${title.replace(/[^a-z0-9]/gi, '_')}.md`, contentType: 'text/markdown' });
@@ -262,7 +449,6 @@ async function generateAndSendPDF(title, markdown, chatId) {
     }
 
     await bot.sendDocument(chatId, pdfPath, { caption: `📄 ${title}` });
-    // Cleanup
     try { fs.unlinkSync(mdPath); fs.unlinkSync(pdfPath); } catch {}
     return { success: true, format: 'pdf' };
   } catch (e) {
@@ -286,12 +472,99 @@ function markdownToHtml(md, title) {
   return `<p>${html}</p>`;
 }
 
+// ── OPENAI DIRECT CLIENT (for Whisper, DALL-E, TTS) ──────────────────────
+const OPENAI_BASE = 'https://api.openai.com/v1';
+
+async function openaiRequest(endpoint, body, isFormData = false) {
+  const headers = { 'Authorization': `Bearer ${OPENAI_API_KEY}` };
+  if (!isFormData) headers['Content-Type'] = 'application/json';
+  const res = await fetch(`${OPENAI_BASE}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: isFormData ? body : JSON.stringify(body),
+    signal: AbortSignal.timeout(60000)
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI ${endpoint} error ${res.status}: ${err.slice(0, 200)}`);
+  }
+  return res;
+}
+
+// Download a file from Telegram and return as Buffer
+async function downloadTelegramFile(fileId) {
+  const file = await bot.getFile(fileId);
+  const url = `https://api.telegram.org/file/bot${process.env.TELEGRAM_TOKEN}/${file.file_path}`;
+  const res = await fetch(url);
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { buf, filePath: file.file_path, url };
+}
+
+// Transcribe voice/audio using OpenAI Whisper
+async function transcribeAudio(fileId) {
+  const { buf, filePath } = await downloadTelegramFile(fileId);
+  const ext = filePath.split('.').pop() || 'ogg';
+  const { FormData, Blob } = await import('formdata-node');
+  const form = new FormData();
+  form.set('file', new Blob([buf], { type: `audio/${ext}` }), `audio.${ext}`);
+  form.set('model', 'whisper-1');
+  const res = await openaiRequest('/audio/transcriptions', form, true);
+  const data = await res.json();
+  return data.text;
+}
+
+// Generate image using DALL-E 3
+async function generateImage(prompt) {
+  const res = await openaiRequest('/images/generations', {
+    model: 'dall-e-3',
+    prompt,
+    n: 1,
+    size: '1024x1024',
+    quality: 'standard'
+  });
+  const data = await res.json();
+  return data.data[0].url;
+}
+
+// Generate TTS audio using OpenAI TTS
+async function generateSpeech(text) {
+  const res = await openaiRequest('/audio/speech', {
+    model: 'tts-1',
+    voice: 'onyx',
+    input: text.slice(0, 4096)
+  });
+  const buf = Buffer.from(await res.arrayBuffer());
+  const tmpPath = `/tmp/sol_tts_${Date.now()}.mp3`;
+  fs.writeFileSync(tmpPath, buf);
+  return tmpPath;
+}
+
+// Extract text from PDF using pdftotext (poppler)
+async function extractPdfText(buf) {
+  const { execSync } = require('child_process');
+  const tmpIn = `/tmp/sol_doc_${Date.now()}.pdf`;
+  fs.writeFileSync(tmpIn, buf);
+  try {
+    const text = execSync(`pdftotext "${tmpIn}" -`, { timeout: 30000 }).toString();
+    fs.unlinkSync(tmpIn);
+    return text.slice(0, 8000);
+  } catch (e) {
+    fs.unlinkSync(tmpIn);
+    throw new Error('PDF text extraction failed: ' + e.message);
+  }
+}
+
 // ── MESSAGE HANDLER ────────────────────────────────────────────────────────
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
-  const text = msg.text;
+  // FIX #8: Read both msg.text AND msg.caption for photo captions
+  const rawText = msg.text || msg.caption || '';
+  const hasPhoto = !!(msg.photo && msg.photo.length > 0);
+  const hasVoice = !!(msg.voice || msg.audio);
+  const hasDocument = !!(msg.document);
 
-  if (!text) return;
+  // Skip if no content at all
+  if (!rawText && !hasPhoto && !hasVoice && !hasDocument) return;
 
   // Owner check
   if (String(chatId) !== String(OWNER_ID)) {
@@ -299,15 +572,113 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  // Handle commands
-  if (text.startsWith('/')) {
-    const handled = await handleCommand(text, chatId);
+  // Handle commands (text only)
+  if (rawText.startsWith('/')) {
+    const handled = await handleCommand(rawText, chatId);
     if (handled) return;
   }
 
   try {
+    let text = rawText;
+    let userContent = rawText;
+    let memoryText = rawText;
+    let ttsRequested = false;
+
+    // ── VOICE / AUDIO: Transcribe with Whisper ──────────────────────────────
+    if (hasVoice) {
+      bot.sendChatAction(chatId, 'typing');
+      console.log('[VOICE] Transcribing audio message...');
+      try {
+        const fileId = (msg.voice || msg.audio).file_id;
+        const transcript = await transcribeAudio(fileId);
+        console.log('[VOICE] Transcript:', transcript.slice(0, 100));
+        text = transcript;
+        userContent = `[Voice message transcribed]: ${transcript}`;
+        memoryText = userContent;
+        await bot.sendMessage(chatId, `🎙️ _Heard: "${transcript.slice(0, 200)}${transcript.length > 200 ? '...' : ''}"_`, { parse_mode: 'Markdown' });
+      } catch (e) {
+        console.error('[VOICE] Transcription failed:', e.message);
+        await bot.sendMessage(chatId, `⚠️ Could not transcribe audio: ${e.message}`);
+        return;
+      }
+    }
+
+    // ── PHOTO: Save to disk + Vision analysis ─────────────────────────────
+    if (hasPhoto) {
+      bot.sendChatAction(chatId, 'typing');
+      const photo = msg.photo[msg.photo.length - 1]; // highest resolution
+      console.log('[VISION] Photo received, file_id:', photo.file_id);
+      try {
+        const { buf, filePath } = await downloadTelegramFile(photo.file_id);
+
+        // FIX #7: Persist image to disk for future reference
+        const savedImage = await saveUserImage(buf, filePath, rawText || '');
+        if (savedImage) {
+          console.log(`[IMAGES] Persisted: ${savedImage.filename}`);
+        }
+
+        const base64Img = buf.toString('base64');
+        const mimeType = filePath.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        const caption = rawText || 'What do you see in this image? Describe it in detail and share any relevant insights.';
+        // Include saved path in context so LLM knows it can reference it later
+        const savedNote = savedImage ? ` [Image saved to: ${savedImage.path}]` : '';
+        userContent = [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Img}` } },
+          { type: 'text', text: caption + savedNote }
+        ];
+        memoryText = rawText
+          ? `[Image with caption: "${rawText}" — saved as ${savedImage ? savedImage.filename : 'unknown'}]`
+          : `[Image sent — saved as ${savedImage ? savedImage.filename : 'unknown'}]`;
+        text = caption;
+        console.log('[VISION] Image prepared, caption:', rawText || '(none)');
+      } catch (e) {
+        console.error('[VISION] Image download failed:', e.message);
+        userContent = rawText || 'I sent you an image but it could not be loaded.';
+        memoryText = userContent;
+        text = userContent;
+      }
+    }
+
+    // ── DOCUMENT: Extract text from PDF/text files ──────────────────────────
+    if (hasDocument) {
+      bot.sendChatAction(chatId, 'typing');
+      const doc = msg.document;
+      const fileName = doc.file_name || 'document';
+      console.log('[DOC] Document received:', fileName, doc.mime_type);
+      try {
+        const { buf } = await downloadTelegramFile(doc.file_id);
+        let docText = '';
+        if (doc.mime_type === 'application/pdf' || fileName.endsWith('.pdf')) {
+          docText = await extractPdfText(buf);
+        } else if (doc.mime_type && (doc.mime_type.startsWith('text/') || fileName.match(/\.(txt|md|csv|json|js|py|html|css)$/i))) {
+          docText = buf.toString('utf-8').slice(0, 8000);
+        } else {
+          await bot.sendMessage(chatId, `⚠️ I can read PDFs and text files. This file type (${doc.mime_type || 'unknown'}) is not yet supported.`);
+          return;
+        }
+        const userPrompt = rawText || `Please analyze this document (${fileName}) and summarize its key contents.`;
+        text = userPrompt;
+        userContent = `[Document: ${fileName}]\n\nContent:\n${docText}\n\nUser request: ${userPrompt}`;
+        memoryText = `[Document "${fileName}" analyzed: ${userPrompt}]`;
+        console.log('[DOC] Extracted', docText.length, 'chars from', fileName);
+      } catch (e) {
+        console.error('[DOC] Extraction failed:', e.message);
+        await bot.sendMessage(chatId, `⚠️ Could not read document: ${e.message}`);
+        return;
+      }
+    }
+
+    // ── TTS DETECTION: "speak" or "voice reply" trigger ────────────────────
+    const ttsTriggers = /^(speak|voice reply|say|read aloud|tts)[:\s]/i;
+    if (ttsTriggers.test(text)) {
+      ttsRequested = true;
+      text = text.replace(ttsTriggers, '').trim();
+      userContent = text;
+      memoryText = `[TTS request]: ${text}`;
+    }
+
     // Save message to memory
-    memory.saveMessage(chatId, 'user', text);
+    memory.saveMessage(chatId, 'user', memoryText || text);
 
     // Build context
     const history = memory.getChatHistory(chatId, config.MAX_MESSAGES);
@@ -317,16 +688,18 @@ bot.on('message', async (msg) => {
     const messages = [
       { role: 'system', content: config.SYSTEM_PROMPT + PERSISTENT_MEMORY + kbContext },
       ...history,
-      { role: 'user', content: text }
+      { role: 'user', content: userContent }
     ];
 
-    // Call LLM with tools
-    let response = await callLLM(messages, tools);
+    // FIX #3: Always provide tools so the model can execute actions (including during vision)
+    // FIX #4: All LLM calls go through OpenRouter (no direct OpenAI for chat)
+    const visionModel = hasPhoto ? 'openai/gpt-4o' : null;
+    let response = await callLLM(messages, tools, visionModel);
     let iterations = 0;
-    const maxIterations = 5;
+    const maxIterations = 8;
 
     // Tool call loop
-    while (response.tool_calls && iterations < maxIterations) {
+    while (response.tool_calls && response.tool_calls.length > 0 && iterations < maxIterations) {
       iterations++;
       const toolResults = [];
 
@@ -335,6 +708,7 @@ bot.on('message', async (msg) => {
         let args = {};
         try { args = JSON.parse(toolCall.function.arguments); } catch {}
 
+        console.log(`[TOOL] Iteration ${iterations}: ${name}`, JSON.stringify(args).slice(0, 200));
         const result = await executeTool(name, args, chatId);
         toolResults.push({
           role: 'tool',
@@ -343,28 +717,86 @@ bot.on('message', async (msg) => {
         });
       }
 
-      // Continue conversation with tool results
-      messages.push(response);
+      // Push the assistant message (with tool_calls) properly formatted
+      const assistantMsg = { role: 'assistant', tool_calls: response.tool_calls };
+      if (response.content) assistantMsg.content = response.content;
+      messages.push(assistantMsg);
       messages.push(...toolResults);
       response = await callLLM(messages, tools);
     }
 
-    // Send final response
-    const reply = response.content || '(No response generated)';
+    // FIX #2 & #5: If tool loop exhausted without text reply, use FRESH summary request
+    if (!response.content) {
+      try {
+        console.log('[BOT] No text reply after tool loop, requesting summary...');
+        // Collect tool execution results for context (fresh array avoids API 400)
+        const toolSummaryParts = [];
+        for (const m of messages) {
+          if (m.role === 'tool' && m.content) {
+            try {
+              const parsed = JSON.parse(m.content);
+              toolSummaryParts.push(JSON.stringify(parsed).slice(0, 500));
+            } catch { toolSummaryParts.push(m.content.slice(0, 500)); }
+          }
+        }
+        const toolContext = toolSummaryParts.length > 0
+          ? `\n\nTool results from this session:\n${toolSummaryParts.join('\n')}`
+          : '';
+        const summaryMessages = [
+          { role: 'system', content: 'You are Sol, Jed\'s AI assistant. Summarize what you just accomplished. Be direct and concise. If something failed, say so honestly.' },
+          { role: 'user', content: `Jed asked: "${text}"\n\nYou executed ${iterations} tool call(s).${toolContext}\n\nPlease give Jed a concise, honest summary of what you did and the result. If the task is still in progress, say what's done and what's next.` }
+        ];
+        const summaryResponse = await callLLM(summaryMessages, null);
+        if (summaryResponse && summaryResponse.content) {
+          response = summaryResponse;
+        }
+      } catch (e) {
+        console.error('[BOT] Summary call failed:', e.message);
+      }
+    }
+
+    // FIX #2: NEVER go completely silent — always send something
+    let reply = response.content;
+    if (!reply) {
+      console.log('[BOT] No reply content after summary attempt — sending fallback status.');
+      reply = iterations > 0
+        ? `⚔️ I executed ${iterations} action(s) for your request but hit an issue generating my response. The actions themselves may have succeeded — ask me for a status update or check /queue.`
+        : `⚔️ I received your message but couldn't generate a response. Could you rephrase or try again?`;
+    }
     memory.saveMessage(chatId, 'assistant', reply);
+
+    // ── TTS: Send audio reply if requested ─────────────────────────────────
+    if (ttsRequested) {
+      try {
+        bot.sendChatAction(chatId, 'record_voice');
+        const audioPath = await generateSpeech(reply);
+        await bot.sendVoice(chatId, audioPath);
+        fs.unlinkSync(audioPath);
+        return; // Don't also send text
+      } catch (e) {
+        console.error('[TTS] Speech generation failed:', e.message);
+        // Fall through to send text reply instead
+      }
+    }
 
     // Split long messages (Telegram 4096 char limit)
     if (reply.length > 4000) {
       const chunks = splitMessage(reply, 4000);
       for (const chunk of chunks) {
         await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' }).catch(() =>
-          bot.sendMessage(chatId, chunk)  // Retry without markdown if parsing fails
+          bot.sendMessage(chatId, chunk)
         );
       }
     } else {
-      await bot.sendMessage(chatId, reply, { parse_mode: 'Markdown' }).catch(() =>
-        bot.sendMessage(chatId, reply)
-      );
+      await bot.sendMessage(chatId, reply, { parse_mode: 'Markdown' }).catch(() => {
+        const plain = reply
+          .replace(/\*\*([^*]+)\*\*/g, '$1')
+          .replace(/\*([^*]+)\*/g, '$1')
+          .replace(/`([^`]+)`/g, '$1')
+          .replace(/```[\s\S]*?```/g, '[code block]')
+          .replace(/_{1,2}([^_]+)_{1,2}/g, '$1');
+        return bot.sendMessage(chatId, plain);
+      });
     }
   } catch (e) {
     console.error('[BOT] Message handling error:', e.message);
@@ -378,7 +810,7 @@ async function handleCommand(text, chatId) {
 
   switch (cmd) {
     case '/start':
-      bot.sendMessage(chatId, `⚔️ *Solomon's Forge v6.0* — Online\n\nI'm Sol, your autonomous business OS. What do you need?`, { parse_mode: 'Markdown' });
+      bot.sendMessage(chatId, `⚔️ *Solomon's Forge v6.1* — Online\n\nI'm Sol, your autonomous business OS. What do you need?`, { parse_mode: 'Markdown' });
       return true;
 
     case '/health':
@@ -436,11 +868,9 @@ async function handleCommand(text, chatId) {
       return true;
 
     default:
-      // Check plugin commands
       const pluginCommands = pluginLoader.getAllCommands();
       if (pluginCommands[cmd]) {
-        // Route to plugin handler (future: plugins can register command handlers)
-        return false;  // Let the LLM handle it with context
+        return false;
       }
       return false;
   }
@@ -465,7 +895,7 @@ const workerAdapter = require('./worker-adapter');
 const CrewAIBridge = require('./crewai-bridge');
 const crewai = new CrewAIBridge(bot, config.OWNER_CHAT_ID || '8762434280');
 
-// Health check CrewAI on startup — retry for up to 30s (handles race condition)
+// Health check CrewAI on startup — retry for up to 30s
 (async () => {
   const MAX_WAIT = 30000;
   const INTERVAL = 3000;
@@ -483,10 +913,7 @@ const crewai = new CrewAIBridge(bot, config.OWNER_CHAT_ID || '8762434280');
     }
   }
   console.log('[CREWAI] Backend did not respond within 30s — falling back to old worker.');
-})()
-// OLD WORKER DISABLED — CrewAI is now the primary task processor
-// workerAdapter.start(config, { bot, memory, taskQueue, pluginLoader, callLLM, executeTool, OWNER_ID });
-// To re-enable old worker as fallback, uncomment the line above.
+})();
 
 // ── HEALTH CHECK SCHEDULER ─────────────────────────────────────────────────
 setInterval(async () => {
@@ -543,16 +970,13 @@ process.on('SIGTERM', () => {
 
 process.on('uncaughtException', (err) => {
   console.error('[BOT] Uncaught exception:', err.message, err.stack);
-  // Don't crash — log and continue
 });
 
 process.on('unhandledRejection', (reason) => {
   console.error('[BOT] Unhandled rejection:', reason);
 });
 
-
 // ── INTERNAL CALLBACK SERVER (for Python CrewAI backend) ──────────────────
-// Listens on port 4000 for proactive notifications from the CrewAI backend
 const http = require('http');
 const internalServer = http.createServer(async (req, res) => {
   if (req.method !== 'POST') {
@@ -567,10 +991,7 @@ const internalServer = http.createServer(async (req, res) => {
       const chatId = OWNER_ID;
 
       if (req.url === '/notify/complete') {
-        // Task completed — send PDF if available
-        const caption = `✅ *${title || 'Task Complete'}*
-
-${(message || '').slice(0, 900)}`;
+        const caption = `✅ *${title || 'Task Complete'}*\n\n${(message || '').slice(0, 900)}`;
         if (pdf_path && fs.existsSync(pdf_path)) {
           await bot.sendDocument(chatId, pdf_path, { caption, parse_mode: 'Markdown' });
         } else if (md_path && fs.existsSync(md_path)) {
@@ -579,27 +1000,22 @@ ${(message || '').slice(0, 900)}`;
           await bot.sendMessage(chatId, caption, { parse_mode: 'Markdown' });
         }
       } else if (req.url === '/notify/question') {
-        // Sol needs Jed's input
         await bot.sendMessage(chatId,
           `❓ *Sol needs your input:*\n\n${message || 'Please respond to continue.'}`,
           { parse_mode: 'Markdown' });
       } else if (req.url === '/notify/milestone') {
-        // Significant milestone reached
         await bot.sendMessage(chatId,
           `🏆 *Milestone:* ${title || ''}\n\n${message || ''}`,
           { parse_mode: 'Markdown' });
       } else if (req.url === '/notify/error') {
-        // Error requiring human intervention
         await bot.sendMessage(chatId,
           `🚨 *Action needed:* ${title || 'Error'}\n\n${message || ''}\n\nPlease advise.`,
           { parse_mode: 'Markdown' });
       } else if (req.url === '/notify/blocked') {
-        // Task is blocked
         await bot.sendMessage(chatId,
           `🚫 *Blocked: ${title || 'Task'}*\n\n${message || ''}\n\nThis task needs your input to proceed.`,
           { parse_mode: 'Markdown' });
       } else {
-        // Generic notification
         await bot.sendMessage(chatId, message || 'Notification from Sol.', { parse_mode: 'Markdown' });
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -613,16 +1029,14 @@ ${(message || '').slice(0, 900)}`;
 internalServer.listen(4000, '127.0.0.1', () => {
   console.log('[BOT] Internal callback server listening on port 4000');
 });
-// ── END INTERNAL CALLBACK SERVER ───────────────────────────────────────────
 
-console.log('[BOT] Solomon v6.0 fully initialized. Awaiting commands.');
+console.log('[BOT] Solomon v6.1 fully initialized. Awaiting commands.');
 
-// ── STARTUP RECOVERY ───────────────────────────────────────────────────────
-// On every start, check for interrupted tasks and notify Jed
+// ── STARTUP RECOVERY (SILENT) ──────────────────────────────────────────────
+// FIX #9: No startup notification spam. Just recover interrupted tasks silently.
 setTimeout(async () => {
   try {
     const queue = taskQueue.getQueueSummary();
-    // Find tasks that were "active" when we crashed — reset them to pending
     const interrupted = queue.active || [];
     let recovered = 0;
     for (const task of interrupted) {
@@ -635,22 +1049,11 @@ setTimeout(async () => {
       });
       recovered++;
     }
-    const freshQueue = taskQueue.getQueueSummary();
-    const pendingCount = freshQueue.pending.length;
-    const completedCount = freshQueue.stats.completed || 0;
-    let msg = '\u2694\ufe0f *Sol v6.0 back online.*\n\n';
     if (recovered > 0) {
-      msg += '\uD83D\uDD04 Resumed ' + recovered + ' interrupted task' + (recovered !== 1 ? 's' : '') + '.\n';
+      console.log(`[BOT] Startup recovery: ${recovered} tasks resumed`);
     }
-    msg += '\uD83D\uDCCB Queue: ' + pendingCount + ' pending, ' + completedCount + ' completed total.\n';
-    if (pendingCount > 0) {
-      msg += '\nNext up:\n' + freshQueue.pending.slice(0, 3).map(function(t) { return '\u2022 ' + t.title; }).join('\n');
-    } else {
-      msg += '\nQueue is clear \u2014 what should I tackle next?';
-    }
-    await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' });
-    console.log('[BOT] Startup recovery: ' + recovered + ' tasks resumed, ' + pendingCount + ' pending');
+    console.log(`[BOT] Queue: ${taskQueue.getQueueSummary().pending.length} pending`);
   } catch (e) {
     console.error('[BOT] Startup recovery error:', e.message);
   }
-}, 3000); // Wait 3s for everything to initialize
+}, 3000);

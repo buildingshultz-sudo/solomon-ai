@@ -105,7 +105,7 @@ async function createCampaign(args) {
       body: JSON.stringify({
         type: 'regular',
         recipients: { list_id: args.listId },
-        settings: { subject_line: args.subject, from_name: 'Solomon\'s Forge', reply_to: 'jed@solomonsforge.com' }
+        settings: { subject_line: args.subject, from_name: 'Solomon\'s Forge', reply_to: 'contact@solomonsforge.com' }
       })
     }).then(r => r.json());
     // Set content
