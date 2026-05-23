@@ -355,7 +355,7 @@ function getAvailableTools() {
     {
       type: 'function', function: {
         name: 'generate_image',
-        description: 'Generate an image using DALL-E 3. Use this for wallpapers, designs, artwork, thumbnails, or any visual content Jed requests. Returns an image URL. The image is also sent directly to Jed in Telegram.',
+        description: 'Generate an image using gpt-image-1. Use this for wallpapers, designs, artwork, thumbnails, or any visual content Jed requests. The image is sent directly to Jed in Telegram.',
         parameters: { type: 'object', properties: {
           prompt: { type: 'string', description: 'Detailed image generation prompt describing the desired image' }
         }, required: ['prompt'] }
@@ -443,13 +443,14 @@ async function executeTool(toolName, args, chatId) {
         }
         return { executed: false, error: 'PC Agent plugin not available' };
       }
-      // For design type: execute DALL-E image generation directly
+      // For design type: execute gpt-image-1 image generation directly
       if (args.type === 'design') {
         console.log('[TOOL] design task detected — generating image directly:', args.title);
         try {
-          const imageUrl = await generateImage(args.description || args.title);
-          await bot.sendPhoto(chatId, imageUrl, { caption: `🎨 ${args.title}` });
-          return { executed: true, type: 'design', title: args.title, imageUrl, sent: true };
+          const imagePath = await generateImage(args.description || args.title);
+          await bot.sendPhoto(chatId, imagePath, { caption: `🎨 ${args.title}` });
+          try { fs.unlinkSync(imagePath); } catch(e) {}
+          return { executed: true, type: 'design', title: args.title, sent: true };
         } catch (e) {
           return { executed: false, error: e.message };
         }
@@ -485,9 +486,10 @@ async function executeTool(toolName, args, chatId) {
     case 'generate_image':
       try {
         console.log('[TOOL] Generating image:', args.prompt?.slice(0, 80));
-        const imgUrl = await generateImage(args.prompt);
-        await bot.sendPhoto(chatId, imgUrl, { caption: `🎨 Generated image` });
-        return { success: true, image_url: imgUrl, sent_to_chat: true };
+        const imgPath = await generateImage(args.prompt);
+        await bot.sendPhoto(chatId, imgPath, { caption: `🎨 Generated image` });
+        try { fs.unlinkSync(imgPath); } catch(e) {}
+        return { success: true, sent_to_chat: true };
       } catch (e) {
         console.error('[TOOL] Image generation failed:', e.message);
         return { success: false, error: e.message };
@@ -653,7 +655,7 @@ function markdownToHtml(md, title) {
   return `<p>${html}</p>`;
 }
 
-// ── OPENAI DIRECT CLIENT (for Whisper, DALL-E, TTS) ──────────────────────
+// ── OPENAI DIRECT CLIENT (for Whisper, gpt-image-1, TTS) ──────────────────────
 const OPENAI_BASE = 'https://api.openai.com/v1';
 
 async function openaiRequest(endpoint, body, isFormData = false) {
@@ -694,17 +696,21 @@ async function transcribeAudio(fileId) {
   return data.text;
 }
 
-// Generate image using DALL-E 3
+// Generate image using gpt-image-1 (returns base64, saved to temp file)
 async function generateImage(prompt) {
   const res = await openaiRequest('/images/generations', {
-    model: 'dall-e-3',
+    model: 'gpt-image-1',
     prompt,
     n: 1,
     size: '1024x1024',
-    quality: 'standard'
+    quality: 'high'
   });
   const data = await res.json();
-  return data.data[0].url;
+  // gpt-image-1 returns base64-encoded image data (not a URL)
+  const b64 = data.data[0].b64_json;
+  const tmpPath = `/tmp/sol_img_${Date.now()}.png`;
+  fs.writeFileSync(tmpPath, Buffer.from(b64, 'base64'));
+  return tmpPath;
 }
 
 // Generate TTS audio using OpenAI TTS

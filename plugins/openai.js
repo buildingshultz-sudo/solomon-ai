@@ -1,5 +1,5 @@
 /**
- * OpenAI Plugin — GPT, Whisper, DALL-E, Codex
+ * OpenAI Plugin — GPT, Whisper, gpt-image-1, Codex
  */
 const fs = require('fs');
 const path = require('path');
@@ -10,7 +10,7 @@ let baseUrl = 'https://api.openai.com/v1';
 module.exports = {
   name: 'openai',
   version: '1.0.0',
-  description: 'OpenAI API integration: GPT chat, Whisper transcription, DALL-E image generation',
+  description: 'OpenAI API integration: GPT chat, Whisper transcription, gpt-image-1 image generation',
   requiredKeys: ['OPENAI_API_KEY'],
   commands: ['/imagine', '/transcribe'],
   tools: [
@@ -18,7 +18,7 @@ module.exports = {
       type: 'function',
       function: {
         name: 'generate_image',
-        description: 'Generate an image using DALL-E 3. Returns image URL.',
+        description: 'Generate an image using gpt-image-1. Returns file path to generated PNG.',
         parameters: {
           type: 'object',
           properties: {
@@ -79,15 +79,19 @@ async function generateImage(prompt, size = '1024x1024') {
     const res = await fetch(`${baseUrl}/images/generations`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size, quality: 'standard' }),
-      signal: AbortSignal.timeout(60000)
+      body: JSON.stringify({ model: 'gpt-image-1', prompt, n: 1, size, quality: 'high' }),
+      signal: AbortSignal.timeout(90000)
     });
     if (!res.ok) {
       const err = await res.text();
-      return { success: false, error: `DALL-E error: ${err}` };
+      return { success: false, error: `gpt-image-1 error: ${err}` };
     }
     const data = await res.json();
-    return { success: true, url: data.data[0].url, revised_prompt: data.data[0].revised_prompt };
+    // gpt-image-1 returns base64 data, not a URL
+    const b64 = data.data[0].b64_json;
+    const tmpPath = `/tmp/sol_plugin_img_${Date.now()}.png`;
+    require('fs').writeFileSync(tmpPath, Buffer.from(b64, 'base64'));
+    return { success: true, filePath: tmpPath };
   } catch (e) {
     return { success: false, error: e.message };
   }
