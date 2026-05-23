@@ -1,103 +1,5 @@
 [
   {
-    "timestamp": "2026-05-22T22:12:02.998Z",
-    "overall": "healthy",
-    "checks": {
-      "memory": {
-        "totalMB": 1968,
-        "usedMB": 683,
-        "freeMB": 1284,
-        "percentUsed": 35
-      },
-      "disk": {
-        "total": "48G",
-        "used": "7.8G",
-        "available": "40G",
-        "percentUsed": 17
-      },
-      "queue": {
-        "ok": true,
-        "issues": [],
-        "stats": {
-          "total": 73,
-          "pending": 0,
-          "active": 0,
-          "completed": 68,
-          "failed": 0,
-          "blocked": 5
-        }
-      },
-      "pdf": {
-        "manus-md-to-pdf": "exists but may not work",
-        "weasyprint": "available"
-      },
-      "telegram": {
-        "ok": true,
-        "botName": "Shultz_Solomon_bot"
-      },
-      "openrouter": {
-        "ok": true,
-        "response": "OK"
-      },
-      "pcAgent": {
-        "ok": true,
-        "stale": false,
-        "version": "5.0.0",
-        "ageSeconds": 6,
-        "tabs": 0
-      }
-    }
-  },
-  {
-    "timestamp": "2026-05-22T22:17:02.999Z",
-    "overall": "healthy",
-    "checks": {
-      "memory": {
-        "totalMB": 1968,
-        "usedMB": 676,
-        "freeMB": 1292,
-        "percentUsed": 34
-      },
-      "disk": {
-        "total": "48G",
-        "used": "7.8G",
-        "available": "40G",
-        "percentUsed": 17
-      },
-      "queue": {
-        "ok": true,
-        "issues": [],
-        "stats": {
-          "total": 73,
-          "pending": 0,
-          "active": 0,
-          "completed": 68,
-          "failed": 0,
-          "blocked": 5
-        }
-      },
-      "pdf": {
-        "manus-md-to-pdf": "exists but may not work",
-        "weasyprint": "available"
-      },
-      "telegram": {
-        "ok": true,
-        "botName": "Shultz_Solomon_bot"
-      },
-      "openrouter": {
-        "ok": true,
-        "response": "OK"
-      },
-      "pcAgent": {
-        "ok": true,
-        "stale": false,
-        "version": "5.0.0",
-        "ageSeconds": 6,
-        "tabs": 0
-      }
-    }
-  },
-  {
     "timestamp": "2026-05-22T22:22:03.000Z",
     "overall": "healthy",
     "checks": {
@@ -14107,6 +14009,104 @@
         "stale": false,
         "version": "5.0.0",
         "ageSeconds": 3,
+        "tabs": 0
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-23T23:18:40.125Z",
+    "overall": "healthy",
+    "checks": {
+      "memory": {
+        "totalMB": 1968,
+        "usedMB": 834,
+        "freeMB": 1134,
+        "percentUsed": 42
+      },
+      "disk": {
+        "total": "48G",
+        "used": "8.3G",
+        "available": "40G",
+        "percentUsed": 18
+      },
+      "queue": {
+        "ok": true,
+        "issues": [],
+        "stats": {
+          "total": 77,
+          "pending": 0,
+          "active": 0,
+          "completed": 72,
+          "failed": 0,
+          "blocked": 5
+        }
+      },
+      "pdf": {
+        "manus-md-to-pdf": "exists but may not work",
+        "weasyprint": "available"
+      },
+      "telegram": {
+        "ok": true,
+        "botName": "Shultz_Solomon_bot"
+      },
+      "openrouter": {
+        "ok": true,
+        "response": "OK"
+      },
+      "pcAgent": {
+        "ok": true,
+        "stale": false,
+        "version": "5.0.0",
+        "ageSeconds": 10,
+        "tabs": 0
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-23T23:23:40.127Z",
+    "overall": "healthy",
+    "checks": {
+      "memory": {
+        "totalMB": 1968,
+        "usedMB": 835,
+        "freeMB": 1133,
+        "percentUsed": 42
+      },
+      "disk": {
+        "total": "48G",
+        "used": "8.3G",
+        "available": "40G",
+        "percentUsed": 18
+      },
+      "queue": {
+        "ok": true,
+        "issues": [],
+        "stats": {
+          "total": 77,
+          "pending": 0,
+          "active": 0,
+          "completed": 72,
+          "failed": 0,
+          "blocked": 5
+        }
+      },
+      "pdf": {
+        "manus-md-to-pdf": "exists but may not work",
+        "weasyprint": "available"
+      },
+      "telegram": {
+        "ok": true,
+        "botName": "Shultz_Solomon_bot"
+      },
+      "openrouter": {
+        "ok": true,
+        "response": "OK"
+      },
+      "pcAgent": {
+        "ok": true,
+        "stale": false,
+        "version": "5.0.0",
+        "ageSeconds": 10,
         "tabs": 0
       }
     }
