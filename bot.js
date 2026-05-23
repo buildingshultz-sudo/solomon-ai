@@ -1198,6 +1198,19 @@ const internalServer = http.createServer(async (req, res) => {
         await bot.sendMessage(chatId,
           `🚨 *Action needed:* ${title || 'Error'}\n\n${message || ''}\n\nPlease advise.`,
           { parse_mode: 'Markdown' });
+      } else if (req.url === "/inject") {
+        // Inject a message as if from the owner
+        const fakeMsg = {
+          chat: { id: parseInt(OWNER_ID) },
+          from: { id: parseInt(OWNER_ID), is_bot: false, first_name: "Jedidiah" },
+          text: data.text || data.message,
+          date: Math.floor(Date.now() / 1000),
+          message_id: Date.now()
+        };
+        bot.emit("message", fakeMsg);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, injected: true }));
+        return;
       } else if (req.url === '/notify/blocked') {
         await bot.sendMessage(chatId,
           `🚫 *Blocked: ${title || 'Task'}*\n\n${message || ''}\n\nThis task needs your input to proceed.`,
