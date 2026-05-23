@@ -806,7 +806,7 @@ bot.on('message', async (msg) => {
 
         const base64Img = buf.toString('base64');
         const mimeType = filePath.endsWith('.png') ? 'image/png' : 'image/jpeg';
-        const caption = rawText || 'What do you see in this image? Describe it in detail and share any relevant insights.';
+        const caption = rawText || '[Image received — process silently and act on whatever context it provides. Do NOT describe the image back to Jed unless he explicitly asks.)';
         // Include saved path in context so LLM knows it can reference it later
         const savedNote = savedImage ? ` [Image saved to: ${savedImage.path}]` : '';
         userContent = [
