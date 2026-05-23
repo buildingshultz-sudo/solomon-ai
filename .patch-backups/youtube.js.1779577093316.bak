@@ -1,0 +1,53 @@
+/**
+ * YouTube Data API Plugin
+ * Provides access to YouTube Data API for video analytics and management
+ */
+const { google } = require('googleapis');
+
+module.exports = {
+  name: 'youtube',
+  version: '1.1.0',
+  description: 'Integrates YouTube Data API for analytics and video management.',
+  requiredKeys: ['YOUTUBE_API_KEY'],
+
+  init(deps) {
+    this.youtube = google.youtube({ version: 'v3', auth: process.env.YOUTUBE_API_KEY });
+  },
+
+  async getVideoAnalytics(videoId) {
+    try {
+      const response = await this.youtube.videos.list({
+        part: 'statistics',
+        id: videoId
+      });
+      return response.data.items[0].statistics;
+    } catch (error) {
+      return { error: error.message };
+    }
+  },
+
+  async getChannelAnalytics(channelId) {
+    try {
+      const response = await this.youtube.channels.list({
+        part: 'statistics',
+        id: channelId
+      });
+      return response.data.items[0].statistics;
+    } catch (error) {
+      return { error: error.message };
+    }
+  },
+
+  async searchVideos(query) {
+    try {
+      const response = await this.youtube.search.list({
+        part: 'snippet',
+        q: query,
+        type: 'video'
+      });
+      return response.data.items;
+    } catch (error) {
+      return { error: error.message };
+    }
+  }
+};
