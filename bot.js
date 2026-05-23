@@ -124,6 +124,99 @@ function searchImageIndex(query) {
   ).slice(0, 20);
 }
 
+// ── SKILL LIBRARY ──────────────────────────────────────────────────────────
+const SKILLS_DIR = path.join(__dirname, 'skills');
+
+function ensureSkillsDir() {
+  if (!fs.existsSync(SKILLS_DIR)) {
+    fs.mkdirSync(SKILLS_DIR, { recursive: true });
+    console.log('[SKILLS] Created skills directory');
+  }
+}
+
+function listSkills() {
+  ensureSkillsDir();
+  try {
+    return fs.readdirSync(SKILLS_DIR).filter(d => {
+      const p = path.join(SKILLS_DIR, d);
+      return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'metadata.yaml'));
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+function readSkill(skillName) {
+  const skillDir = path.join(SKILLS_DIR, skillName);
+  const metaPath = path.join(skillDir, 'metadata.yaml');
+  const instrPath = path.join(skillDir, 'instructions.md');
+  if (!fs.existsSync(metaPath)) return null;
+  const meta = fs.readFileSync(metaPath, 'utf8');
+  const instructions = fs.existsSync(instrPath) ? fs.readFileSync(instrPath, 'utf8') : '';
+  return { name: skillName, metadata: meta, instructions };
+}
+
+function createSkill(skillName, description, triggerConditions, instructions, scripts = {}) {
+  ensureSkillsDir();
+  const skillDir = path.join(SKILLS_DIR, skillName);
+  fs.mkdirSync(skillDir, { recursive: true });
+  const now = new Date().toISOString();
+  const meta = `name: ${skillName}\ndescription: ${description}\ntrigger_conditions:\n${triggerConditions.split(',').map(t => '  - ' + t.trim()).join('\n')}\ncreated_at: ${now}\nversion: 1\n`;
+  fs.writeFileSync(path.join(skillDir, 'metadata.yaml'), meta);
+  fs.writeFileSync(path.join(skillDir, 'instructions.md'), instructions);
+  for (const [filename, content] of Object.entries(scripts)) {
+    fs.writeFileSync(path.join(skillDir, filename), content);
+  }
+  console.log(`[SKILLS] Created skill: ${skillName}`);
+  return { created: true, path: skillDir };
+}
+
+function updateSkillInstructions(skillName, correction) {
+  const skillDir = path.join(SKILLS_DIR, skillName);
+  const instrPath = path.join(skillDir, 'instructions.md');
+  if (!fs.existsSync(instrPath)) return { updated: false, error: 'Skill not found' };
+  const existing = fs.readFileSync(instrPath, 'utf8');
+  const now = new Date().toISOString();
+  const updated = existing + `\n\n---\n## Correction (${now})\n${correction}\n`;
+  fs.writeFileSync(instrPath, updated);
+  // Bump version in metadata
+  const metaPath = path.join(skillDir, 'metadata.yaml');
+  if (fs.existsSync(metaPath)) {
+    let meta = fs.readFileSync(metaPath, 'utf8');
+    meta = meta.replace(/version: (\d+)/, (_, v) => `version: ${parseInt(v) + 1}`);
+    meta = meta + `last_updated: ${now}\n`;
+    fs.writeFileSync(metaPath, meta);
+  }
+  console.log(`[SKILLS] Updated skill: ${skillName}`);
+  return { updated: true, skill: skillName };
+}
+
+function checkSkillsForTask(taskDescription) {
+  const skills = listSkills();
+  if (skills.length === 0) return null;
+  const desc = taskDescription.toLowerCase();
+  for (const skillName of skills) {
+    const skill = readSkill(skillName);
+    if (!skill) continue;
+    // Check if task description matches any trigger condition in metadata
+    const triggers = skill.metadata.match(/  - (.+)/g) || [];
+    for (const trigger of triggers) {
+      const t = trigger.replace('  - ', '').toLowerCase().trim();
+      if (t && desc.includes(t)) {
+        return skill;
+      }
+    }
+    // Also check if skill name words appear in description
+    const nameWords = skillName.replace(/-/g, ' ').split(' ');
+    if (nameWords.length >= 2 && nameWords.every(w => desc.includes(w))) {
+      return skill;
+    }
+  }
+  return null;
+}
+
+ensureSkillsDir();
+
 // ── CORE MODULES (continued) ──────────────────────────────────────────────
 const pluginLoader = require('./core/plugin-loader');
 const memory = require('./core/memory');
@@ -286,6 +379,46 @@ function getAvailableTools() {
           query: { type: 'string', description: 'Search term to filter images by caption or filename. Leave empty to get the most recent 20 images.' }
         }, required: [] }
       }
+    },
+    {
+      type: 'function', function: {
+        name: 'check_skills',
+        description: 'Check if a skill exists for the current task. Call this BEFORE responding to any task request. If a matching skill is found, follow its instructions exactly.',
+        parameters: { type: 'object', properties: {
+          task_description: { type: 'string', description: 'Description of the task to check for a matching skill' }
+        }, required: ['task_description'] }
+      }
+    },
+    {
+      type: 'function', function: {
+        name: 'create_skill',
+        description: 'Create a new skill in the skill library. Use when Jed says "make this a skill", "save that as a skill", "remember this workflow", or similar.',
+        parameters: { type: 'object', properties: {
+          skill_name: { type: 'string', description: 'Kebab-case skill name (e.g. desktop-wallpaper, content-sprint, youtube-upload)' },
+          description: { type: 'string', description: 'One-sentence description of what this skill does' },
+          trigger_conditions: { type: 'string', description: 'Comma-separated list of phrases/conditions that should trigger this skill' },
+          instructions: { type: 'string', description: 'Step-by-step playbook in markdown format (under 5k tokens). Be specific and deterministic.' },
+          script_filename: { type: 'string', description: 'Optional: filename for a supporting script (e.g. run.py, execute.sh)' },
+          script_content: { type: 'string', description: 'Optional: content of the supporting script' }
+        }, required: ['skill_name', 'description', 'trigger_conditions', 'instructions'] }
+      }
+    },
+    {
+      type: 'function', function: {
+        name: 'update_skill',
+        description: 'Update an existing skill with a correction or improvement. Use when Jed corrects you on a task that has a matching skill.',
+        parameters: { type: 'object', properties: {
+          skill_name: { type: 'string', description: 'Name of the skill to update' },
+          correction: { type: 'string', description: 'The correction or improvement to add to the skill instructions' }
+        }, required: ['skill_name', 'correction'] }
+      }
+    },
+    {
+      type: 'function', function: {
+        name: 'list_skills',
+        description: 'List all available skills in the skill library with their descriptions and trigger conditions.',
+        parameters: { type: 'object', properties: {}, required: [] }
+      }
     }
   );
   return tools;
@@ -392,6 +525,54 @@ async function executeTool(toolName, args, chatId) {
           size_kb: Math.round(img.size / 1024)
         }))
       };
+
+    case 'check_skills': {
+      const matchedSkill = checkSkillsForTask(args.task_description || '');
+      if (matchedSkill) {
+        return {
+          found: true,
+          skill_name: matchedSkill.name,
+          instructions: matchedSkill.instructions,
+          metadata: matchedSkill.metadata
+        };
+      }
+      return { found: false, available_skills: listSkills() };
+    }
+
+    case 'create_skill': {
+      const scripts = {};
+      if (args.script_filename && args.script_content) {
+        scripts[args.script_filename] = args.script_content;
+      }
+      const result = createSkill(
+        args.skill_name,
+        args.description,
+        args.trigger_conditions,
+        args.instructions,
+        scripts
+      );
+      return result;
+    }
+
+    case 'update_skill': {
+      return updateSkillInstructions(args.skill_name, args.correction);
+    }
+
+    case 'list_skills': {
+      const skillNames = listSkills();
+      const skillList = skillNames.map(name => {
+        const skill = readSkill(name);
+        if (!skill) return { name };
+        const descMatch = skill.metadata.match(/description: (.+)/);
+        const triggersMatch = skill.metadata.match(/trigger_conditions:[\s\S]*?(?=\ncreated_at|\nversion|$)/);
+        return {
+          name,
+          description: descMatch ? descMatch[1] : '',
+          triggers: triggersMatch ? triggersMatch[0].replace('trigger_conditions:', '').trim() : ''
+        };
+      });
+      return { count: skillList.length, skills: skillList };
+    }
   }
 
   // Plugin tools (pc_execute, pc_status, pc_screenshot, web_search, fetch_url, etc.)
