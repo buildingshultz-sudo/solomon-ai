@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+       max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #1a1a1a; }
+h1 { color: #111; border-bottom: 2px solid #333; padding-bottom: 10px; font-size: 24px; }
+h2 { color: #222; margin-top: 30px; font-size: 20px; }
+h3 { color: #333; margin-top: 20px; font-size: 16px; }
+table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+th { background: #f5f5f5; font-weight: 600; }
+code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+pre { background: #f4f4f4; padding: 16px; border-radius: 6px; overflow-x: auto; }
+blockquote { border-left: 4px solid #333; margin: 20px 0; padding: 10px 20px; background: #f9f9f9; }
+ul, ol { padding-left: 24px; }
+li { margin-bottom: 4px; }
+</style></head><body><h1>Brief: Stripe payment flow</h1>
+<h1>Stripe Payment Processing Flow — Technical Brief</h1>
+<h2>Executive Summary</h2>
+<p>Stripe delivers a modular yet end-to-end payment stack that combines PCI-compliant payment collection, orchestration logic (PaymentIntent and SetupIntent objects), fraud mitigation (Radar), payout scheduling, and extensible reporting through APIs and the Dashboard. A complete Stripe payment flow typically moves through seven checkpoints: customer data collection, tokenization and PaymentIntent creation, authentication (3D Secure/SCA), authorization, capture/settlement, post-payment lifecycle events (webhooks, refunds, disputes), and payout reconciliation. By leaning on Stripe’s opinionated flow, builders get lower PCI scope, global payment method support, and automated compliance updates, but they must still design resilient webhook listeners, idempotent server logic, and a reconciled ledger. This brief details each phase, highlights configuration choices (automatic vs. manual capture, on-session vs. off-session, multi-processor failover), and ends with implementation timelines plus tactical recommendations for Building Shultz’s ecosystem. Sources: Stripe Documentation on PaymentIntents, Webhooks, and Radar <a href="https://stripe.com/docs/payments/payment-intents">Stripe Docs – PaymentIntents</a>, NerdWallet overview (2026) <a href="https://www.nerdwallet.com/business/software/learn/what-is-stripe">NerdWallet</a>, and FitSmallBusiness guide (2024) <a href="https://fitsmallbusiness.com/what-is-stripe/">FitSmallBusiness</a>.</p>
+<hr />
+<h2>1. Stripe Payment Infrastructure Overview</h2>
+<h3>1.1 Core Components</h3>
+<ul>
+<li><strong>Stripe Dashboard</strong>: Web console to configure payment methods, create API keys, monitor balances, issue refunds, manage disputes, and export financial data. Offers role-based access control, test/live mode toggles, and granular log inspection.</li>
+<li><strong>API + SDKs</strong>: RESTful endpoints and client libraries (JS, Python, Ruby, Go, etc.) that expose every object (PaymentIntent, Customer, Product, Price) with idempotent operations. Stripe.js handles PCI compliance by preventing raw card data from hitting merchant servers.</li>
+<li><strong>Stripe Elements / Checkout</strong>: Pre-built UI layers. Elements is customizable form components; Checkout is a hosted page that handles localization, payment method display, wallet buttons, and SCA.</li>
+<li><strong>Webhook System</strong>: Stripe asynchronously fires events (e.g., <code>payment_intent.succeeded</code>, <code>charge.refunded</code>) to merchant endpoints. Webhooks enable final state confirmation, ledger updates, and service downstream notifications even when customers close browsers early.</li>
+<li><strong>Balance &amp; Payout Layer</strong>: Stripe aggregates captured funds into an available balance, then disburses to linked bank accounts based on payout schedules (daily, weekly, monthly, or manual). Instant payouts available in supported regions with an extra fee.</li>
+<li><strong>Risk &amp; Compliance</strong>: Radar uses machine learning on Stripe’s global network to score transactions, enforce blocklists, and route flagged payments for manual review. Compliance updates (PCI DSS, PSD2/SCA, NACHA, etc.) are handled centrally.</li>
+</ul>
+<h3>1.2 Mode Separation</h3>
+<ul>
+<li><strong>Test Mode</strong>: Uses separate API keys, webhooks, and data. Ideal for staging flows without touching real money. Stripe provides extensive test cards to simulate outcomes (insufficient funds, authentication required, etc.).</li>
+<li><strong>Live Mode</strong>: Production credentials that move money. Merchants must segregate keys, store them securely (e.g., environment variables or secrets manager), and audit usage regularly.</li>
+</ul>
+<hr />
+<h2>2. End-to-End Payment Flow (Card + Wallet Example)</h2>
+<p>Stripe’s flagship card flow is orchestrated by <strong>PaymentIntent</strong>, an object representing a customer’s intent to pay a specific amount. The PaymentIntent evolves through statuses (<code>requires_payment_method</code>, <code>requires_confirmation</code>, <code>requires_action</code>, <code>processing</code>, <code>succeeded</code>, etc.). Below is a canonical seven-step journey.</p>
+<h3>Step 1: Customer Initiation &amp; Data Capture</h3>
+<ol>
+<li>Customer selects a product/plan and provides billing details on the merchant app.</li>
+<li>Frontend uses <strong>Stripe Elements</strong> or direct Stripe.js integration to tokenize sensitive payment data, yielding a <code>payment_method</code> ID. Merchants never store raw PAN/CSC, reducing PCI scope to SAQ A.</li>
+<li>Optional: Collect customer email, shipping address, tax IDs, and metadata for downstream analytics.</li>
+</ol>
+<h3>Step 2: Create/Update PaymentIntent (Server-Side)</h3>
+<ol>
+<li>Backend receives <code>payment_method</code> ID via HTTPS.</li>
+<li>Server calls <code>POST /v1/payment_intents</code> (or updates existing one) with amount, currency, capture method, confirmation method, and <code>payment_method</code>.</li>
+<li>Stripe immediately runs validation (currency, amount limits) and attaches the payment method. Status becomes <code>requires_confirmation</code>.</li>
+</ol>
+<h3>Step 3: Confirm PaymentIntent</h3>
+<ol>
+<li>Server or client calls <code>confirm</code> endpoint, depending on integration style:</li>
+<li><strong>Automatic confirmation</strong>: Client uses <code>stripe.confirmCardPayment(clientSecret)</code> so front-end can handle dynamic authentication challenges.</li>
+<li><strong>Manual confirmation</strong>: Backend confirms, suitable for server-driven flows.</li>
+<li>If 3D Secure or regulatory SCA is required, PaymentIntent moves to <code>requires_action</code>; Stripe returns instructions for handling the challenge via Stripe.js. Otherwise it proceeds to authorization.</li>
+</ol>
+<h3>Step 4: Authorization &amp; Fraud Checks</h3>
+<ol>
+<li>Stripe requests authorization from card networks/banks; funds are reserved but not yet captured.</li>
+<li>Radar scores the payment. Depending on rules, Stripe can auto-block, require manual review, or proceed.</li>
+<li>Status transitions to <code>processing</code> or <code>requires_capture</code> (if manual capture is enabled).</li>
+</ol>
+<h3>Step 5: Capture &amp; Settlement</h3>
+<ol>
+<li><strong>Automatic capture</strong> (default) captures funds immediately after authorization.</li>
+<li><strong>Manual capture</strong> gives merchants up to 7 days (card) to capture via <code>POST /v1/payment_intents/{id}/capture</code>. Useful for verifying inventory or partial fulfillment.</li>
+<li>Upon capture, Stripe creates a <code>Charge</code> object, moves PaymentIntent to <code>succeeded</code>, and schedules funds for payout.</li>
+</ol>
+<h3>Step 6: Post-Payment Lifecycle</h3>
+<ol>
+<li><strong>Webhooks</strong>: Merchant receives <code>payment_intent.succeeded</code> to trigger order fulfillment, send receipts, and update internal ledgers. Webhooks ensure consistency even if the client disconnects.</li>
+<li><strong>Refunds</strong>: Initiated via Dashboard or API (<code>POST /v1/refunds</code>). Partial refunds reference the original Charge.</li>
+<li><strong>Disputes</strong>: Cardholders can dispute via their bank. Stripe notifies the merchant (<code>charge.dispute.created</code>), debits the balance for the disputed amount, and expects evidence uploads before a deadline.</li>
+<li><strong>Reconciliation</strong>: Combine Stripe Balance reports with accounting software. Stripe can push to accounting platforms via APIs or data exports.</li>
+</ol>
+<h3>Step 7: Payouts</h3>
+<ol>
+<li>Captured funds appear in the <strong>available balance</strong> after settlement times (typically T+2 for U.S. cards).</li>
+<li>Payouts follow the configured schedule to the merchant’s bank account. Instant payout (if enabled) moves funds within minutes for an extra percentage fee.</li>
+<li>Payout failure notifications allow merchants to fix bank details and retry.</li>
+</ol>
+<hr />
+<h2>3. Variations in the Flow</h2>
+<h3>3.1 Alternative Payment Methods</h3>
+<p>Stripe PaymentIntents abstract payment method differences. Key variations:
+- <strong>Wallets (Apple Pay, Google Pay)</strong>: Use the same PaymentIntent but leverage platform-specific tokens. Reduced friction on mobile.
+- <strong>ACH Debit</strong>: Requires bank account verification via microdeposits or Plaid. Settlement takes longer (2–5 days) and includes return risk.
+- <strong>Buy Now Pay Later (Affirm, Klarna)</strong>: PaymentIntent interacts with third-party lenders; merchants receive funds upfront, customers pay over time.
+- <strong>PayPal/Venmo</strong>: Through Stripe’s new partnerships (region-dependent), still orchestrated via PaymentIntent.</p>
+<h3>3.2 Subscriptions &amp; Recurring Billing</h3>
+<ul>
+<li>Use <strong>Stripe Billing</strong> with <code>Product</code>, <code>Price</code>, and <code>Subscription</code> objects.</li>
+<li>First payment uses PaymentIntent; subsequent renewals use <code>SetupIntent</code> captured payment methods for off-session charges.</li>
+<li>Stripe handles dunning via Smart Retries, email reminders, and card updater services.</li>
+</ul>
+<h3>3.3 In-Person (Stripe Terminal)</h3>
+<ul>
+<li>Terminal devices pair with Stripe readers. Payment-intent-like flow occurs but with reader SDKs.</li>
+<li>Ideal for pop-up shops, events, or hybrid online/offline businesses.</li>
+</ul>
+<hr />
+<h2>4. Security, Compliance, and Risk Management</h2>
+<h3>4.1 PCI and Data Security</h3>
+<ul>
+<li>Using Stripe Elements/Checkout keeps merchants at <strong>PCI DSS SAQ A</strong> scope. No need to manage encryption or tokenization.</li>
+<li>For custom UI without Elements, merchants must meet SAQ A-EP or SAQ D—significantly higher compliance burden.</li>
+<li>Stripe rotates certificates, encrypts data, and provides audit logs.</li>
+</ul>
+<h3>4.2 Authentication &amp; Regulatory Requirements</h3>
+<ul>
+<li><strong>PSD2/SCA</strong> (EU/UK): Stripe handles PSD2 logic automatically. Merchants can create rules to prefer exemptions (TRA, MIT) but must provide documentation.</li>
+<li><strong>3D Secure (3DS)</strong>: Stripe triggers when required. Merchants can configure Radar rules to request 3DS above certain amounts.</li>
+</ul>
+<h3>4.3 Radar &amp; Custom Rules</h3>
+<ul>
+<li>Default Radar leverages network-wide data.</li>
+<li>Merchants can define allow/deny lists, velocity checks, and custom scoring rules.</li>
+<li>Review flows integrate into Dashboard for manual adjudication.</li>
+</ul>
+<hr />
+<h2>5. Operational Monitoring &amp; Reporting</h2>
+<h3>5.1 Dashboards and Alerts</h3>
+<ul>
+<li><strong>Payments Overview</strong>: Monitor volume, conversion, average ticket.</li>
+<li><strong>Balance Tab</strong>: View pending vs. available balances, payouts, deductions.</li>
+<li><strong>Radar</strong>: Track block/allow rates, rule effectiveness.</li>
+<li><strong>Alerts</strong>: Configure email/SMS/Slack notifications for failed webhooks, payout failures, dispute deadlines.</li>
+</ul>
+<h3>5.2 Reconciliation</h3>
+<ul>
+<li>Stripe provides <strong>Payout Reconciliation report</strong> aligning charges, refunds, disputes, fees per payout.</li>
+<li>Export CSVs or integrate with accounting suites (QuickBooks, Xero).</li>
+<li>Recommended: maintain an internal ledger keyed by PaymentIntent ID to align product fulfillment and financial entries.</li>
+</ul>
+<hr />
+<h2>6. Actionable Recommendations for Building Shultz</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Recommendation</th>
+<th>Owner</th>
+<th>Rationale</th>
+<th>Timeline</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Implement Stripe Checkout for initial launch, then graduate to Elements for custom branding</td>
+<td>Sol (integration) + Jed (UX feedback)</td>
+<td>Checkout accelerates compliance and SCA handling; Elements later enables signature look</td>
+<td>Week 1–2</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Leverage PaymentIntents with manual capture for high-ticket commissions (custom builds)</td>
+<td>Sol (backend)</td>
+<td>Allows verification of materials/availability before capturing funds</td>
+<td>Design Week 2, deploy Week 4</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Stand up dedicated webhook microservice (e.g., on VPS) with idempotent handlers and retries</td>
+<td>Sol</td>
+<td>Ensures order management stays in sync; Stripe retries for 3 days, but you need ACK logging</td>
+<td>Week 1 build, Week 2 smoke test</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Configure Radar custom rules (e.g., block mismatched country/IP, require 3DS above $1,000)</td>
+<td>Sol</td>
+<td>Reduces fraud exposure for bespoke products</td>
+<td>Week 3</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Automate payout reconciliation by pushing Stripe data into accounting ledger nightly</td>
+<td>Sol + CPA partner</td>
+<td>Prevents month-end scramble and supports tax filings</td>
+<td>Week 4 integration, ongoing</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Set up dispute playbook: template evidence packet, assign owner, track deadlines</td>
+<td>Sol</td>
+<td>Minimizes lost disputes and revenue leakage</td>
+<td>Week 5</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Use Checkout Sessions + Stripe Tax to auto-calculate EU/VAT as soon as digital goods launch</td>
+<td>Sol</td>
+<td>Keeps compliance ready for future eBooks/courses</td>
+<td>Week 6</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>7. Implementation Timeline (6-Week Plan)</h2>
+<ol>
+<li><strong>Week 1</strong></li>
+<li>Obtain API keys, restrict them via dashboard roles.</li>
+<li>Build sandbox environment with Stripe Checkout (test mode).</li>
+<li>Stand up webhook endpoint with logging, signature verification.</li>
+<li><strong>Week 2</strong></li>
+<li>Integrate PaymentIntent manual capture path for flagship products.</li>
+<li>Add client-side validation (Elements) for improved UX.</li>
+<li>Begin Radar baseline (observe default scoring).</li>
+<li><strong>Week 3</strong></li>
+<li>Define Radar custom rules &amp; allowlists/denylists.</li>
+<li>Configure email/SMS alerts for failed payouts and disputes.</li>
+<li>Start drafting dispute evidence templates.</li>
+<li><strong>Week 4</strong></li>
+<li>Connect accounting stack for automatic reconciliation.</li>
+<li>Enable payout schedule review (evaluate instant payout need).</li>
+<li>Conduct failure-mode tests (webhook downtime, partial refunds).</li>
+<li><strong>Week 5</strong></li>
+<li>Document SOPs for refunds, disputes, payout reconciliation.</li>
+<li>Enable live mode with limited product set; monitor conversion.</li>
+<li><strong>Week 6</strong></li>
+<li>Expand payment methods (ACH, wallets).</li>
+<li>Add Stripe Tax/Checkout localization for global audience.</li>
+<li>Review metrics, adjust Radar rules and capture strategies.</li>
+</ol>
+<hr />
+<h2>8. Next Steps Checklist</h2>
+<ul>
+<li>[ ] Generate restricted API keys (publishable + secret) and store via environment variables.</li>
+<li>[ ] Implement server-side PaymentIntent endpoints with idempotency keys.</li>
+<li>[ ] Deploy webhook receiver with queue-based retry handling.</li>
+<li>[ ] Configure Stripe Checkout session flow; gather branding assets.</li>
+<li>[ ] Map physical fulfillment pipeline to webhook events (order creation, shipping).</li>
+<li>[ ] Draft refund/dispute SOPs with responsible owners and deadlines.</li>
+<li>[ ] Schedule Day-30 review to evaluate payment method expansion and subscription readiness.</li>
+</ul>
+<hr />
+<h2>9. Takeaways</h2>
+<ul>
+<li>Stripe’s PaymentIntent-centric architecture ensures compliance with SCA, supports multi-method payments, and reduces PCI exposure, but it requires disciplined backend orchestration.</li>
+<li>Radar and webhooks are not optional—they’re the backbone for fraud control and financial reconciliation.</li>
+<li>A phased rollout (Checkout → Elements → custom flows) lets Building Shultz launch quickly while planning for branded experiences and complex products like IronEdit subscriptions.</li>
+<li>Establishing a six-week implementation plan with clear owners and SOPs guarantees operational readiness, supports Jed’s “Building What Matters” ethos, and keeps the march toward a million-dollar business on rails.</li>
+</ul>
+<hr />
+<h2>Sources</h2>
+<ol>
+<li>Stripe Docs — PaymentIntents: lifecycle, confirmations, capture options (https://stripe.com/docs/payments/payment-intents)  </li>
+<li>Stripe Docs — Webhooks: reliability, signature verification (https://stripe.com/docs/webhooks)  </li>
+<li>Stripe Docs — Radar for Fraud Teams (https://stripe.com/docs/radar)  </li>
+<li>NerdWallet — “What Is Stripe, and How Does It Work to Accept Payments?” (March 20, 2026) (https://www.nerdwallet.com/business/software/learn/what-is-stripe)  </li>
+<li>FitSmallBusiness — “What Is Stripe and How Does it Work? Small Businesses Guide” (Oct 30, 2024) (https://fitsmallbusiness.com/what-is-stripe/)</li>
+</ol></body></html>

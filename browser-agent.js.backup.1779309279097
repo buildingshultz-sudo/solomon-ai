@@ -1,0 +1,110 @@
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const playwright = require('playwright');
+const fetch = require('node-fetch');
+
+async function callGPT4o(instructions) {
+  // Placeholder for GPT-4o API call
+  // Replace with actual API call logic and return the generated script as a string
+  return `
+    const { chromium } = require('playwright');
+    (async () => {
+      const browser = await chromium.launch();
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      ${instructions}
+      await browser.close();
+    })();
+  `;
+}
+
+async function runBrowserTask(instructions, options = {}) {
+  try {
+    const script = await callGPT4o(instructions);
+    const timestamp = Date.now();
+    const scriptPath = `/tmp/playwright-task-${timestamp}.js`;
+    fs.writeFileSync(scriptPath, script);
+
+    return new Promise((resolve, reject) => {
+      exec(`node ${scriptPath}`, (error, stdout, stderr) => {
+        if (error) {
+          reject({ error, stderr });
+        } else {
+          resolve({ stdout, stderr });
+        }
+      });
+    });
+
+  } catch (error) {
+    console.error('Error running browser task:', error);
+    throw error;
+  }
+}
+
+async function scrapeURL(url, extractionInstructions) {
+  const browser = await playwright.chromium.launch();
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(url);
+
+  const data = await page.evaluate(extractionInstructions);
+  const screenshotPath = `/tmp/screenshot-${Date.now()}.png`;
+  await page.screenshot({ path: screenshotPath });
+
+  await browser.close();
+  return { data, screenshotPath };
+}
+
+async function loginAndScrape(url, credentials, extractionInstructions) {
+  const browser = await playwright.chromium.launch();
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(url);
+
+  await page.fill(credentials.selector, credentials.value);
+  await page.click(credentials.submitButton);
+
+  const data = await page.evaluate(extractionInstructions);
+  const screenshotPath = `/tmp/screenshot-${Date.now()}.png`;
+  await page.screenshot({ path: screenshotPath });
+
+  const cookies = await context.cookies();
+  const domain = new URL(url).hostname;
+  const sessionPath = `/root/solomon-bot/browser-sessions/${domain}.json`;
+  fs.writeFileSync(sessionPath, JSON.stringify(cookies, null, 2));
+
+  await browser.close();
+  return { data, screenshotPath };
+}
+
+module.exports = {
+  runBrowserTask,
+  scrapeURL,
+  loginAndScrape
+};
+
+// Contents of /root/solomon-bot/bot.js
+const express = require('express');
+const browserAgent = require('./browser-agent');
+
+const app = express();
+
+app.use(express.json());
+
+app.post('/browse', async (req, res) => {
+  const { url, instructions } = req.body;
+  try {
+    const result = await browserAgent.scrapeURL(url, instructions);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Additional code to integrate browser automation as a GPT-4o tool (not fully implemented here)
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Bot server running on port ${PORT}`);
+});

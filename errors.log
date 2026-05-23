@@ -1,0 +1,80 @@
+[2026-05-20T14:52:22.677Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-20T15:55:02.679Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-20T17:56:58.884Z] [web_search] Search failed: 403
+[2026-05-20T17:57:01.422Z] [web_search] Search failed: 403
+[2026-05-20T17:57:54.770Z] [web_search] Search failed: 403
+[2026-05-20T17:57:57.311Z] [web_search] Search failed: 403
+[2026-05-20T17:57:59.855Z] [web_search] Search failed: 403
+[2026-05-20T17:58:02.391Z] [web_search] Search failed: 403
+[2026-05-20T17:58:54.763Z] [web_search] Search failed: 403
+[2026-05-20T17:58:57.305Z] [web_search] Search failed: 403
+[2026-05-20T17:58:59.841Z] [web_search] Search failed: 403
+[2026-05-20T17:59:02.378Z] [web_search] Search failed: 403
+[2026-05-20T17:59:54.781Z] [web_search] Search failed: 403
+[2026-05-20T17:59:57.322Z] [web_search] Search failed: 403
+[2026-05-20T17:59:59.864Z] [web_search] Search failed: 403
+[2026-05-20T18:00:02.414Z] [web_search] Search failed: 403
+[2026-05-20T18:00:54.767Z] [web_search] Search failed: 403
+[2026-05-20T18:00:57.300Z] [web_search] Search failed: 403
+[2026-05-20T18:00:59.848Z] [web_search] Search failed: 403
+[2026-05-20T18:01:02.391Z] [web_search] Search failed: 403
+[2026-05-20T18:01:54.781Z] [web_search] Search failed: 403
+[2026-05-20T18:14:58.914Z] [web_search] Search failed: 403
+[2026-05-20T18:15:01.454Z] [web_search] Search failed: 403
+[2026-05-20T18:15:54.791Z] [web_search] Search failed: 403
+[2026-05-20T18:15:57.347Z] [web_search] Search failed: 403
+[2026-05-20T18:15:59.891Z] [web_search] Search failed: 403
+[2026-05-20T18:16:02.429Z] [web_search] Search failed: 403
+[2026-05-20T18:16:54.779Z] [web_search] Search failed: 403
+[2026-05-20T18:16:57.320Z] [web_search] Search failed: 403
+[2026-05-20T18:16:59.886Z] [web_search] Search failed: 403
+[2026-05-20T18:17:02.430Z] [web_search] Search failed: 403
+[2026-05-20T18:19:54.795Z] [web_search] Search failed: 403
+[2026-05-20T18:34:45.975Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-20T19:11:42.486Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-20T21:04:34.646Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-21T00:30:16.727Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T00:36:17.145Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T02:36:19.477Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T07:48:19.801Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-21T10:01:39.269Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T12:22:31.933Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T12:22:31.936Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T12:31:49.385Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T12:31:49.385Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T13:40:12.865Z] [uncaught] selfImprove is not defined
+[2026-05-21T14:07:08.716Z] [uncaught] selfImprove is not defined
+[2026-05-21T14:53:44.977Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T15:10:36.507Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T15:10:36.507Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T15:43:50.812Z] [search] _webSearchStructured is not defined
+[2026-05-21T15:44:20.816Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T15:44:20.816Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T16:16:03.217Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T17:38:27.760Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T17:42:21.600Z] [health_openrouter] fetch failed
+[2026-05-21T19:01:39.228Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T19:23:36.157Z] [polling] EFATAL: Error: getaddrinfo EAI_AGAIN api.telegram.org
+[2026-05-21T19:24:50.434Z] [health_openrouter] fetch failed
+[2026-05-21T19:46:32.566Z] [search] _webSearchStructured is not defined
+[2026-05-21T19:46:34.068Z] [search] _webSearchStructured is not defined
+[2026-05-21T20:02:54.526Z] [health_openrouter] fetch failed
+[2026-05-21T20:37:59.907Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T20:37:59.913Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T20:45:34.323Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-21T20:45:40.151Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T20:45:40.152Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T21:16:54.864Z] [polling] EFATAL: Error: read ECONNRESET
+[2026-05-21T21:22:29.234Z] [health_telegram] EFATAL: Error: read ECONNRESET
+[2026-05-21T21:29:10.267Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T21:29:10.267Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T21:40:38.095Z] [llm_attempt_0] Empty LLM response
+[2026-05-21T21:40:38.095Z] [llm_first] Empty LLM response
+[2026-05-21T22:51:39.634Z] [llm_attempt_0] OpenRouter 400: {"error":{"message":"No models provided","code":400},"user_id":"user_3DZnizI4OVEpKFVrO30Te7UsmWn"}
+[2026-05-21T22:52:09.562Z] [llm_attempt_0] OpenRouter 400: {"error":{"message":"No models provided","code":400},"user_id":"user_3DZnizI4OVEpKFVrO30Te7UsmWn"}
+[2026-05-21T22:53:39.528Z] [llm_attempt_0] OpenRouter 400: {"error":{"message":"No models provided","code":400},"user_id":"user_3DZnizI4OVEpKFVrO30Te7UsmWn"}
+[2026-05-21T22:57:48.734Z] [llm_attempt_0] The operation was aborted due to timeout
+[2026-05-21T22:57:48.735Z] [llm_first] The operation was aborted due to timeout
+[2026-05-21T23:58:36.742Z] [llm_attempt_0] Empty LLM response
+[2026-05-21T23:58:55.397Z] [llm_attempt_0] Empty LLM response
+[2026-05-22T01:36:29.421Z] [polling] EFATAL: Error: read ECONNRESET

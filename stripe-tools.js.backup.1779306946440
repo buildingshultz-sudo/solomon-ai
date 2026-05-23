@@ -1,0 +1,149 @@
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
+async function getBalance() {
+  try {
+    const balance = await stripe.balance.retrieve();
+    return {
+      available: balance.available.map(b => ({ amount: b.amount, currency: b.currency })),
+      pending: balance.pending.map(b => ({ amount: b.amount, currency: b.currency }))
+    };
+  } catch (error) {
+    console.error('Error retrieving balance:', error);
+    throw error;
+  }
+}
+
+async function listCharges(limit = 10) {
+  try {
+    const charges = await stripe.charges.list({ limit });
+    return charges.data.map(charge => ({
+      id: charge.id,
+      amount: charge.amount,
+      currency: charge.currency,
+      description: charge.description,
+      status: charge.status,
+      created: charge.created
+    }));
+  } catch (error) {
+    console.error('Error listing charges:', error);
+    throw error;
+  }
+}
+
+async function listCustomers(limit = 10) {
+  try {
+    const customers = await stripe.customers.list({ limit });
+    return customers.data.map(customer => ({
+      id: customer.id,
+      email: customer.email,
+      name: customer.name,
+      created: customer.created
+    }));
+  } catch (error) {
+    console.error('Error listing customers:', error);
+    throw error;
+  }
+}
+
+async function createPaymentLink(priceId, quantity = 1) {
+  try {
+    const paymentLink = await stripe.paymentLinks.create({
+      line_items: [{ price: priceId, quantity }]
+    });
+    return paymentLink.url;
+  } catch (error) {
+    console.error('Error creating payment link:', error);
+    throw error;
+  }
+}
+
+async function createCheckoutSession(items, successUrl, cancelUrl) {
+  try {
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: items,
+      mode: 'payment',
+      success_url: successUrl,
+      cancel_url: cancelUrl
+    });
+    return session.url;
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    throw error;
+  }
+}
+
+async function getRevenueSummary(days = 30) {
+  try {
+    const charges = await stripe.charges.list({ limit: 100 });
+    const now = Math.floor(Date.now() / 1000);
+    const pastTime = now - (days * 24 * 60 * 60);
+    const recentCharges = charges.data.filter(charge => charge.created >= pastTime);
+    
+    const total = recentCharges.reduce((sum, charge) => sum + charge.amount, 0);
+    const count = recentCharges.length;
+    const avgCharge = count ? total / count : 0;
+    const topProducts = recentCharges.reduce((acc, charge) => {
+      const product = charge.description || 'Unknown Product';
+      acc[product] = (acc[product] || 0) + 1;
+      return acc;
+    }, {});
+    
+    return { total, count, avgCharge, topProducts };
+  } catch (error) {
+    console.error('Error getting revenue summary:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  getBalance,
+  listCharges,
+  listCustomers,
+  createPaymentLink,
+  createCheckoutSession,
+  getRevenueSummary
+};
+
+// In /root/solomon-bot/bot.js
+const stripeTools = require('./stripe-tools');
+
+// Assuming some bot framework is in use, e.g., Telegraf for Telegram
+const { Telegraf } = require('telegraf');
+const bot = new Telegraf(process.env.BOT_TOKEN);
+
+bot.command('/stripe', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return ctx.reply('Please set the STRIPE_SECRET_KEY environment variable.');
+  }
+  
+  try {
+    switch (args[0]) {
+      case 'balance':
+        const balance = await stripeTools.getBalance();
+        return ctx.reply(`Available: ${balance.available.map(b => `${b.amount} ${b.currency}`).join(', ')}\nPending: ${balance.pending.map(b => `${b.amount} ${b.currency}`).join(', ')}`);
+      
+      case 'charges':
+        const charges = await stripeTools.listCharges();
+        return ctx.reply(`Charges: ${charges.map(c => `ID: ${c.id}, Amount: ${c.amount}, Currency: ${c.currency}, Description: ${c.description}, Status: ${c.status}, Created: ${new Date(c.created * 1000).toLocaleString()}`).join('\n')}`);
+      
+      case 'revenue':
+        const revenueSummary = await stripeTools.getRevenueSummary();
+        return ctx.reply(`Total: ${revenueSummary.total}\nCount: ${revenueSummary.count}\nAvg Charge: ${revenueSummary.avgCharge}\nTop Products: ${JSON.stringify(revenueSummary.topProducts)}`);
+      
+      case 'link':
+        if (!args[1]) return ctx.reply('Please provide a price ID.');
+        const paymentLink = await stripeTools.createPaymentLink(args[1]);
+        return ctx.reply(`Payment Link: ${paymentLink}`);
+      
+      default:
+        return ctx.reply('Unknown command. Available commands: balance, charges, revenue, link [price_id]');
+    }
+  } catch (error) {
+    console.error('Error handling /stripe command:', error);
+    return ctx.reply('An error occurred while processing your request.');
+  }
+});
+
+bot.launch();

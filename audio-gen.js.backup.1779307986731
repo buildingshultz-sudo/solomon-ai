@@ -1,0 +1,83 @@
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVENLABS_API_URL = 'https://api.elevenlabs.io/v1';
+
+async function fetchFromElevenLabs(endpoint, options = {}) {
+  const url = `${ELEVENLABS_API_URL}${endpoint}`;
+  const response = await fetch(url, options);
+  
+  if (!response.ok) {
+    throw new Error(`Failed to fetch from ElevenLabs: ${response.statusText}`);
+  }
+  
+  return response.json();
+}
+
+async function textToSpeechElevenLabs(text, voiceId, outputPath) {
+  try {
+    const requestBody = JSON.stringify({
+      text,
+      voice: voiceId
+    });
+    
+    const response = await fetchFromElevenLabs('/text-to-speech', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${ELEVENLABS_API_KEY}`
+      },
+      body: requestBody
+    });
+
+    if (response.audio_url) {
+      const audioResponse = await fetch(response.audio_url);
+      const audioBuffer = await audioResponse.buffer();
+      fs.writeFileSync(outputPath, audioBuffer);
+      console.log(`Audio file saved to ${outputPath}`);
+    } else {
+      throw new Error('Audio URL not found in response');
+    }
+  } catch (error) {
+    console.error(`Error in textToSpeechElevenLabs: ${error.message}`);
+  }
+}
+
+async function listVoicesElevenLabs() {
+  try {
+    const response = await fetchFromElevenLabs('/voices', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${ELEVENLABS_API_KEY}`
+      }
+    });
+
+    return response.voices || [];
+  } catch (error) {
+    console.error(`Error in listVoicesElevenLabs: ${error.message}`);
+    return [];
+  }
+}
+
+function generateSoundEffectElevenLabs(description, outputPath) {
+  try {
+    const command = `sound-effect-generator --description "${description}" --output ${outputPath}`;
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error generating sound effect: ${stderr}`);
+        return;
+      }
+      console.log(`Sound effect generated: ${stdout}`);
+    });
+  } catch (error) {
+    console.error(`Error in generateSoundEffectElevenLabs: ${error.message}`);
+  }
+}
+
+module.exports = {
+  textToSpeech: textToSpeechElevenLabs,
+  listVoices: listVoicesElevenLabs,
+  generateSoundEffect: generateSoundEffectElevenLabs
+};

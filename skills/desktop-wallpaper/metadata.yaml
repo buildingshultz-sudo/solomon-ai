@@ -1,0 +1,8 @@
+name: desktop-wallpaper
+description: Generate and set desktop wallpaper using DALL-E.
+trigger_conditions:
+  - Generate new wallpaper
+  - set desktop wallpaper
+  - Building Shultz aesthetic
+created_at: 2026-05-23T22:08:51.190Z
+version: 1

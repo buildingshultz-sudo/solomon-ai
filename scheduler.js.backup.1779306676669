@@ -1,0 +1,123 @@
+const { Queue, Worker, QueueScheduler, RepeatOptions } = require('bullmq');
+const { promises: fs } = require('fs');
+const path = require('path');
+
+const REDIS_CONNECTION = { connection: { host: 'localhost', port: 6379 } };
+const TASK_QUEUE_PATH = path.join(__dirname, 'task-queue.json');
+
+// Create a new queue
+const scheduledQueue = new Queue('sol-scheduled', REDIS_CONNECTION);
+
+// Create a queue scheduler to handle repeatable jobs
+new QueueScheduler('sol-scheduled', REDIS_CONNECTION);
+
+// Function to schedule a task
+async function scheduleTask(name, cronExpression, taskData) {
+  try {
+    await scheduledQueue.add(
+      name,
+      taskData,
+      {
+        repeat: { cron: cronExpression }
+      }
+    );
+    console.log(`Scheduled task '${name}' with cron '${cronExpression}'`);
+  } catch (error) {
+    console.error('Error scheduling task:', error);
+  }
+}
+
+// Function to list all scheduled jobs
+async function listScheduled() {
+  try {
+    const jobs = await scheduledQueue.getRepeatableJobs();
+    return jobs.map(job => ({
+      name: job.name,
+      nextRunAt: new Date(job.next)
+    }));
+  } catch (error) {
+    console.error('Error listing scheduled jobs:', error);
+    return [];
+  }
+}
+
+// Function to remove a scheduled job
+async function removeScheduled(name) {
+  try {
+    const jobs = await scheduledQueue.getRepeatableJobs();
+    for (const job of jobs) {
+      if (job.name === name) {
+        await scheduledQueue.removeRepeatableByKey(job.key);
+        console.log(`Removed scheduled task '${name}'`);
+        return;
+      }
+    }
+    console.log(`No scheduled task found with name '${name}'`);
+  } catch (error) {
+    console.error('Error removing scheduled job:', error);
+  }
+}
+
+// Worker to process scheduled jobs
+const worker = new Worker('sol-scheduled', async job => {
+  try {
+    const tasks = JSON.parse(await fs.readFile(TASK_QUEUE_PATH, 'utf8'));
+    tasks.push({ name: job.name, data: job.data });
+    await fs.writeFile(TASK_QUEUE_PATH, JSON.stringify(tasks, null, 2));
+    console.log(`Processed job '${job.name}'`);
+  } catch (error) {
+    console.error('Error processing job:', error);
+  }
+}, REDIS_CONNECTION);
+
+module.exports = {
+  scheduleTask,
+  listScheduled,
+  removeScheduled
+};
+
+// bot.js
+const scheduler = require('./scheduler');
+const { GPT4o } = require('some-gpt4o-library'); // Placeholder for actual import
+
+// Example function to convert natural language to cron expression
+async function parseNaturalLanguageToCron(expression) {
+  try {
+    const cronExpression = await GPT4o.parse(expression);
+    return cronExpression;
+  } catch (error) {
+    console.error('Error parsing natural language:', error);
+    return null;
+  }
+}
+
+// Handle /schedule command
+async function handleScheduleCommand(command) {
+  const [_, expression, ...taskData] = command.split(' ');
+  const cronExpression = await parseNaturalLanguageToCron(expression);
+  if (cronExpression) {
+    await scheduler.scheduleTask('task-name', cronExpression, { data: taskData.join(' ') });
+  }
+}
+
+// Handle /scheduled command
+async function handleScheduledCommand() {
+  const scheduledJobs = await scheduler.listScheduled();
+  console.log('Scheduled Jobs:', scheduledJobs);
+}
+
+// Handle /unschedule command
+async function handleUnscheduleCommand(command) {
+  const [_, name] = command.split(' ');
+  await scheduler.removeScheduled(name);
+}
+
+// Example function to start bot and handle commands
+async function startBot() {
+  // Simulate some command input
+  await handleScheduleCommand('/schedule every day at 9am Do something');
+  await handleScheduledCommand();
+  await handleUnscheduleCommand('/unschedule task-name');
+}
+
+startBot().catch(console.error);

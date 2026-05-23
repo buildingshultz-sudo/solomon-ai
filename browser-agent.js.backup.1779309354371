@@ -1,0 +1,71 @@
+const { chromium } = require('playwright');
+
+// Launches a browser instance
+async function launchBrowserUniqueInstance(headless = true) {
+    try {
+        const browserInstance = await chromium.launch({ headless });
+        return browserInstance;
+    } catch (error) {
+        return `Error launching browser: ${error.message}`;
+    }
+}
+
+// Navigates to a URL and returns the page text content
+async function navigateToUniquePage(browser, url) {
+    try {
+        const contextInstance = await browser.newContext();
+        const pageInstance = await contextInstance.newPage();
+        await pageInstance.goto(url);
+        const pageContent = await pageInstance.textContent('body');
+        await contextInstance.close();
+        return pageContent;
+    } catch (error) {
+        return `Error navigating to URL: ${error.message}`;
+    }
+}
+
+// Scrapes text from a CSS selector on a page
+async function scrapeSelectorUniqueContent(browser, url, cssSelector) {
+    try {
+        const contextInstance = await browser.newContext();
+        const pageInstance = await contextInstance.newPage();
+        await pageInstance.goto(url);
+        const scrapedTextContent = await pageInstance.textContent(cssSelector);
+        await contextInstance.close();
+        return scrapedTextContent;
+    } catch (error) {
+        return `Error scraping selector: ${error.message}`;
+    }
+}
+
+// Takes a screenshot and saves it to outputPath
+async function takeScreenshotUniquePath(browser, url, outputPath) {
+    try {
+        const contextInstance = await browser.newContext();
+        const pageInstance = await contextInstance.newPage();
+        await pageInstance.goto(url);
+        await pageInstance.screenshot({ path: outputPath });
+        await contextInstance.close();
+        return `Screenshot saved to ${outputPath}`;
+    } catch (error) {
+        return `Error taking screenshot: ${error.message}`;
+    }
+}
+
+// Closes the browser instance
+async function closeBrowserUniqueInstance(browser) {
+    try {
+        await browser.close();
+        return 'Browser closed successfully';
+    } catch (error) {
+        return `Error closing browser: ${error.message}`;
+    }
+}
+
+module.exports = {
+    launchBrowserUniqueInstance,
+    navigateToUniquePage,
+    scrapeSelectorUniqueContent,
+    takeScreenshotUniquePath,
+    closeBrowserUniqueInstance
+};

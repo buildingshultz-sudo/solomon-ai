@@ -1,0 +1,78 @@
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+const MCP = require('@modelcontextprotocol/sdk');
+
+// Helper function to log errors
+function logErrorMCPClient(error) {
+    console.error("MCP Client Error:", error);
+}
+
+// Helper function to load configuration
+function loadConfigMCPClient() {
+    try {
+        const configPath = path.join(__dirname, 'config.json');
+        const configFile = fs.readFileSync(configPath, 'utf-8');
+        return JSON.parse(configFile);
+    } catch (error) {
+        logErrorMCPClient(error);
+        return null;
+    }
+}
+
+// Function to initialize MCP client
+async function initializeMCPClient() {
+    const config = loadConfigMCPClient();
+    if (!config || !config.mcpServerUrl) {
+        throw new Error("Invalid or missing configuration for MCP Client");
+    }
+    try {
+        const client = await MCP.connect(config.mcpServerUrl);
+        return client;
+    } catch (error) {
+        logErrorMCPClient(error);
+        throw error;
+    }
+}
+
+// Function to list available tools from the MCP server
+async function listAvailableToolsMCPClient() {
+    try {
+        const client = await initializeMCPClient();
+        const tools = await client.getTools();
+        return tools;
+    } catch (error) {
+        logErrorMCPClient(error);
+        return [];
+    }
+}
+
+// Function to pass tools to GPT-4o function calling
+async function passToolsToGPT4oMCPClient(tools) {
+    try {
+        // Assuming a function gpt4oFunctionCall exists for handling function calling
+        tools.forEach(tool => {
+            // Replace with actual GPT-4o function calling logic
+            console.log(`Passing tool to GPT-4o: ${tool.name}`);
+        });
+    } catch (error) {
+        logErrorMCPClient(error);
+    }
+}
+
+// Main function to execute the tool registry process
+async function executeToolRegistryMCPClient() {
+    try {
+        const tools = await listAvailableToolsMCPClient();
+        await passToolsToGPT4oMCPClient(tools);
+    } catch (error) {
+        logErrorMCPClient(error);
+    }
+}
+
+// Exporting the public functions
+module.exports = {
+    executeToolRegistryMCPClient,
+    listAvailableToolsMCPClient,
+    passToolsToGPT4oMCPClient
+};

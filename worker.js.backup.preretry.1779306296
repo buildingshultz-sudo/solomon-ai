@@ -1,0 +1,476 @@
+/**
+ * Solomon Autonomous Worker v2
+ * Picks up tasks from the queue and executes them without human input.
+ * Runs on a 60-second interval.
+ * 
+ * v2 additions:
+ * - self_upgrade / code_generation task type: generates code via LLM, writes to VPS, restarts services
+ * - Retry safeguards and message deduplication
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync, exec } = require('child_process');
+
+const WORKER_INTERVAL = 60000; // 60 seconds
+const PROGRESS_REPORT_INTERVAL = 1800000; // 30 minutes
+const MAX_TASK_ATTEMPTS = 3; // Stop retrying after 3 failures
+
+let lastProgressReport = Date.now();
+let workerActive = false;
+
+function initWorker(bot, config, deps) {
+  const { addTask, getNextTask, getActiveTask, updateTask, advanceStep, logAction, getQueueSummary } = deps.taskQueue;
+  const { loadKB, addToKB } = deps.knowledgeBase;
+  const { callLLM, webSearch, executeOnPC, safeSend } = deps.core;
+
+  async function executeTask(task) {
+    console.log(`[WORKER] Executing: ${task.title} (${task.type})`);
+    
+    // Increment attempts
+    const attempts = (task.attempts || 0) + 1;
+    updateTask(task.id, { attempts });
+
+    // ── PC AGENT GATE ──────────────────────────────────────────────────────
+    const needsPC = task.requiresPCAgent || task.type === 'pc_command' || task.type === 'browser_action';
+    if (needsPC) {
+      try {
+        const statusRes = await fetch('http://127.0.0.1:3001/agent/status');
+        const statusData = await statusRes.json();
+        if (!statusData.online) {
+          console.log(`[WORKER] PC Agent OFFLINE — deferring task: ${task.title}`);
+          const lastNotify = task._lastOfflineNotify || 0;
+          if (Date.now() - lastNotify > 1800000) {
+            updateTask(task.id, { status: 'pending', error: 'PC Agent offline', _lastOfflineNotify: Date.now() });
+            await safeSend(bot, config.OWNER_CHAT_ID, 
+              `⏳ Task queued — waiting for PC Agent:\n*${task.title}*\n\nI cannot execute this until your PC agent is online.`);
+          } else {
+            updateTask(task.id, { status: 'pending', error: 'PC Agent offline' });
+          }
+          return false;
+        }
+      } catch (e) {
+        console.log(`[WORKER] Cannot check PC agent: ${e.message} — deferring`);
+        updateTask(task.id, { status: 'pending', error: 'Cannot verify PC agent' });
+        return false;
+      }
+    }
+    // ── END PC AGENT GATE ──────────────────────────────────────────────────
+
+    updateTask(task.id, { status: 'active', startedAt: Date.now() });
+
+    try {
+      let result;
+      switch (task.type) {
+        case 'research':
+        case 'web_search':
+          result = await executeResearchTask(task);
+          break;
+        case 'pc_command':
+          result = await executePCTask(task);
+          break;
+        case 'browser_action':
+          result = await executeBrowserTask(task);
+          break;
+        case 'file_creation':
+          result = await executeFileTask(task);
+          break;
+        case 'report_generation':
+          result = await executeReportTask(task);
+          break;
+        case 'self_upgrade':
+        case 'code_generation':
+          result = await executeSelfUpgradeTask(task);
+          break;
+        default:
+          result = await executeGeneralTask(task);
+      }
+
+      // If result is null, task was intentionally deferred
+      if (result === null || result === false) {
+        console.log(`[WORKER] Task deferred (null/false result): ${task.title}`);
+        if (attempts >= MAX_TASK_ATTEMPTS) {
+          console.log(`[WORKER] Task ${task.id} failed ${attempts} times. Marking as failed.`);
+          updateTask(task.id, { status: 'failed', failReason: 'Max attempts reached (deferred/stalled)' });
+          await safeSend(bot, config.OWNER_CHAT_ID, `❌ *Task Failed: ${task.title}*\n\nStalled ${attempts} times. Moved to manual review.`);
+        }
+        return false;
+      }
+
+      // Verify result
+      const verified = verifyResult(task, result);
+      
+      logAction({
+        taskId: task.id,
+        type: task.type,
+        description: `Completed: ${task.title}`,
+        output: typeof result === 'string' ? result.slice(0, 500) : JSON.stringify(result).slice(0, 500),
+        verified,
+        verificationMethod: 'output_check',
+        success: true
+      });
+
+      updateTask(task.id, { status: 'completed', result: typeof result === 'string' ? result.slice(0, 2000) : result });
+      
+      const summary = typeof result === 'string' ? result.slice(0, 3000) : JSON.stringify(result).slice(0, 1000);
+      await safeSend(bot, config.OWNER_CHAT_ID, `✅ *Task Complete: ${task.title}*\n\n${summary}`);
+
+      if (task.type === 'research' || task.type === 'web_search') {
+        addToKB('research_findings', { title: task.title, finding: summary.slice(0, 500), date: new Date().toISOString() });
+      }
+
+      return true;
+    } catch (e) {
+      console.error(`[WORKER] Task failed: ${task.title}`, e.message);
+      
+      const failReason = e.message;
+      const isNewError = task.failReason !== failReason;
+      
+      if (attempts >= MAX_TASK_ATTEMPTS) {
+        updateTask(task.id, { status: 'failed', failReason: `Max attempts reached: ${failReason}` });
+        await safeSend(bot, config.OWNER_CHAT_ID, `❌ *Task Failed: ${task.title}*\n\nFailed ${attempts} times. Error: ${failReason}\n\nStopping retries.`);
+      } else {
+        updateTask(task.id, { status: 'pending', failReason });
+        if (isNewError) {
+          await safeSend(bot, config.OWNER_CHAT_ID, `⚠️ *Task Error: ${task.title}*\n\n${failReason}\n\nRetrying (${attempts}/${MAX_TASK_ATTEMPTS}).`);
+        }
+      }
+      
+      logAction({
+        taskId: task.id,
+        type: task.type,
+        description: `Failed: ${task.title}`,
+        output: e.message,
+        success: false
+      });
+      
+      return false;
+    }
+  }
+
+  // ─── SELF-UPGRADE / CODE GENERATION TASK ─────────────────────────────────
+  async function executeSelfUpgradeTask(task) {
+    const description = task.description || task.title;
+    const targetFile = task.targetFile || null;
+    const restartProcess = task.restartProcess || 'solomon-bot';
+    
+    console.log(`[WORKER] Self-upgrade: ${task.title}`);
+    advanceStep(task.id, 'Analyzing upgrade requirements...');
+
+    // Step 1: Read the target file if specified
+    let currentCode = '';
+    let resolvedTargetFile = targetFile;
+    
+    if (targetFile) {
+      const fullPath = targetFile.startsWith('/') ? targetFile : path.join(__dirname, targetFile);
+      resolvedTargetFile = fullPath;
+      try {
+        currentCode = fs.readFileSync(fullPath, 'utf8');
+        advanceStep(task.id, `Read current file: ${fullPath} (${currentCode.length} chars)`);
+      } catch (e) {
+        console.log(`[WORKER] Target file not found, will create: ${fullPath}`);
+        advanceStep(task.id, `File not found — will create: ${fullPath}`);
+      }
+    }
+
+    // Step 2: Generate the code via LLM
+    const codeGenPrompt = `You are an expert Node.js developer. You are upgrading the Solomon autonomous bot.
+
+TASK: ${description}
+
+${currentCode ? `CURRENT FILE CONTENTS (${resolvedTargetFile}):\n\`\`\`javascript\n${currentCode.slice(0, 8000)}\n\`\`\`\n` : 'This is a new file.'}
+
+REQUIREMENTS:
+- Write production-ready Node.js code
+- Keep existing functionality intact (don't break what works)
+- Add clear comments for new code
+- Use modern JavaScript (async/await, ES2020+)
+- Handle errors gracefully
+- The bot runs on Node.js v20 on Ubuntu 22.04
+- Available globals: fetch (native), fs, path, child_process
+- If modifying an existing file, output the COMPLETE file (not just the changes)
+
+OUTPUT: Return ONLY the complete JavaScript code. No markdown, no explanation, no \`\`\` blocks. Just raw JavaScript.`;
+
+    advanceStep(task.id, 'Generating code via GPT-4o...');
+    
+    const generatedCode = await callLLM([
+      { role: 'system', content: 'You are a senior Node.js developer. Output ONLY raw JavaScript code. No markdown formatting, no explanation text, no code fences. Just the code.' },
+      { role: 'user', content: codeGenPrompt }
+    ]);
+
+    if (!generatedCode || generatedCode.length < 50) {
+      throw new Error('LLM returned empty or too-short code generation result');
+    }
+
+    // Strip any markdown code fences the LLM might have added despite instructions
+    let cleanCode = generatedCode;
+    if (cleanCode.startsWith('```')) {
+      cleanCode = cleanCode.replace(/^```(?:javascript|js)?\n?/, '').replace(/\n?```$/, '');
+    }
+
+    // Step 3: Validate the generated code (basic syntax check)
+    advanceStep(task.id, `Code generated (${cleanCode.length} chars). Validating syntax...`);
+    
+    try {
+      // Attempt to parse as a module to check for syntax errors
+      new Function(cleanCode);
+    } catch (syntaxError) {
+      // Try to fix common issues
+      if (syntaxError instanceof SyntaxError) {
+        // If it's a require/module issue, that's expected for Node modules
+        if (!syntaxError.message.includes('require') && !syntaxError.message.includes('module') && !syntaxError.message.includes('exports')) {
+          throw new Error(`Generated code has syntax error: ${syntaxError.message}`);
+        }
+      }
+    }
+
+    // Step 4: Write the code to the target file
+    if (!resolvedTargetFile) {
+      // If no target file specified, infer from task title
+      const safeName = task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+      resolvedTargetFile = path.join(__dirname, `${safeName}.js`);
+    }
+
+    // Backup the original file
+    if (fs.existsSync(resolvedTargetFile)) {
+      const backupPath = resolvedTargetFile + '.backup.' + Date.now();
+      fs.copyFileSync(resolvedTargetFile, backupPath);
+      advanceStep(task.id, `Backed up original to: ${path.basename(backupPath)}`);
+    }
+
+    // Write the new code
+    fs.writeFileSync(resolvedTargetFile, cleanCode, 'utf8');
+    advanceStep(task.id, `Written to: ${resolvedTargetFile}`);
+
+    // Step 5: Restart the relevant PM2 process
+    if (restartProcess) {
+      advanceStep(task.id, `Restarting ${restartProcess}...`);
+      try {
+        execSync(`npx pm2 restart ${restartProcess}`, { timeout: 15000, cwd: __dirname });
+        advanceStep(task.id, `Restarted ${restartProcess} successfully`);
+      } catch (restartErr) {
+        // If restart fails, restore backup
+        const backups = fs.readdirSync(path.dirname(resolvedTargetFile))
+          .filter(f => f.startsWith(path.basename(resolvedTargetFile) + '.backup.'))
+          .sort()
+          .reverse();
+        if (backups.length > 0) {
+          const latestBackup = path.join(path.dirname(resolvedTargetFile), backups[0]);
+          fs.copyFileSync(latestBackup, resolvedTargetFile);
+          try { execSync(`npx pm2 restart ${restartProcess}`, { timeout: 15000, cwd: __dirname }); } catch {}
+        }
+        throw new Error(`PM2 restart failed after code deploy: ${restartErr.message}. Rolled back to backup.`);
+      }
+    }
+
+    // Step 6: Verify the process is running
+    await new Promise(r => setTimeout(r, 3000)); // Wait for process to stabilize
+    try {
+      const pm2Status = execSync('npx pm2 jlist', { timeout: 10000, cwd: __dirname }).toString();
+      const processes = JSON.parse(pm2Status);
+      const proc = processes.find(p => p.name === restartProcess);
+      if (proc && proc.pm2_env.status === 'online') {
+        advanceStep(task.id, `✅ ${restartProcess} is online (PID: ${proc.pid})`);
+      } else {
+        throw new Error(`Process ${restartProcess} is not online after restart`);
+      }
+    } catch (verifyErr) {
+      throw new Error(`Verification failed: ${verifyErr.message}`);
+    }
+
+    return `🔧 Self-Upgrade Complete: ${task.title}\n\nFile: ${resolvedTargetFile}\nCode: ${cleanCode.length} chars written\nProcess: ${restartProcess} restarted and verified online\n\nChanges are live.`;
+  }
+
+  // ─── RESEARCH TASK ───────────────────────────────────────────────────────
+  async function executeResearchTask(task) {
+    const steps = task.steps || generateResearchSteps(task);
+    const findings = [];
+    let totalSources = 0;
+
+    for (const step of steps) {
+      console.log(`[WORKER] Research step: ${step}`);
+      const searchResult = await webSearch(step);
+      if (searchResult && searchResult.results && searchResult.results.length > 0) {
+        totalSources += searchResult.results.length;
+        findings.push({
+          query: step,
+          results: searchResult.results.map(r => ({ title: r.title, snippet: r.snippet, url: r.url }))
+        });
+      }
+      advanceStep(task.id, `Searched: "${step}" — ${searchResult.results?.length || 0} results`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    // ── ZERO FABRICATION GUARD ──────────────────────────────────────────────
+    if (findings.length === 0 || totalSources === 0) {
+      console.log(`[WORKER] 0 real results — refusing to fabricate report for: ${task.title}`);
+      const errorMsg = '0 search results — cannot fabricate';
+      const isNewError = task.error !== errorMsg;
+      updateTask(task.id, { status: 'pending', error: errorMsg });
+      if (isNewError) {
+        await safeSend(bot, config.OWNER_CHAT_ID, 
+          `⚠️ Research task stalled: "${task.title}"\n\nAll searches returned 0 results. Status: pending.`);
+      }
+      return null;
+    }
+
+    const synthesisPrompt = `You are a research analyst. Synthesize these findings into a clear, actionable report for a YouTube creator/entrepreneur.
+RESEARCH TOPIC: ${task.title}
+RAW FINDINGS:
+${findings.map(f => `Query: "${f.query}"\nResults:\n${f.results.map(r => `- ${r.title}: ${r.snippet}`).join('\n')}`).join('\n\n')}
+
+Write a concise report (500 words max) with:
+1. Key findings (bullet points)
+2. Actionable recommendations
+3. Sources cited
+Be specific and data-driven. No fluff.`;
+
+    const report = await callLLM([
+      { role: 'system', content: 'You are a research analyst. Be concise, specific, and actionable.' },
+      { role: 'user', content: synthesisPrompt }
+    ]);
+
+    return `📊 Research Report: ${task.title}\n(${totalSources} sources analyzed)\n\n${report}`;
+  }
+
+  function generateResearchSteps(task) {
+    const topic = task.description || task.title;
+    return [
+      topic,
+      `${topic} best practices 2025`,
+      `${topic} statistics data`,
+      `${topic} examples case studies`,
+      `${topic} YouTube creators`
+    ];
+  }
+
+  async function executePCTask(task) {
+    const command = task.command || task.steps[0] || task.description;
+    const taskTimeout = task.timeout || 300000;
+    const result = await executeOnPC(command, 'powershell', taskTimeout);
+    if (!result.success) throw new Error(result.output || 'PC command failed');
+    return result.output;
+  }
+
+  async function executeBrowserTask(task) {
+    const url = task.steps[0] || task.description;
+    const result = await executeOnPC(`browser_open ${url}`, 'browser', 30000);
+    if (!result.success) throw new Error(result.output || 'Browser action failed');
+    return result.output;
+  }
+
+  async function executeFileTask(task) {
+    // For file_creation tasks, use the LLM to generate content and write locally
+    const description = task.description || task.title;
+    const targetFile = task.targetFile || null;
+    
+    if (targetFile) {
+      // If a target file is specified, generate content and write it
+      const content = await callLLM([
+        { role: 'system', content: 'Generate the requested file content. Output ONLY the file content, no explanation.' },
+        { role: 'user', content: description }
+      ]);
+      const fullPath = targetFile.startsWith('/') ? targetFile : path.join(__dirname, targetFile);
+      fs.writeFileSync(fullPath, content, 'utf8');
+      return `File created: ${fullPath} (${content.length} chars)`;
+    }
+    
+    // Fallback: try PC command
+    const result = await executeOnPC(task.steps?.[0] || description, 'powershell', 30000);
+    return result.output || 'File operation completed';
+  }
+
+  async function executeReportTask(task) {
+    const messages = [
+      { role: 'system', content: 'You are Sol, writing a report. Be concise, data-driven, and actionable. Max 600 words.' },
+      { role: 'user', content: task.description || task.title }
+    ];
+    return await callLLM(messages);
+  }
+
+  async function executeGeneralTask(task) {
+    const messages = [
+      { role: 'system', content: 'You are Sol. Execute this task and provide the result. Be concise.' },
+      { role: 'user', content: `Task: ${task.title}\nDescription: ${task.description}\nSteps: ${(task.steps || []).join(', ')}` }
+    ];
+    return await callLLM(messages);
+  }
+
+  function verifyResult(task, result) {
+    if (!result) return false;
+    if (typeof result === 'string' && result.length < 10) return false;
+    if (typeof result === 'string' && result.includes('Error')) return false;
+    return true;
+  }
+
+  // ─── MAIN WORKER LOOP ─────────────────────────────────────────────────────
+  async function workerTick() {
+    if (workerActive) return;
+    workerActive = true;
+
+    try {
+      const active = getActiveTask();
+      if (active) {
+        if (Date.now() - active.startedAt > 300000) {
+          updateTask(active.id, { status: 'pending' });
+          console.log(`[WORKER] Recovered stale task: ${active.title}`);
+        } else {
+          workerActive = false;
+          return;
+        }
+      }
+
+      const next = getNextTask();
+      if (next) {
+        await executeTask(next);
+      } else {
+        await proactiveTaskGeneration();
+      }
+
+      if (Date.now() - lastProgressReport > PROGRESS_REPORT_INTERVAL) {
+        const summary = getQueueSummary();
+        if (summary.active.length > 0 || summary.completed.length > 0) {
+          const activeDesc = summary.active.map(t => `${t.title} (${t.progress}%)`).join(', ') || 'None';
+          const pendingCount = summary.pending.length;
+          if (summary.active.length > 0) {
+            await safeSend(bot, config.OWNER_CHAT_ID, `📊 *Progress Update*\nActive: ${activeDesc}\nQueued: ${pendingCount} tasks`);
+          }
+          lastProgressReport = Date.now();
+        }
+      }
+    } catch (e) {
+      console.error('[WORKER] Tick error:', e.message);
+    }
+    workerActive = false;
+  }
+
+  async function proactiveTaskGeneration() {
+    if (Math.random() > 0.1) return;
+    const kb = loadKB();
+    const summary = getQueueSummary();
+    if (summary.pending.length > 0) return;
+    
+    if (kb.next_moves && kb.next_moves.length > 0) {
+      const move = kb.next_moves[0];
+      const title = typeof move === 'string' ? move : move.title;
+      if (title) {
+        addTask({
+          title: title,
+          description: typeof move === 'object' ? move.description || title : title,
+          type: 'research',
+          priority: 5
+        });
+        console.log(`[WORKER] Proactively added task: ${title}`);
+      }
+    }
+  }
+
+  setInterval(workerTick, WORKER_INTERVAL);
+  setTimeout(workerTick, 10000);
+  console.log(`[WORKER] Autonomous worker v2 started (${WORKER_INTERVAL / 1000}s interval, self-upgrade enabled)`);
+  
+  return { executeTask, workerTick, getQueueSummary };
+}
+
+module.exports = { initWorker };

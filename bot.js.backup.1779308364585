@@ -1,0 +1,2135 @@
+const TelegramBot = require('node-telegram-bot-api');
+const Database = require('better-sqlite3');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const config = require('./config');
+
+// ─── AUTONOMOUS MODULES ──────────────────────────────────────────────────────
+const taskQueueModule = require('./task-queue');
+const { loadKB, saveKB, initKB, addToKB, getKBContext, getFullKBReport } = require('./knowledge-base');
+const { registerIronEditCommands } = require('./ironedit-commands');
+const stripeTools = require('./stripe-tools');
+const appDeployer = require('./app-deployer');
+const { initWorker } = require('./worker');
+
+// Initialize knowledge base on startup
+const knowledgeBase = initKB();
+console.log('[KB] Knowledge base loaded');
+
+// ─── PATHS ────────────────────────────────────────────────────────────────────
+const DB_PATH = path.join(__dirname, 'solomon.db');
+const KB_PATH = path.join(__dirname, 'knowledge_base.json');
+const REMINDERS_PATH = path.join(__dirname, 'reminders.json');
+const ERROR_LOG = path.join(__dirname, 'errors.log');
+const BACKUP_PATH = path.join(__dirname, 'backup_config.json');
+const TASKS_PATH = path.join(__dirname, 'tasks.json');
+const PROJECTS_PATH = path.join(__dirname, 'projects.json');
+const WORK_QUEUE_PATH = path.join(__dirname, 'work_queue.json');
+const STYLE_GUIDE_PATH = path.join(__dirname, 'thumbnail_style_guide.json');
+const SEO_CACHE_PATH = path.join(__dirname, 'seo_cache.json');
+
+// ─── STARTUP TRACKING ────────────────────────────────────────────────────────
+const STARTUP_TIME = Date.now();
+let lastHealthCheck = Date.now();
+let healthStatus = { telegram: true, openrouter: true, pm2: true };
+let isRecoveredCrash = false;
+
+try {
+  const uptimeFile = path.join(__dirname, '.last_clean_shutdown');
+  if (fs.existsSync(uptimeFile)) {
+    const lastShutdown = parseInt(fs.readFileSync(uptimeFile, 'utf-8'));
+    if (Date.now() - lastShutdown > 5000 && Date.now() - lastShutdown < 60000) isRecoveredCrash = true;
+  }
+} catch {}
+
+// ─── ERROR LOGGING ────────────────────────────────────────────────────────────
+function logError(context, error) {
+  const entry = `[${new Date().toISOString()}] [${context}] ${error?.message || error}\n`;
+  fs.appendFileSync(ERROR_LOG, entry);
+  console.error(`[ERROR][${context}] ${error?.message || error}`);
+}
+
+// ─── DATABASE SETUP ───────────────────────────────────────────────────────────
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    timestamp INTEGER DEFAULT (unixepoch())
+  );
+  CREATE INDEX IF NOT EXISTS idx_chat_id ON messages(chat_id);
+`);
+
+const insertMsg = db.prepare('INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)');
+const getHistory = db.prepare('SELECT role, content FROM messages WHERE chat_id = ? ORDER BY id DESC LIMIT ?');
+const countMessages = db.prepare('SELECT COUNT(*) as cnt FROM messages WHERE chat_id = ?');
+const deleteOldest = db.prepare(`DELETE FROM messages WHERE id IN (SELECT id FROM messages WHERE chat_id = ? ORDER BY id ASC LIMIT ?)`);
+
+function saveMessage(chatId, role, content) {
+  const id = String(chatId);
+  insertMsg.run(id, role, content);
+  const { cnt } = countMessages.get(id);
+  if (cnt > config.MAX_MESSAGES) deleteOldest.run(id, cnt - config.MAX_MESSAGES);
+}
+
+function getChatHistory(chatId) {
+  return getHistory.all(String(chatId), config.MAX_MESSAGES).reverse();
+}
+
+// ─── KNOWLEDGE BASE ──────────────────────────────────────────────────────────
+function loadKnowledgeBase() {
+  try { if (fs.existsSync(KB_PATH)) return JSON.parse(fs.readFileSync(KB_PATH, 'utf-8')); } catch (e) { logError('kb_load', e); }
+  return { facts: [], decisions: [], updated: null };
+}
+
+function saveKnowledgeBase(kb) {
+  kb.updated = new Date().toISOString();
+  fs.writeFileSync(KB_PATH, JSON.stringify(kb, null, 2));
+}
+
+function addToKnowledgeBase(category, entry) {
+  const kb = loadKnowledgeBase();
+  if (!kb[category]) kb[category] = [];
+  kb[category].push({ text: entry, date: new Date().toISOString() });
+  if (kb[category].length > 200) kb[category] = kb[category].slice(-200);
+  saveKnowledgeBase(kb);
+}
+
+function getKnowledgeSummary() {
+  const kb = loadKnowledgeBase();
+  let summary = '';
+  if (kb.facts?.length) summary += 'KEY FACTS:\n' + kb.facts.slice(-20).map(f => `• ${f.text}`).join('\n') + '\n\n';
+  if (kb.decisions?.length) summary += 'RECENT DECISIONS:\n' + kb.decisions.slice(-10).map(d => `• ${d.text}`).join('\n') + '\n\n';
+  return summary;
+}
+
+// ─── REMINDERS ───────────────────────────────────────────────────────────────
+function loadReminders() {
+  try { if (fs.existsSync(REMINDERS_PATH)) return JSON.parse(fs.readFileSync(REMINDERS_PATH, 'utf-8')); } catch (e) { logError('reminders_load', e); }
+  return [];
+}
+function saveReminders(reminders) { fs.writeFileSync(REMINDERS_PATH, JSON.stringify(reminders, null, 2)); }
+
+function addReminder(chatId, text, triggerTime) {
+  const reminders = loadReminders();
+  reminders.push({ chatId: String(chatId), text, triggerTime, created: Date.now() });
+  saveReminders(reminders);
+}
+
+function parseReminderTime(timeStr) {
+  const now = Date.now();
+  const match = timeStr.match(/(\d+)\s*(min|minute|minutes|h|hour|hours|d|day|days)/i);
+  if (match) {
+    const num = parseInt(match[1]);
+    const unit = match[2].toLowerCase();
+    if (unit.startsWith('min')) return now + num * 60000;
+    if (unit.startsWith('h')) return now + num * 3600000;
+    if (unit.startsWith('d')) return now + num * 86400000;
+  }
+  return now + 3600000;
+}
+
+// ─── PROJECT STATE (persistent) ──────────────────────────────────────────────
+function loadProjects() {
+  try { if (fs.existsSync(PROJECTS_PATH)) return JSON.parse(fs.readFileSync(PROJECTS_PATH, 'utf-8')); } catch {}
+  return {
+    ironedit: {
+      name: 'IronEdit',
+      status: 'active',
+      phase: 'electron-build',
+      description: 'Drop-to-Post video editing desktop app (Electron)',
+      nextSteps: ['Build Electron app scaffold', 'Integrate FFmpeg', 'Build UI', 'Package installer'],
+      completedSteps: [],
+      lastUpdated: new Date().toISOString()
+    }
+  };
+}
+
+function saveProjects(projects) {
+  fs.writeFileSync(PROJECTS_PATH, JSON.stringify(projects, null, 2));
+}
+
+function updateProject(key, updates) {
+  const projects = loadProjects();
+  if (!projects[key]) projects[key] = { name: key, status: 'active', completedSteps: [], nextSteps: [] };
+  Object.assign(projects[key], updates, { lastUpdated: new Date().toISOString() });
+  saveProjects(projects);
+}
+
+// ─── WORK QUEUE (autonomous tasks Sol works on proactively) ──────────────────
+function loadWorkQueue() {
+  try { if (fs.existsSync(WORK_QUEUE_PATH)) return JSON.parse(fs.readFileSync(WORK_QUEUE_PATH, 'utf-8')); } catch {}
+  return { items: [], processing: false, lastProcessed: null };
+}
+
+function saveWorkQueue(queue) {
+  fs.writeFileSync(WORK_QUEUE_PATH, JSON.stringify(queue, null, 2));
+}
+
+function addToWorkQueue(item) {
+  const queue = loadWorkQueue();
+  queue.items.push({ ...item, id: Date.now().toString(36), status: 'pending', created: Date.now() });
+  saveWorkQueue(queue);
+}
+
+// ─── TASK QUEUE (sub-agent system) ───────────────────────────────────────────
+let taskQueue = [];
+let activeTasks = [];
+let completedTasks = [];
+
+function loadTasks() {
+  try { if (fs.existsSync(TASKS_PATH)) return JSON.parse(fs.readFileSync(TASKS_PATH, 'utf-8')); } catch {}
+  return { queue: [], active: [], completed: [] };
+}
+
+function saveTasks() {
+  fs.writeFileSync(TASKS_PATH, JSON.stringify({ queue: taskQueue, active: activeTasks, completed: completedTasks.slice(-20) }, null, 2));
+}
+
+async function addTask(description, context, chatId) {
+  const task = { id: Date.now().toString(36), description, context, chatId: String(chatId), status: 'queued', created: Date.now() };
+  taskQueue.push(task);
+  saveTasks();
+  processTaskQueue();
+  return task;
+}
+
+async function processTaskQueue() {
+  while (taskQueue.length > 0 && activeTasks.length < config.MAX_WORKERS) {
+    const task = taskQueue.shift();
+    task.status = 'active';
+    activeTasks.push(task);
+    saveTasks();
+    executeTask(task).catch(e => logError('task_exec', e));
+  }
+}
+
+async function executeTask(task) {
+  try {
+    const messages = [
+      { role: 'system', content: `You are Sol, executing a sub-task. Be concise and actionable. Task: ${task.description}` },
+      { role: 'user', content: task.context || task.description }
+    ];
+    const result = await callLLM(messages);
+    task.status = 'completed';
+    task.result = result;
+    task.completedAt = Date.now();
+  } catch (e) {
+    task.status = 'failed';
+    task.error = e.message;
+  }
+  activeTasks = activeTasks.filter(t => t.id !== task.id);
+  completedTasks.push(task);
+  saveTasks();
+  return task;
+}
+
+// ─── LLM CALL ─────────────────────────────────────────────────────────────────
+async function callLLM(messages, model = config.MODEL, retries = 1) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      console.log(`[LLM] Calling ${model} (attempt ${attempt})`);
+      const res = await fetch(config.OPENROUTER_URL, {
+        method: 'POST',
+        signal: AbortSignal.timeout(30000),
+        headers: {
+          'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://solomon-bot.local',
+          'X-Title': 'Sol Bot'
+        },
+        body: JSON.stringify({ model, messages, max_tokens: 4096, temperature: 0.7 })
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`OpenRouter ${res.status}: ${errText}`);
+      }
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error('Empty LLM response');
+      console.log(`[LLM] Success (${content.length} chars)`);
+      return content;
+    } catch (e) {
+      logError(`llm_attempt_${attempt}`, e);
+      if (attempt < retries) {
+        model = config.MODEL_FALLBACK;
+        await new Promise(r => setTimeout(r, 2000));
+      } else throw e;
+    }
+  }
+}
+
+// ─── WEB SEARCH ───────────────────────────────────────────────────────────────
+async function webSearch(query) {
+  // Simple search wrapper for inline use (returns formatted string for chat context)
+  try {
+    const result = await _webSearchStructured(query, 8);
+    if (result.success && result.results.length > 0) {
+      return result.results.map(r => `• ${r.title}\n  ${r.snippet}\n  ${r.url}`).join('\n\n');
+    }
+    return 'No results found. Try rephrasing.';
+  } catch (e) { logError('search', e); return 'Search unavailable.'; }
+}
+// ─── IMAGE VISION (GPT-4o multimodal) ──────────────────────────────────────
+async function analyzeImage(imageUrl, caption = '') {
+  const userContent = [
+    { type: 'text', text: caption || 'Analyze this image in detail. If it\'s a thumbnail, give specific feedback on composition, text, colors, and effectiveness. If it\'s a build/project, describe what you see and offer insights.' },
+    { type: 'image_url', image_url: { url: imageUrl } }
+  ];
+  const messages = [
+    { role: 'system', content: config.SYSTEM_PROMPT },
+    { role: 'user', content: userContent }
+  ];
+  const res = await fetch(config.OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://solomon-bot.local',
+      'X-Title': 'Sol Bot'
+    },
+    body: JSON.stringify({ model: config.MODEL, messages, max_tokens: 4096, temperature: 0.7 })
+  });
+  if (!res.ok) throw new Error(`Vision API ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || 'Could not analyze image.';
+}
+
+// ─── THUMBNAIL STYLE GUIDE ──────────────────────────────────────────────────
+function loadStyleGuide() {
+  try { if (fs.existsSync(STYLE_GUIDE_PATH)) return JSON.parse(fs.readFileSync(STYLE_GUIDE_PATH, 'utf-8')); } catch {}
+  return { analyses: [], preferences: [], feedback: [], brandColors: ['#FF6B00', '#1A1A1A', '#FFFFFF'], updated: null };
+}
+
+function saveStyleGuide(guide) {
+  guide.updated = new Date().toISOString();
+  fs.writeFileSync(STYLE_GUIDE_PATH, JSON.stringify(guide, null, 2));
+}
+
+function addToStyleGuide(category, entry) {
+  const guide = loadStyleGuide();
+  if (!guide[category]) guide[category] = [];
+  guide[category].push({ ...entry, date: new Date().toISOString() });
+  if (guide[category].length > 50) guide[category] = guide[category].slice(-50);
+  saveStyleGuide(guide);
+}
+
+// ─── YOUTUBE SEO RESEARCH ───────────────────────────────────────────────────
+async function youtubeSearch(query, maxResults = 15) {
+  // Try YouTube Data API v3 first (real data with view counts, tags, etc.)
+  if (config.YOUTUBE_API_KEY) {
+    try {
+      const encoded = encodeURIComponent(query);
+      const searchRes = await fetch(
+        `${config.YOUTUBE_API_URL}/search?part=snippet&q=${encoded}&type=video&maxResults=${maxResults}&order=relevance&key=${config.YOUTUBE_API_KEY}`
+      );
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.items && searchData.items.length > 0) {
+          // Get video IDs for stats lookup
+          const videoIds = searchData.items.map(i => i.id.videoId).join(',');
+          const statsRes = await fetch(
+            `${config.YOUTUBE_API_URL}/videos?part=statistics,contentDetails,snippet&id=${videoIds}&key=${config.YOUTUBE_API_KEY}`
+          );
+          const statsData = statsRes.ok ? await statsRes.json() : { items: [] };
+          const statsMap = {};
+          for (const v of (statsData.items || [])) statsMap[v.id] = v;
+
+          return searchData.items.map(item => {
+            const stats = statsMap[item.id.videoId] || {};
+            const snippet = item.snippet || {};
+            const vstats = stats.statistics || {};
+            return {
+              videoId: item.id.videoId,
+              title: snippet.title,
+              author: snippet.channelTitle,
+              publishedText: snippet.publishedAt ? new Date(snippet.publishedAt).toLocaleDateString() : 'N/A',
+              description: snippet.description || '',
+              viewCount: vstats.viewCount ? parseInt(vstats.viewCount).toLocaleString() : 'N/A',
+              likeCount: vstats.likeCount ? parseInt(vstats.likeCount).toLocaleString() : 'N/A',
+              commentCount: vstats.commentCount ? parseInt(vstats.commentCount).toLocaleString() : 'N/A',
+              duration: stats.contentDetails?.duration || 'N/A',
+              tags: (stats.snippet?.tags || []).slice(0, 20),
+              thumbnailUrl: snippet.thumbnails?.high?.url || snippet.thumbnails?.default?.url || ''
+            };
+          });
+        }
+      }
+    } catch (e) { logError('yt_api_search', e); }
+  }
+
+  // Fallback: Invidious public API
+  try {
+    const encoded = encodeURIComponent(query);
+    const instances = [
+      'https://invidious.io.lol/api/v1/search',
+      'https://inv.nadeko.net/api/v1/search',
+      'https://invidious.privacyredirect.com/api/v1/search'
+    ];
+    for (const base of instances) {
+      try {
+        const res = await fetch(`${base}?q=${encoded}&type=video&sort_by=relevance`, { signal: AbortSignal.timeout(8000) });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) return data.slice(0, maxResults);
+        }
+      } catch {}
+    }
+  } catch (e) { logError('yt_invidious', e); }
+
+  return [];
+}
+
+async function deepSEOAnalysis(topic) {
+  // Fetch real YouTube data
+  const results = await youtubeSearch(topic, 15);
+  const webResults = await webSearch(`YouTube "${topic}" woodworking DIY tradesman content strategy 2025`);
+
+  // Build rich data block
+  const hasApiData = results.length > 0 && results[0].viewCount !== undefined;
+  let data = `YouTube search results for "${topic}" (${results.length} videos found, ${hasApiData ? 'YouTube Data API v3' : 'Invidious fallback'}):\n\n`;
+
+  let totalViews = 0;
+  let maxViews = 0;
+  let topVideo = null;
+  for (const v of results) {
+    const views = parseInt((v.viewCount || '0').replace(/,/g, '')) || 0;
+    totalViews += views;
+    if (views > maxViews) { maxViews = views; topVideo = v; }
+    data += `TITLE: ${v.title || 'N/A'}\n`;
+    data += `CHANNEL: ${v.author || v.authorId || 'N/A'}\n`;
+    data += `VIEWS: ${v.viewCount || v.viewCountText || 'N/A'} | LIKES: ${v.likeCount || 'N/A'} | COMMENTS: ${v.commentCount || 'N/A'}\n`;
+    data += `PUBLISHED: ${v.publishedText || 'N/A'} | DURATION: ${v.duration || 'N/A'}\n`;
+    if (v.tags && v.tags.length > 0) data += `TAGS: ${v.tags.join(', ')}\n`;
+    data += `DESC: ${(v.description || '').slice(0, 300)}\n\n`;
+  }
+
+  const avgViews = results.length > 0 ? Math.round(totalViews / results.length) : 0;
+  data += `\nSTATISTICS: ${results.length} videos analyzed | Avg views: ${avgViews.toLocaleString()} | Top video: ${maxViews.toLocaleString()} views`;
+  if (topVideo) data += ` ("${topVideo.title}")\n`;
+  data += `\nWEB RESEARCH:\n${webResults}`;
+
+  const messages = [
+    {
+      role: 'system',
+      content: `${config.SYSTEM_PROMPT}\n\nYou are performing DEEP YouTube SEO analysis with real data. Go deeper than vidIQ. This is for Building Shultz (@BuildingShultz, ~1,450 subs) — woodworking, metalworking, DIY builds, tradesmen, AI for makers. Be hyper-specific. Use the actual data provided.`
+    },
+    {
+      role: 'user',
+      content: `Deep SEO analysis for: "${topic}"\n\nREAL DATA:\n${data}\n\nProvide:\n1. TITLE PATTERNS — what exact title formulas are working (with examples from the data)\n2. VIEW COUNT ANALYSIS — what separates high-performers from low-performers in this data\n3. THUMBNAIL INTEL — based on top performers, what visual style/text/composition works\n4. OPTIMAL TITLE — give me 5 specific title options for Building Shultz on this topic\n5. DESCRIPTION TEMPLATE — first 150 chars (what shows in search) + full structure\n6. TAG STRATEGY — 25 specific tags ranked by priority\n7. CONTENT ANGLE — the specific angle Building Shultz should take to differentiate\n8. OPPORTUNITY SCORE — 1-10, with reasoning based on competition vs. channel size\n9. BEST UPLOAD TIME — based on publish dates of top performers\n10. NEXT STEP — one specific action Jed should take today`
+    }
+  ];
+  return await callLLM(messages);
+}
+
+// ─── DAVINCI RESOLVE INTEGRATION ────────────────────────────────────────────
+async function resolveCommand(operation, args = '') {
+  // Call resolve-helper.py on the PC
+  const scriptPath = 'C:\\Users\\Ashle\\SolomonAgent\\resolve-helper.py';
+  const cmd = args ? `python "${scriptPath}" ${operation} ${args}` : `python "${scriptPath}" ${operation}`;
+  return await executeOnPC(cmd, 'cmd', 120000);
+}
+
+async function resolveGetStatus() {
+  const r = await resolveCommand('status');
+  if (!r.success) return { online: false, message: r.output };
+  try { return { online: true, ...JSON.parse(r.output) }; }
+  catch { return { online: true, message: r.output }; }
+}
+
+// ─── BROWSER COMMANDS (via PC Agent — Multi-Step Automation) ──────────────────
+async function browseURL(url) {
+  const result = await executeOnPC(`browser_open ${url}`, 'cmd', 45000);
+  if (!result.success) return { success: false, content: result.output };
+  try {
+    const parsed = JSON.parse(result.output);
+    return { success: true, title: parsed.title, url: parsed.url, text: parsed.text, step: parsed.step };
+  } catch {
+    return { success: true, content: result.output };
+  }
+}
+
+async function browserFill(selector, value) {
+  const result = await executeOnPC(`browser_fill ${selector}|||${value}`, 'cmd', 20000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+async function browserClick(selector) {
+  const result = await executeOnPC(`browser_click ${selector}`, 'cmd', 20000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+async function browserScreenshot() {
+  const result = await executeOnPC('browser_screenshot', 'cmd', 30000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+async function browserText(selector) {
+  const result = await executeOnPC(`browser_text ${selector || 'body'}`, 'cmd', 20000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+async function browserWait(selector) {
+  const result = await executeOnPC(`browser_wait ${selector}`, 'cmd', 20000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+async function browserNavigate(url) {
+  const result = await executeOnPC(`browser_navigate ${url}`, 'cmd', 45000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+async function browserEvaluate(js) {
+  const result = await executeOnPC(`browser_eval ${js}`, 'cmd', 30000);
+  if (!result.success) return { success: false, content: result.output };
+  try { return { success: true, ...JSON.parse(result.output) }; }
+  catch { return { success: true, content: result.output }; }
+}
+
+// ─── PROACTIVE TIMER SYSTEM ──────────────────────────────────────────────────
+const activeTimers = new Map(); // id -> { description, interval, timerId, chatId }
+let timerCounter = 0;
+
+function setProactiveTimer(bot, chatId, description, intervalMs, callback) {
+  timerCounter++;
+  const id = `timer_${timerCounter}`;
+  const timerId = setInterval(async () => {
+    try {
+      if (callback) {
+        await callback(bot, chatId);
+      } else {
+        await safeSend(bot, chatId, `⏰ *Timer Update:* ${description}`);
+      }
+    } catch (e) { logError('timer_' + id, e); }
+  }, intervalMs);
+  activeTimers.set(id, { description, interval: intervalMs, timerId, chatId, createdAt: Date.now() });
+  console.log(`[TIMER] Set: ${id} | ${description} | every ${intervalMs / 1000}s`);
+  return id;
+}
+
+function clearProactiveTimer(id) {
+  const timer = activeTimers.get(id);
+  if (timer) {
+    clearInterval(timer.timerId);
+    activeTimers.delete(id);
+    console.log(`[TIMER] Cleared: ${id}`);
+    return true;
+  }
+  return false;
+}
+
+function clearAllTimers() {
+  for (const [id, timer] of activeTimers) {
+    clearInterval(timer.timerId);
+  }
+  activeTimers.clear();
+}
+
+function getActiveTimers() {
+  return Array.from(activeTimers.entries()).map(([id, t]) => ({
+    id, description: t.description, intervalMs: t.interval, createdAt: t.createdAt
+  }));
+}
+
+// ─── VOICE TRANSCRIPTION ─────────────────────────────────────────────────────
+async function transcribeVoice(bot, fileId) {
+  try {
+    const fileUrl = await bot.getFileLink(fileId);
+    const response = await fetch(fileUrl);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const tmpPath = path.join(__dirname, `voice_${Date.now()}.ogg`);
+    fs.writeFileSync(tmpPath, buffer);
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      const { execSync } = require('child_process');
+      const result = execSync(
+        `curl -s -X POST "https://api.openai.com/v1/audio/transcriptions" -H "Authorization: Bearer ${openaiKey}" -F "file=@${tmpPath}" -F "model=whisper-1"`,
+        { encoding: 'utf-8', timeout: 30000 }
+      );
+      fs.unlinkSync(tmpPath);
+      return JSON.parse(result).text || '';
+    }
+    fs.unlinkSync(tmpPath);
+    return '[Voice received — transcription unavailable]';
+  } catch (e) { logError('transcribe', e); return '[Could not transcribe]'; }
+}
+
+// ─── PC BRIDGE ───────────────────────────────────────────────────────────────
+async function pcAgentStatus() {
+  try {
+    const res = await fetch(`${config.RELAY_URL}/agent/status`);
+    const data = await res.json();
+    return data;
+  } catch { return { ok: false, online: false }; }
+}
+
+async function executeOnPC(command, type = 'powershell', timeoutMs = 60000) {
+  try {
+    const status = await pcAgentStatus();
+    if (!status.online) return { success: false, output: 'PC agent is offline.' };
+    const qRes = await fetch(`${config.RELAY_URL}/command/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command, type })
+    });
+    const qData = await qRes.json();
+    if (!qData.ok) return { success: false, output: 'Failed to queue command.' };
+    const cmdId = qData.id;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      await new Promise(r => setTimeout(r, 1500));
+      const rRes = await fetch(`${config.RELAY_URL}/command/result/${cmdId}`);
+      const rData = await rRes.json();
+      if (rData.status === 'completed') {
+        const r = rData.result;
+        return { success: r.exitCode === 0, output: r.stdout || r.stderr || '(no output)', exitCode: r.exitCode };
+      }
+    }
+    return { success: false, output: 'Command timed out (60s).' };
+  } catch (e) {
+    logError('pc_bridge', e);
+    return { success: false, output: `Bridge error: ${e.message}` };
+  }
+}
+
+// Execute multiple commands in sequence on PC, returning all results
+async function executeMultiOnPC(commands) {
+  const results = [];
+  for (const cmd of commands) {
+    const r = await executeOnPC(cmd.command || cmd, cmd.type || 'powershell', cmd.timeout || 60000);
+    results.push({ command: cmd.command || cmd, ...r });
+    if (!r.success && cmd.stopOnFail !== false) break;
+  }
+  return results;
+}
+
+// ─── DEV WORKFLOW (GitHub, npm, builds) ──────────────────────────────────────
+async function devGitClone(repo, targetDir) {
+  return executeOnPC(`git clone https://github.com/${repo}.git "${targetDir}"`, 'cmd', 120000);
+}
+
+async function devNpmInstall(dir) {
+  return executeOnPC(`cd "${dir}" && npm install`, 'cmd', 120000);
+}
+
+async function devWriteFile(filePath, content) {
+  // Escape content for PowerShell
+  const escaped = content.replace(/'/g, "''");
+  const cmd = `$content = @'\n${escaped}\n'@\nSet-Content -Path "${filePath}" -Value $content -Encoding UTF8`;
+  return executeOnPC(cmd, 'powershell', 30000);
+}
+
+async function devRunCommand(command, dir = null, timeout = 60000) {
+  const prefix = dir ? `cd "${dir}" && ` : '';
+  return executeOnPC(`${prefix}${command}`, 'cmd', timeout);
+}
+// ─── SELF-UPDATE PC AGENT ────────────────────────────────────────────────────
+// Sol can update his own PC agent code. The watchdog detects the file change
+// and auto-restarts the agent. NEVER kill node.exe directly.
+async function selfUpdateAgent(newCode) {
+  const AGENT_PATH = 'C:\\Users\\Ashle\\SolomonAgent\\solomon-agent.js';
+  // Write new code via PowerShell here-string
+  const escaped = newCode.replace(/'/g, "''");
+  const writeCmd = `$c = @'\n${escaped}\n'@\nSet-Content -Path "${AGENT_PATH}" -Value $c -Encoding UTF8`;
+  const writeResult = await executeOnPC(writeCmd, 'powershell', 30000);
+  if (!writeResult.success) {
+    return { success: false, message: `Failed to write agent file: ${writeResult.output}` };
+  }
+  // Wait 15 seconds for watchdog to detect change and restart agent
+  await new Promise(r => setTimeout(r, 15000));
+  // Verify agent came back online
+  const status = await pcAgentStatus();
+  if (status.online) {
+    return { success: true, message: 'Agent updated and restarted successfully.' };
+  } else {
+    return { success: false, message: 'Agent file written but agent did not come back online. Watchdog may not be running. Alert Jed.' };
+  }
+}
+
+
+// ─── SEND WITH MARKDOWN FALLBACK ──────────────────────────────────────────────
+
+// ─── MESSAGE DEDUP GUARD ─────────────────────────────────────────────────────
+const recentSentMessages = new Set();
+function isDuplicateMessage(chatId, text) {
+  const key = `${chatId}:${text.slice(0, 100)}`;
+  if (recentSentMessages.has(key)) return true;
+  recentSentMessages.add(key);
+  setTimeout(() => recentSentMessages.delete(key), 60000); // 60s dedup window
+  return false;
+}
+
+const lastSentTimes = {};
+async function safeSend(bot, chatId, text) {
+  if (!text || !text.trim()) return;
+  if (isDuplicateMessage(chatId, text)) { console.log('[DEDUP] Blocked duplicate message'); return; }
+  
+  // Rate limiting: 3s between messages to same chat
+  const now = Date.now();
+  const lastSent = lastSentTimes[chatId] || 0;
+  const waitTime = Math.max(0, 3000 - (now - lastSent));
+  if (waitTime > 0) {
+    console.log(`[RATE_LIMIT] Waiting ${waitTime}ms before sending to ${chatId}`);
+    await new Promise(r => setTimeout(r, waitTime));
+  }
+  lastSentTimes[chatId] = Date.now();
+
+  const chunks = text.length > 4000 ? text.match(/[\s\S]{1,4000}/g) : [text];
+  for (const chunk of chunks) {
+    try {
+      await bot.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+    } catch (e) {
+      if (e.message?.includes('parse') || e.message?.includes("can't parse")) {
+        try { await bot.sendMessage(chatId, chunk); } catch (e2) { logError('send_plain', e2); }
+      } else { logError('send', e); }
+    }
+  }
+}
+
+// ─── CONTEXT BUILDER ──────────────────────────────────────────────────────────
+function buildContext(chatId) {
+  const now = new Date();
+  const timeStr = now.toLocaleString('en-US', {
+    timeZone: 'America/Chicago', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+  let ctx = `\n\n[CURRENT TIME: ${timeStr} CDT]\n`;
+
+  const kbSummary = getKnowledgeSummary();
+  if (kbSummary) ctx += `\n[PERSISTENT KNOWLEDGE]\n${kbSummary}`;
+
+  // Project state
+  const projects = loadProjects();
+  const activeProjects = Object.entries(projects).filter(([_, p]) => p.status === 'active');
+  if (activeProjects.length > 0) {
+    ctx += `\n[ACTIVE PROJECTS]\n`;
+    for (const [key, p] of activeProjects) {
+      ctx += `• ${p.name} [${p.phase}]: Next → ${(p.nextSteps || []).slice(0, 2).join(', ')}\n`;
+    }
+  }
+
+  const reminders = loadReminders().filter(r => String(r.chatId) === String(chatId));
+  if (reminders.length > 0) {
+    ctx += `\n[ACTIVE REMINDERS]\n`;
+    for (const r of reminders.slice(0, 5)) {
+      const when = new Date(r.triggerTime).toLocaleString('en-US', { timeZone: 'America/Chicago' });
+      ctx += `• ${r.text} (due: ${when})\n`;
+    }
+  }
+
+  if (activeTasks.length > 0) {
+    ctx += `\n[ACTIVE SUB-TASKS: ${activeTasks.length}]\n`;
+    activeTasks.forEach(t => { ctx += `• ${t.description}\n`; });
+  }
+
+  // Work queue status
+  const wq = loadWorkQueue();
+  const pendingWork = wq.items.filter(i => i.status === 'pending');
+  if (pendingWork.length > 0) {
+    ctx += `\n[WORK QUEUE: ${pendingWork.length} items pending]\n`;
+    pendingWork.slice(0, 3).forEach(w => { ctx += `• ${w.description}\n`; });
+  }
+
+  return ctx;
+}
+
+// ─── AUTO-EXTRACT KNOWLEDGE ───────────────────────────────────────────────────
+function autoExtractKnowledge(userMsg) {
+  if (/\b(decided|decision|let's go with|we'll do|the plan is|moving forward)\b/i.test(userMsg)) {
+    addToKnowledgeBase('decisions', userMsg.substring(0, 200));
+  }
+  if (/\b(my .+ is|i (have|got|made|earned|spent)|revenue|income|subscribers|views)\b/i.test(userMsg) && userMsg.length < 300) {
+    addToKnowledgeBase('facts', userMsg.substring(0, 200));
+  }
+}
+
+// ─── TEXT HANDLER ────────────────────────────────────────────────────────────
+async function handleText(bot, chatId, text, prefix = '') {
+  try {
+    saveMessage(chatId, 'user', text);
+    autoExtractKnowledge(text);
+    const history = getChatHistory(chatId);
+
+    // Smart content detection: if asking about videos/content, check PC for real data
+    let contextInjection = '';
+
+    // Inject knowledge base context
+    const kbContext = getKBContext();
+    contextInjection += kbContext;
+    const videoKeywords = /\b(video|next video|upcoming|content|upload|footage|what.*(going out|publishing|posting)|seo|thumbnail)\b/i;
+    if (videoKeywords.test(text)) {
+      const agentStatus = await pcAgentStatus();
+      if (agentStatus.online) {
+        try {
+          const folderResult = await executeOnPC('Get-ChildItem "C:\\Users\\Ashle\\Desktop\\UNEDITED VIDEOS" -Directory | Select-Object Name, LastWriteTime | Format-Table -AutoSize | Out-String');
+          if (folderResult.success && folderResult.output && !folderResult.output.includes('Cannot find path')) {
+            contextInjection += `\n\n[REAL DATA - Unedited footage folders on PC:]\n${folderResult.output.slice(0, 1500)}\n`;
+          }
+        } catch {}
+      }
+      // Check project memory for planned videos
+      const projects = loadProjects();
+      const videoProjects = Object.entries(projects).filter(([k, v]) => v.type === 'video' || v.category === 'content');
+      if (videoProjects.length > 0) {
+        contextInjection += `\n[Project memory - planned videos:]\n${videoProjects.map(([k, v]) => `- ${k}: ${v.status} - ${v.description || ''}`).join('\n')}\n`;
+      }
+      if (!contextInjection) {
+        contextInjection += `\n[NOTE: Could not check PC footage folder (agent ${agentStatus.online ? 'online but folder empty/missing' : 'offline'}). If you do not know what video Jed is working on, ASK HIM directly. Do NOT guess or give generic advice.]\n`;
+
+    // Web search injection: if asking to research/find/look up something, do a real search
+    const researchKeywords = /\b(research|look up|find out|search for|what is|who is|latest|current|trending|news about)\b/i;
+    if (researchKeywords.test(text) && !text.startsWith('/')) {
+      try {
+        const searchQuery = text.replace(/^(can you |please |sol |hey )?(research|look up|find out about|search for|tell me about)/i, '').trim().slice(0, 100);
+        if (searchQuery.length > 5) {
+          const searchResults = await webSearch(searchQuery, 5);
+          if (searchResults.success && searchResults.results.length > 0) {
+            contextInjection += `\n\n[LIVE WEB SEARCH RESULTS for "${searchQuery}":]\n`;
+            searchResults.results.forEach((r, i) => {
+              contextInjection += `${i+1}. ${r.title} - ${r.snippet}\n   URL: ${r.url}\n`;
+            });
+            contextInjection += `\n[Use these REAL search results to inform your response. Cite sources.]\n`;
+          }
+        }
+      } catch (searchErr) { /* silent fail */ }
+    }
+      }
+    }
+
+    const messages = [
+      { role: 'system', content: config.SYSTEM_PROMPT + buildContext(chatId) + contextInjection },
+      ...history.map(m => ({ role: m.role, content: m.content }))
+    ];
+    const typing = setInterval(() => { bot.sendChatAction(chatId, 'typing').catch(() => {}); }, 4000);
+    try {
+      let rawReply;
+      try {
+        rawReply = await callLLM(messages);
+      } catch (firstErr) {
+        // First attempt failed — notify Jed and retry once
+        logError('llm_first', firstErr);
+        await safeSend(bot, chatId, 'Still processing, give me a moment...');
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          rawReply = await callLLM(messages, config.MODEL_FALLBACK, 0);
+        } catch (secondErr) {
+          clearInterval(typing);
+          logError('llm_retry', secondErr);
+          await safeSend(bot, chatId, 'Hit a connectivity snag. Trying again in 30 seconds.');
+          await new Promise(r => setTimeout(r, 30000));
+          try {
+            rawReply = await callLLM(messages, config.MODEL_FALLBACK, 0);
+          } catch (finalErr) {
+            clearInterval(typing);
+            logError('llm_final', finalErr);
+            await safeSend(bot, chatId, "Still having connection issues. I'm aware and will retry when the connection stabilizes. Try again in a minute.");
+            return;
+          }
+        }
+      }
+      clearInterval(typing);
+      // Strip [EXECUTE_PC:...] markers from what Jed sees — execute them silently
+      const cleanReply = rawReply.replace(/\[EXECUTE_PC:[^\]]+\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+      saveMessage(chatId, 'assistant', cleanReply);
+      await safeSend(bot, chatId, prefix + cleanReply);
+
+      // Auto-detect and silently execute PC commands from Sol's response
+      await autoExecutePCCommands(bot, chatId, rawReply);
+    } catch (e) {
+      clearInterval(typing);
+      logError('llm', e);
+      await safeSend(bot, chatId, 'Something went wrong processing that. Try again in a moment.');
+    }
+  } catch (e) {
+    logError('handleText', e);
+    try { await bot.sendMessage(chatId, 'Something went wrong. Try again in a moment.'); } catch {}
+  }
+}
+
+// ─── AUTO PC COMMAND DETECTION ───────────────────────────────────────────────
+async function autoExecutePCCommands(bot, chatId, reply) {
+  // Extract and silently execute [EXECUTE_PC: ...] markers — Jed never sees the raw commands
+  const pcMatches = [...reply.matchAll(/\[EXECUTE_PC:\s*([^\]]+)\]/gi)];
+  for (const match of pcMatches) {
+    const cmd = match[1].trim();
+    console.log(`[AUTO_PC] Silently executing: ${cmd.slice(0, 100)}`);
+    try {
+      const result = await executeOnPC(cmd);
+      // Only log to console — never show raw output to Jed unless it's meaningful
+      if (!result.success) {
+        console.log(`[AUTO_PC] Command failed (exit ${result.exitCode}): ${result.output?.slice(0, 200)}`);
+      } else {
+        console.log(`[AUTO_PC] Done. Exit 0.`);
+      }
+    } catch (e) {
+      logError('auto_pc', e);
+    }
+  }
+}
+
+// ─── HEALTH MONITORING ──────────────────────────────────────────────────────
+async function healthCheck(bot) {
+  const status = { telegram: false, openrouter: false, timestamp: Date.now() };
+  try {
+    const me = await bot.getMe();
+    status.telegram = !!me?.id;
+  } catch (e) {
+    logError('health_telegram', e);
+    try { await bot.stopPolling(); await new Promise(r => setTimeout(r, 3000)); await bot.startPolling(); } catch {}
+  }
+  try {
+    const res = await fetch(config.OPENROUTER_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: config.MODEL_FALLBACK, messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 })
+    });
+    status.openrouter = res.ok;
+  } catch (e) { logError('health_openrouter', e); }
+  healthStatus = status;
+  lastHealthCheck = Date.now();
+  if (!status.telegram || !status.openrouter) {
+    console.log(`[HEALTH] ISSUES: TG=${status.telegram} LLM=${status.openrouter}`);
+  }
+  return status;
+}
+
+// ─── BACKUP CONFIG ───────────────────────────────────────────────────────────
+function saveBackupConfig() {
+  const backup = {
+    telegram_token: config.TELEGRAM_TOKEN,
+    openrouter_key: config.OPENROUTER_API_KEY,
+    model: config.MODEL,
+    owner_chat_id: config.OWNER_CHAT_ID,
+    system_prompt_hash: config.SYSTEM_PROMPT.length,
+    saved_at: new Date().toISOString(),
+    knowledge_base: loadKnowledgeBase(),
+    reminders: loadReminders()
+  };
+  fs.writeFileSync(BACKUP_PATH, JSON.stringify(backup, null, 2));
+  console.log('[BACKUP] Config saved');
+}
+
+// ─── DAILY CHECK-IN ──────────────────────────────────────────────────────────
+let lastCheckinDate = null;
+
+function shouldDoCheckin() {
+  const now = new Date();
+  const cdt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  const today = `${cdt.getFullYear()}-${cdt.getMonth()}-${cdt.getDate()}`;
+  if (lastCheckinDate === today) return false;
+  if (cdt.getHours() === config.DAILY_CHECKIN_HOUR && cdt.getMinutes() >= config.DAILY_CHECKIN_MINUTE && cdt.getMinutes() < config.DAILY_CHECKIN_MINUTE + 5) {
+    lastCheckinDate = today;
+    return true;
+  }
+  return false;
+}
+
+async function dailyCheckin(bot) {
+  try {
+    const projects = loadProjects();
+    const projectStatus = Object.entries(projects)
+      .filter(([_, p]) => p.status === 'active')
+      .map(([_, p]) => `${p.name}: ${p.phase} — Next: ${(p.nextSteps || []).slice(0, 2).join(', ')}`)
+      .join('\n');
+
+    const messages = [
+      { role: 'system', content: config.SYSTEM_PROMPT + buildContext(config.OWNER_CHAT_ID) },
+      { role: 'user', content: `Give me a brief morning check-in. Include: one motivational thought tied to my goals, current project status (IronEdit and others), what you worked on overnight, and one proactive suggestion for today. Keep it under 200 words. Be Sol.\n\nProject status:\n${projectStatus}` }
+    ];
+    const reply = await callLLM(messages);
+    await safeSend(bot, config.OWNER_CHAT_ID, `☀️ *Morning Check-in*\n\n${reply}`);
+    console.log('[CHECKIN] Daily check-in sent');
+  } catch (e) { logError('daily_checkin', e); }
+}
+
+// ─── PROACTIVE WORK PROCESSOR ────────────────────────────────────────────────
+let isProcessingWork = false;
+
+async function processWorkQueue(bot) {
+  if (isProcessingWork) return;
+  isProcessingWork = true;
+
+  try {
+    const queue = loadWorkQueue();
+    const pending = queue.items.filter(i => i.status === 'pending');
+    if (pending.length === 0) { isProcessingWork = false; return; }
+
+    const item = pending[0];
+    item.status = 'processing';
+    item.startedAt = Date.now();
+    saveWorkQueue(queue);
+
+    console.log(`[WORK] Processing: ${item.description}`);
+
+    // Execute the work item
+    if (item.type === 'pc_command') {
+      const result = await executeOnPC(item.command, item.cmdType || 'powershell', item.timeout || 60000);
+      item.result = result;
+      item.status = result.success ? 'completed' : 'failed';
+    } else if (item.type === 'dev_task') {
+      // Multi-step dev task
+      const results = await executeMultiOnPC(item.commands);
+      item.results = results;
+      item.status = results.every(r => r.success) ? 'completed' : 'partial';
+    } else if (item.type === 'llm_task') {
+      const result = await callLLM([
+        { role: 'system', content: config.SYSTEM_PROMPT },
+        { role: 'user', content: item.prompt }
+      ]);
+      item.result = result;
+      item.status = 'completed';
+    }
+
+    item.completedAt = Date.now();
+    saveWorkQueue(queue);
+
+    // Notify Jed if it's a milestone
+    if (item.notify) {
+      await safeSend(bot, config.OWNER_CHAT_ID, `✅ *Work Complete:* ${item.description}\n\n${item.result?.output || item.result || '(done)'}`);
+    }
+
+    // Update project state if relevant
+    if (item.project) {
+      const projects = loadProjects();
+      if (projects[item.project]) {
+        projects[item.project].completedSteps.push(item.description);
+        if (projects[item.project].nextSteps.length > 0) {
+          projects[item.project].nextSteps.shift();
+        }
+        saveProjects(projects);
+      }
+    }
+  } catch (e) {
+    logError('work_queue', e);
+  }
+
+  isProcessingWork = false;
+}
+
+// ─── MAIN ─────────────────────────────────────────────────────────────────────
+async function main() {
+  console.log('🟢 Sol v5.0 starting (AUTONOMOUS + VISION + BROWSER)...');
+  console.log(`   Model: ${config.MODEL}`);
+  console.log(`   Memory: ${config.MAX_MESSAGES} messages`);
+  console.log(`   Owner: ${config.OWNER_CHAT_ID}`);
+  console.log(`   Workers: ${config.MAX_WORKERS}`);
+  console.log(`   Work Queue: ${config.WORK_QUEUE_INTERVAL / 1000}s interval`);
+
+  // Delete any webhook
+  try {
+    const delRes = await fetch(`https://api.telegram.org/bot${config.TELEGRAM_TOKEN}/deleteWebhook`);
+    const delData = await delRes.json();
+    console.log(`   Webhook deleted: ${delData.ok}`);
+  } catch (e) { console.log('   Webhook delete failed (non-fatal)'); }
+
+  // Initialize bot
+  const bot = new TelegramBot(config.TELEGRAM_TOKEN, {
+    polling: { interval: 300, autoStart: true, params: { timeout: 30 } }
+  });
+
+  bot.on('polling_error', (err) => {
+    const code = err?.response?.statusCode;
+    if (code === 409) return;
+    logError('polling', err?.message || err);
+  });
+
+  console.log('🟢 Polling active. Listening for messages...');
+
+  // ─── AUTONOMOUS WORKER INITIALIZATION ──────────────────────────────────────
+  const workerDeps = {
+    taskQueue: taskQueueModule,
+    knowledgeBase: { loadKB, addToKB },
+    core: { callLLM, webSearch, executeOnPC, safeSend },
+    modules: { stripeTools, appDeployer }
+  };
+  const worker = initWorker(bot, config, workerDeps);
+  console.log('[WORKER] Autonomous worker initialized');
+
+  // ─── IRONEDIT PIPELINE ──────────────────────────────────────────────────────
+  registerIronEditCommands(bot, { safeSend, executeOnPC, callLLM, taskQueueModule, addToKB });
+  console.log('[IRONEDIT] Pipeline commands registered');
+
+  // ─── STRIPE COMMANDS ──────────────────────────────────────────────────────
+  bot.onText(/\/stripe_balance/, async (msg) => {
+    const chatId = msg.chat.id;
+    if (chatId.toString() !== config.OWNER_CHAT_ID.toString()) return;
+    const result = await stripeTools.getBalance();
+    if (result.error) return safeSend(bot, chatId, '❌ ' + result.error);
+    await safeSend(bot, chatId, `💰 *Stripe Balance*\n\nAvailable: ${result.available}\nPending: ${result.pending}`);
+  });
+
+  bot.onText(/\/stripe_charges(?:\s+(\d+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    if (chatId.toString() !== config.OWNER_CHAT_ID.toString()) return;
+    const limit = parseInt(match[1]) || 10;
+    const result = await stripeTools.listRecentCharges(limit);
+    if (result.error) return safeSend(bot, chatId, '❌ ' + result.error);
+    const lines = result.charges.map(c => `• ${c.amount} — ${c.description} (${c.status})`).join('\n');
+    await safeSend(bot, chatId, `💳 *Recent Charges (${result.total})*\n\n${lines}`);
+  });
+
+  bot.onText(/\/stripe_link\s+(.+?)\s+(\d+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    if (chatId.toString() !== config.OWNER_CHAT_ID.toString()) return;
+    const productName = match[1];
+    const priceInCents = parseInt(match[2]);
+    const result = await stripeTools.createPaymentLink(productName, priceInCents);
+    if (result.error) return safeSend(bot, chatId, '❌ ' + result.error);
+    await safeSend(bot, chatId, `🔗 *Payment Link Created*\n\nProduct: ${productName}\nAmount: ${result.amount}\nLink: ${result.url}`);
+  });
+
+  // ─── APP DEPLOYER COMMANDS ────────────────────────────────────────────────
+  bot.onText(/\/deploy\s+(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    if (chatId.toString() !== config.OWNER_CHAT_ID.toString()) return;
+    const args = match[1].split('|').map(s => s.trim());
+    const appName = args[0];
+    const description = args[1] || '';
+    await safeSend(bot, chatId, `🚀 Scaffolding *${appName}*...`);
+    const result = appDeployer.scaffoldNextApp(appName, description);
+    if (result.error) return safeSend(bot, chatId, '❌ ' + result.error);
+    // Init git
+    const gitResult = appDeployer.initGitRepo(result.path);
+    const gitMsg = gitResult.success ? '\n✅ Git initialized' : '\n⚠️ Git: ' + gitResult.error;
+    await safeSend(bot, chatId, `✅ *App Scaffolded: ${appName}*\n\nPath: ${result.path}\nFiles: ${result.files}${gitMsg}\n\nNext: ${result.nextStep}`);
+  });
+
+  console.log('[MODULES] Stripe + App Deployer commands registered');
+
+  // Crash recovery
+  if (isRecoveredCrash) {
+    setTimeout(async () => {
+      await safeSend(bot, config.OWNER_CHAT_ID, '⚡ Sol back online — auto-recovered from crash. All systems nominal.');
+    }, 5000);
+  }
+
+  saveBackupConfig();
+
+  // ─── COMMAND: /start ────────────────────────────────────────────────────
+  bot.onText(/^\/start$/, async (msg) => {
+    await bot.sendMessage(msg.chat.id,
+      `Sol v5.0 online. Full autonomy.\n\nGPT-4o Vision • Browser • SEO • PC Control • GitHub • Sub-agents\n\nCommands:\n/search — Web research\n/seo — Deep YouTube SEO analysis\n/browse — Open & read any URL\n/screenshot — Capture webpage\n/pc — PowerShell on PC\n/dev — Dev workflow\n/pcstatus — PC agent check\n/remind — Set reminder\n/remember — Store fact\n/tasks — Sub-tasks\n/projects — Active projects\n/status — System health\n/clear — Reset memory\n\nSend me any image — I can see and analyze it.\nOr just talk. I'm already working.`
+    );
+  });
+
+  // ─── COMMAND: /clear ────────────────────────────────────────────────────
+  bot.onText(/^\/clear$/, async (msg) => {
+    db.prepare('DELETE FROM messages WHERE chat_id = ?').run(String(msg.chat.id));
+    await bot.sendMessage(msg.chat.id, 'Conversation memory cleared. Knowledge base and projects retained.');
+  });
+
+  // ─── COMMAND: /status ───────────────────────────────────────────────────
+  // OLD STATUS HANDLER REMOVED (replaced by autonomous version)
+
+  // ─── COMMAND: /projects ─────────────────────────────────────────────────
+  bot.onText(/^\/projects$/, async (msg) => {
+    const projects = loadProjects();
+    let text = '📁 *Active Projects*\n\n';
+    for (const [key, p] of Object.entries(projects)) {
+      if (p.status !== 'active') continue;
+      text += `*${p.name}* [${p.phase}]\n`;
+      text += `  Status: ${p.status}\n`;
+      if (p.completedSteps?.length) text += `  Done: ${p.completedSteps.length} steps\n`;
+      if (p.nextSteps?.length) text += `  Next: ${p.nextSteps.slice(0, 3).join(' → ')}\n`;
+      text += `  Updated: ${p.lastUpdated}\n\n`;
+    }
+    await safeSend(bot, msg.chat.id, text);
+  });
+
+  // ─── COMMAND: /tasks ────────────────────────────────────────────────────
+  bot.onText(/^\/tasks$/, async (msg) => {
+    const wq = loadWorkQueue();
+    let text = '📋 *Tasks & Work Queue*\n\n';
+    if (activeTasks.length > 0) text += '*Active sub-tasks:*\n' + activeTasks.map(t => `• 🔄 ${t.description}`).join('\n') + '\n\n';
+    if (taskQueue.length > 0) text += '*Queued:*\n' + taskQueue.map(t => `• ⏳ ${t.description}`).join('\n') + '\n\n';
+    const pending = wq.items?.filter(i => i.status === 'pending') || [];
+    if (pending.length > 0) text += '*Work queue:*\n' + pending.slice(0, 10).map(w => `• 📌 ${w.description}`).join('\n') + '\n\n';
+    if (completedTasks.length > 0) text += '*Recent completed:*\n' + completedTasks.slice(-5).map(t => `• ✓ ${t.description}`).join('\n');
+    if (text === '📋 *Tasks & Work Queue*\n\n') text += 'No active tasks or work items.';
+    await safeSend(bot, msg.chat.id, text);
+  });
+
+  // ─── COMMAND: /pc ───────────────────────────────────────────────────────
+  bot.onText(/^\/pc (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const command = match[1];
+    console.log(`[CMD] /pc from ${chatId}: ${command}`);
+    await bot.sendChatAction(chatId, 'typing');
+    const result = await executeOnPC(command);
+    const sym = result.success ? '✓' : '✗';
+    await safeSend(bot, chatId, `${sym} *PC:* \`${command.slice(0, 100)}\`\n\n\`\`\`\n${result.output.slice(0, 3000)}\n\`\`\``);
+  });
+
+  // ─── COMMAND: /dev ──────────────────────────────────────────────────────
+  bot.onText(/^\/dev (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const instruction = match[1];
+    console.log(`[CMD] /dev from ${chatId}: ${instruction}`);
+    await bot.sendChatAction(chatId, 'typing');
+
+    // Let Sol interpret the dev instruction and generate commands
+    const messages = [
+      { role: 'system', content: `You are Sol's dev executor. Convert this development instruction into a PowerShell or CMD command that can run on Windows. The PC has Node.js, Python, Git, npm installed. User is Ashle, desktop at C:\\Users\\Ashle\\Desktop. Respond with ONLY the command, no explanation.` },
+      { role: 'user', content: instruction }
+    ];
+    try {
+      const cmd = await callLLM(messages, config.MODEL_FALLBACK, 0);
+      const cleanCmd = cmd.replace(/```[\s\S]*?```/g, '').replace(/`/g, '').trim().split('\n')[0];
+      const result = await executeOnPC(cleanCmd, 'cmd', 120000);
+      await safeSend(bot, chatId, `🔧 *Dev:* \`${cleanCmd.slice(0, 100)}\`\n\n\`\`\`\n${result.output.slice(0, 3000)}\n\`\`\``);
+    } catch (e) {
+      logError('dev_cmd', e);
+      await safeSend(bot, chatId, 'Dev command failed. Try /pc for direct PowerShell.');
+    }
+  });
+
+  // ─── COMMAND: /pcstatus ─────────────────────────────────────────────────
+  bot.onText(/^\/pcstatus$/, async (msg) => {
+    const status = await pcAgentStatus();
+    if (status.online) {
+      const ago = Math.floor((Date.now() - status.lastHeartbeat) / 1000);
+      await bot.sendMessage(msg.chat.id, `🖥️ PC Agent: ONLINE (heartbeat ${ago}s ago)`);
+    } else {
+      await bot.sendMessage(msg.chat.id, '🖥️ PC Agent: OFFLINE\n\nMake sure solomon-agent.js is running on your PC.');
+    }
+  });
+
+  // ─── COMMAND: /search ───────────────────────────────────────────────────
+  bot.onText(/^\/search (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const query = match[1];
+    console.log(`[CMD] /search from ${chatId}: ${query}`);
+    await bot.sendChatAction(chatId, 'typing');
+    const results = await webSearch(query);
+    const history = getChatHistory(chatId);
+    const messages = [
+      { role: 'system', content: config.SYSTEM_PROMPT + buildContext(chatId) },
+      ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
+      { role: 'user', content: `Research: "${query}"\n\nWeb results:\n${results}\n\nSynthesize into actionable intelligence.` }
+    ];
+    try {
+      const reply = await callLLM(messages);
+      saveMessage(chatId, 'user', `/search ${query}`);
+      saveMessage(chatId, 'assistant', reply);
+      await safeSend(bot, chatId, reply);
+    } catch (e) {
+      logError('search_cmd', e);
+      await bot.sendMessage(chatId, `Search results:\n\n${results}`);
+    }
+  });
+
+  // ─── COMMAND: /remind ───────────────────────────────────────────────────
+  bot.onText(/^\/remind\s+(.+)/, async (msg, match) => {
+    const input = match[1];
+    const timeMatch = input.match(/^(\d+\s*(?:min|minute|minutes|h|hour|hours|d|day|days))\s+(.+)/i);
+    if (timeMatch) {
+      const triggerTime = parseReminderTime(timeMatch[1]);
+      addReminder(msg.chat.id, timeMatch[2], triggerTime);
+      const when = new Date(triggerTime).toLocaleString('en-US', { timeZone: 'America/Chicago' });
+      await bot.sendMessage(msg.chat.id, `✓ Reminder set: "${timeMatch[2]}"\nDue: ${when} CDT`);
+    } else {
+      addReminder(msg.chat.id, input, Date.now() + 3600000);
+      await bot.sendMessage(msg.chat.id, `✓ Reminder set for 1 hour: "${input}"`);
+    }
+  });
+
+  // ─── COMMAND: /remember ─────────────────────────────────────────────────
+  bot.onText(/^\/remember\s+(.+)/, async (msg, match) => {
+    addToKnowledgeBase('facts', match[1]);
+    await bot.sendMessage(msg.chat.id, `✓ Stored: "${match[1]}"`);
+  });
+
+  // ─── COMMAND: /browse ──────────────────────────────────────────────────
+  bot.onText(/^\/browse (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const url = match[1].trim();
+    console.log(`[CMD] /browse from ${chatId}: ${url}`);
+    await bot.sendChatAction(chatId, 'typing');
+    const result = await browseURL(url);
+    if (!result.success) {
+      await safeSend(bot, chatId, `Could not browse: ${result.content || 'PC agent offline or page unreachable'}`);
+      return;
+    }
+    const msgs = [
+      { role: 'system', content: config.SYSTEM_PROMPT + buildContext(chatId) },
+      { role: 'user', content: `I browsed this page. Summarize the key information:\n\nTitle: ${result.title}\nURL: ${result.url}\n\nContent:\n${(result.text || result.content || '').slice(0, 3000)}` }
+    ];
+    try {
+      const summary = await callLLM(msgs);
+      saveMessage(chatId, 'user', `/browse ${url}`);
+      saveMessage(chatId, 'assistant', summary);
+      await safeSend(bot, chatId, `🌐 *${result.title || url}*\n\n${summary}`);
+    } catch (e) {
+      await safeSend(bot, chatId, `🌐 *${result.title || url}*\n\n${(result.text || result.content || '').slice(0, 2000)}`);
+    }
+  });
+
+  // ─── COMMAND: /screenshot ──────────────────────────────────────────────
+  bot.onText(/^\/screenshot(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const url = match[1]?.trim();
+    console.log(`[CMD] /screenshot from ${chatId}: ${url || 'current page'}`);
+    await bot.sendChatAction(chatId, 'typing');
+    if (url) await executeOnPC(`browser_open ${url}`, 'cmd', 30000);
+    const result = await browserScreenshot();
+    if (result.success && result.screenshot) {
+      await safeSend(bot, chatId, `📸 Screenshot saved: \`${result.screenshot}\``);
+    } else {
+      await safeSend(bot, chatId, 'Could not take screenshot. Make sure PC agent is online.');
+    }
+  });
+
+  // ─── COMMAND: /seo ─────────────────────────────────────────────────────
+  bot.onText(/^\/seo (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const topic = match[1].trim();
+    console.log(`[CMD] /seo from ${chatId}: ${topic}`);
+    await bot.sendChatAction(chatId, 'typing');
+    await safeSend(bot, chatId, `🔍 Running deep SEO analysis for "${topic}"... This takes 15-30 seconds.`);
+    try {
+      const analysis = await deepSEOAnalysis(topic);
+      saveMessage(chatId, 'user', `/seo ${topic}`);
+      saveMessage(chatId, 'assistant', analysis);
+      await safeSend(bot, chatId, analysis);
+    } catch (e) {
+      logError('seo_cmd', e);
+      await safeSend(bot, chatId, 'SEO analysis failed. Try again in a moment.');
+    }
+  });
+
+  // ─── RESOLVE COMMAND ────────────────────────────────────────────────────
+  bot.onText(/^\/resolve(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const args = (match[1] || 'status').trim();
+    console.log(`[CMD] /resolve from ${chatId}: ${args}`);
+    await bot.sendChatAction(chatId, 'typing');
+    try {
+      const parts = args.split(/\s+/);
+      const operation = parts[0];
+      const opArgs = parts.slice(1).join(' ');
+      const result = await resolveCommand(operation, opArgs);
+      if (result && result.success) {
+        await safeSend(bot, chatId, `🎬 Resolve [${operation}]: ${result.output || 'Done'}`);
+      } else {
+        await safeSend(bot, chatId, `⚠️ Resolve [${operation}]: ${result?.output || 'Command failed or timed out'}`);
+      }
+    } catch (e) {
+      logError('resolve_cmd', e);
+      await safeSend(bot, chatId, 'Resolve command failed. Is DaVinci Resolve running?');
+    }
+  });
+
+  // ─── OBS RECORD COMMAND ─────────────────────────────────────────────────
+  bot.onText(/^\/record(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const action = (match[1] || 'status').trim().toLowerCase();
+    console.log(`[CMD] /record from ${chatId}: ${action}`);
+    await bot.sendChatAction(chatId, 'typing');
+    try {
+      let cmd;
+      if (action === 'start') {
+        cmd = `node -e "const {default:OBSWebSocket}=require('obs-websocket-js');const obs=new OBSWebSocket();(async()=>{await obs.connect('ws://127.0.0.1:4455');await obs.call('StartRecord');console.log('Recording started');await obs.disconnect()})().catch(e=>console.error(e.message))"`;
+      } else if (action === 'stop') {
+        cmd = `node -e "const {default:OBSWebSocket}=require('obs-websocket-js');const obs=new OBSWebSocket();(async()=>{await obs.connect('ws://127.0.0.1:4455');const r=await obs.call('StopRecord');console.log('Recording stopped:',r.outputPath||'saved');await obs.disconnect()})().catch(e=>console.error(e.message))"`;
+      } else if (action === 'status') {
+        cmd = `node -e "const {default:OBSWebSocket}=require('obs-websocket-js');const obs=new OBSWebSocket();(async()=>{await obs.connect('ws://127.0.0.1:4455');const s=await obs.call('GetRecordStatus');console.log(JSON.stringify(s));await obs.disconnect()})().catch(e=>console.error(e.message))"`;
+      } else if (action.startsWith('path ')) {
+        const recPath = action.replace('path ', '').trim();
+        cmd = `node -e "const {default:OBSWebSocket}=require('obs-websocket-js');const obs=new OBSWebSocket();(async()=>{await obs.connect('ws://127.0.0.1:4455');await obs.call('SetProfileParameter',{parameterCategory:'SimpleOutput',parameterName:'FilePath',parameterValue:'${recPath.replace(/\\/g, '\\\\')}'});console.log('Recording path set to: ${recPath}');await obs.disconnect()})().catch(e=>console.error(e.message))"`;
+      } else {
+        await safeSend(bot, chatId, 'Usage: /record start | stop | status | path [folder]');
+        return;
+      }
+      const result = await executeOnPC(`cd C:\\Users\\Ashle\\SolomonAgent && ${cmd}`, 'cmd', 15000);
+      if (result && result.success) {
+        await safeSend(bot, chatId, `🎥 OBS: ${result.output || 'Done'}`);
+      } else {
+        await safeSend(bot, chatId, `⚠️ OBS: ${result?.output || 'Failed - is OBS running with WebSocket enabled?'}`);
+      }
+    } catch (e) {
+      logError('record_cmd', e);
+      await safeSend(bot, chatId, 'OBS control failed. Make sure OBS is running with WebSocket server enabled (port 4455).');
+    }
+  });
+
+  // ─── NEWSLETTER COMMAND ──────────────────────────────────────────────
+  bot.onText(/^\/newsletter(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const sub = (match[1] || 'draft').trim().toLowerCase();
+    console.log(`[CMD] /newsletter from ${chatId}: ${sub}`);
+    await bot.sendChatAction(chatId, 'typing');
+    try {
+      const kb = loadKnowledgeBase();
+      const platform = kb.newsletter_platform || null;
+      if (sub === 'draft' || sub.startsWith('draft')) {
+        const topic = sub.replace('draft', '').trim() || 'latest Building Shultz updates';
+        const messages = [
+          { role: 'system', content: config.SYSTEM_PROMPT },
+          { role: 'user', content: `Write a newsletter for Building Shultz subscribers about: ${topic}\n\nVoice: Jed's authentic tradesman voice. Casual, motivational, real. "Be Inspired, Stay Humble, and Build." energy.\nLength: 300-400 words.\nStructure: Punchy subject line, personal opening, main value/story, call to action, sign-off.\nTie in: recent YouTube content, AI Journey story, upcoming projects.\nDO NOT make it sound corporate or AI-generated.` }
+        ];
+        const draft = await callLLM(messages);
+        await safeSend(bot, chatId, `📧 *Newsletter Draft*\n\n${draft}\n\n_Reply with /newsletter send to send, or give me feedback to revise._`);
+      } else if (sub === 'send') {
+        if (!platform) {
+          await safeSend(bot, chatId, '❓ What email platform do you use? (Mailchimp, ConvertKit, Beehiiv, etc.) Reply and I\'ll set it up.');
+        } else {
+          await safeSend(bot, chatId, `📤 Newsletter send via ${platform} — integration coming. For now, copy the draft above into ${platform} and hit send. I\'ll automate this once I have API access.`);
+        }
+      } else if (sub.startsWith('platform ')) {
+        const p = sub.replace('platform ', '').trim();
+        kb.newsletter_platform = p;
+        fs.writeFileSync(KB_PATH, JSON.stringify(kb, null, 2));
+        await safeSend(bot, chatId, `✅ Newsletter platform set to: ${p}. I\'ll use this for future sends.`);
+      } else {
+        await safeSend(bot, chatId, 'Usage: /newsletter draft [topic] | send | platform [name]');
+      }
+    } catch (e) {
+      logError('newsletter_cmd', e);
+      await safeSend(bot, chatId, 'Newsletter command failed. Try again.');
+    }
+  });
+
+  // ─── NEXT MOVES COMMAND ──────────────────────────────────────────────
+  bot.onText(/^\/nextmoves$/, async (msg) => {
+    const chatId = msg.chat.id;
+    console.log(`[CMD] /nextmoves from ${chatId}`);
+    await bot.sendChatAction(chatId, 'typing');
+    try {
+      const NEXT_MOVES_PATH = path.join(__dirname, 'next_moves.json');
+      let moves = { items: [], updated: null };
+      if (fs.existsSync(NEXT_MOVES_PATH)) {
+        try { moves = JSON.parse(fs.readFileSync(NEXT_MOVES_PATH, 'utf8')); } catch {}
+      }
+      const projects = loadProjects();
+      const kb = loadKnowledgeBase();
+      const messages = [
+        { role: 'system', content: config.SYSTEM_PROMPT },
+        { role: 'user', content: `Generate a prioritized "Next Moves" list for Shultz Enterprises. Be specific, actionable, and strategic. Think like a Chief of Staff who is 3 steps ahead.\n\nContext:\n- Active projects: ${JSON.stringify(Object.values(projects).filter(p=>p.status==='active').map(p=>p.name))}\n- Known facts: ${JSON.stringify(kb.facts?.slice(-5) || [])}\n- Previous moves: ${JSON.stringify(moves.items?.slice(0,5) || [])}\n\nProvide:\n1. TOP PRIORITY (do this week)\n2. HIGH PRIORITY (do this month)\n3. STRATEGIC (do this quarter)\n4. WATCH LIST (opportunities to monitor)\n5. ONE THING JED SHOULD STOP DOING\n\nBe direct. No fluff. Think revenue, growth, leverage.` }
+      ];
+      const reply = await callLLM(messages);
+      // Save updated moves
+      moves.items = [{ text: reply, generated: new Date().toISOString() }, ...(moves.items || []).slice(0, 4)];
+      moves.updated = new Date().toISOString();
+      fs.writeFileSync(NEXT_MOVES_PATH, JSON.stringify(moves, null, 2));
+      await safeSend(bot, chatId, `🎯 *Next Moves — Shultz Enterprises*\n\n${reply}`);
+    } catch (e) {
+      logError('nextmoves_cmd', e);
+      await safeSend(bot, chatId, 'Could not generate Next Moves. Try again.');
+    }
+  });
+
+  // ─── TRENDING COMMAND ─────────────────────────────────────────────────
+  bot.onText(/^\/trending(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const niche = (match[1] || 'woodworking DIY tradesman AI creator').trim();
+    console.log(`[CMD] /trending from ${chatId}: ${niche}`);
+    await bot.sendChatAction(chatId, 'typing');
+    await safeSend(bot, chatId, `🔍 Scanning for trending content in: ${niche}... (15-30 seconds)`);
+    try {
+      const TRENDING_PATH = path.join(__dirname, 'trending_cache.json');
+      // Pull real search data
+      const [ytResults, webResults] = await Promise.all([
+        youtubeSearch(`${niche} 2025 trending`, 10),
+        webSearch(`trending ${niche} YouTube TikTok Instagram content 2025 viral`)
+      ]);
+      const dataBlock = `YouTube trending data (${ytResults.length} results):\n${ytResults.map(v=>`- "${v.title}" | ${v.viewCountText||v.viewCount||'N/A'} views | ${v.author||'N/A'}`).join('\n')}\n\nWeb research:\n${webResults}`;
+      const messages = [
+        { role: 'system', content: config.SYSTEM_PROMPT },
+        { role: 'user', content: `Analyze this trending content data for Building Shultz. Niche: ${niche}\n\nDATA:\n${dataBlock}\n\nProvide:\n1. TOP 3 TRENDS — what's working right now in this niche\n2. CONTENT FORMATS — shorts vs long-form, hooks, thumbnails that are winning\n3. COLLABORATION OPPORTUNITIES — creators Jed should reach out to\n4. PRODUCT LEVERAGE — how to use these trends to sell KDP books, merch, IronEdit\n5. CONTENT IDEA — one specific video Jed should make THIS WEEK based on this data\n6. PLATFORM PLAY — which platform (YT/IG/TT/X) has the best opportunity right now\n\nBe specific. Use the actual data. Think revenue and audience growth.` }
+      ];
+      const analysis = await callLLM(messages);
+      // Cache results
+      const cache = { niche, analysis, data: dataBlock, timestamp: new Date().toISOString() };
+      let allCache = [];
+      if (fs.existsSync(TRENDING_PATH)) { try { allCache = JSON.parse(fs.readFileSync(TRENDING_PATH, 'utf8')); } catch {} }
+      allCache = [cache, ...allCache.slice(0, 9)];
+      fs.writeFileSync(TRENDING_PATH, JSON.stringify(allCache, null, 2));
+      await safeSend(bot, chatId, `📈 *Trending Intelligence — ${niche}*\n\n${analysis}`);
+    } catch (e) {
+      logError('trending_cmd', e);
+      await safeSend(bot, chatId, 'Trending scan failed. Try again.');
+    }
+  });
+
+  // ─── KDP COMMAND ────────────────────────────────────────────────────
+  bot.onText(/^\/kdp(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const sub = (match[1] || 'status').trim().toLowerCase();
+    console.log(`[CMD] /kdp from ${chatId}: ${sub}`);
+    await bot.sendChatAction(chatId, 'typing');
+    try {
+      const kb = loadKnowledgeBase();
+      if (sub === 'status' || sub === 'check') {
+        const listings = kb.kdp_listings || null;
+        if (!listings) {
+          await safeSend(bot, chatId, '❓ I don\'t have your KDP listings yet. Tell me what books/products you have on KDP, or I can check via browser if you\'re logged in. What\'s on there?');
+        } else {
+          await safeSend(bot, chatId, `📚 *KDP Listings:*\n${listings.map((l,i)=>`${i+1}. ${l.title} — ${l.status||'active'}`).join('\n')}\n\nUse /kdp optimize [title] to get optimization recommendations.`);
+        }
+      } else if (sub.startsWith('optimize')) {
+        const title = sub.replace('optimize', '').trim() || 'all listings';
+        await safeSend(bot, chatId, `🔍 Researching KDP optimization for: ${title}...`);
+        const webData = await webSearch(`KDP ${title} optimization keywords categories bestseller rank 2025`);
+        const messages = [
+          { role: 'system', content: config.SYSTEM_PROMPT },
+          { role: 'user', content: `Optimize this KDP listing for maximum discoverability:\nTitle/Product: ${title}\nJed\'s niches: woodworking, DIY, trades, self-improvement, AI for makers, fatherhood\n\nResearch data:\n${webData}\n\nProvide:\n1. OPTIMIZED TITLE (with subtitle)\n2. KEYWORD STRATEGY (7 KDP backend keywords)\n3. CATEGORY RECOMMENDATIONS (2 best categories)\n4. DESCRIPTION REWRITE (first 100 words that hook + full description)\n5. PRICING STRATEGY\n6. COMPETITIVE ANALYSIS — what top sellers in this space are doing\n7. QUICK WIN — one change to make today` }
+        ];
+        const analysis = await callLLM(messages);
+        await safeSend(bot, chatId, `📚 *KDP Optimization: ${title}*\n\n${analysis}`);
+      } else if (sub.startsWith('add ')) {
+        const listing = sub.replace('add ', '').trim();
+        if (!kb.kdp_listings) kb.kdp_listings = [];
+        kb.kdp_listings.push({ title: listing, added: new Date().toISOString(), status: 'active' });
+        fs.writeFileSync(KB_PATH, JSON.stringify(kb, null, 2));
+        await safeSend(bot, chatId, `✅ Added "${listing}" to KDP listings. Use /kdp optimize ${listing} to get optimization recommendations.`);
+      } else {
+        await safeSend(bot, chatId, 'Usage: /kdp status | optimize [title] | add [title]');
+      }
+    } catch (e) {
+      logError('kdp_cmd', e);
+      await safeSend(bot, chatId, 'KDP command failed. Try again.');
+    }
+  });
+
+  // ─── JOURNEY LOG COMMAND ────────────────────────────────────────────────
+  bot.onText(/^\/log(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const entry = (match[1] || '').trim();
+    if (!entry) {
+      await safeSend(bot, chatId, 'Usage: /log [entry text] — Appends to the Journey Log');
+      return;
+    }
+    const date = new Date().toISOString().split('T')[0];
+    const logEntry = `\n\n## ${date} - ${entry.split('.')[0]}\n${entry}`;
+    const cmd = `Add-Content -Path "C:\\Users\\Ashle\\Desktop\\AI Journey\\The Solomon Story - Journey Log.md" -Value '${logEntry.replace(/'/g, "''")}' -Encoding UTF8`;
+    const result = await executeOnPC(cmd, 'powershell', 10000);
+    if (result && result.success) {
+      await safeSend(bot, chatId, '📝 Journey Log updated.');
+    } else {
+      await safeSend(bot, chatId, '⚠️ Could not update Journey Log.');
+    }
+  });
+
+  // ─── PHOTO/IMAGE HANDLER (Vision) ─────────────────────────────────────
+// ─── IMAGE GENERATION (DALL-E 3 via OpenRouter + Flux via BFL) ──────────────
+async function generateImageDALLE(prompt) {
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      signal: AbortSignal.timeout(60000),
+      headers: {
+        'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: 'standard'
+      })
+    });
+    if (!res.ok) {
+      // Try via OpenRouter image generation endpoint
+      const orRes = await fetch('https://openrouter.ai/api/v1/images/generations', {
+        method: 'POST',
+        signal: AbortSignal.timeout(60000),
+        headers: {
+          'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'openai/dall-e-3',
+          prompt: prompt,
+          n: 1,
+          size: '1024x1024'
+        })
+      });
+      if (!orRes.ok) throw new Error(`Image gen failed: ${orRes.status}`);
+      const orData = await orRes.json();
+      return { success: true, url: orData.data?.[0]?.url };
+    }
+    const data = await res.json();
+    return { success: true, url: data.data?.[0]?.url };
+  } catch (e) {
+    logError('dalle', e);
+    return { success: false, error: e.message };
+  }
+}
+
+async function generateImageFlux(prompt) {
+  if (!config.BFL_API_KEY) return { success: false, error: 'BFL API key not configured. Set BFL_API_KEY in config.' };
+  try {
+    const res = await fetch(config.BFL_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(90000),
+      headers: {
+        'Authorization': `Bearer ${config.BFL_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ prompt, width: 1024, height: 1024 })
+    });
+    if (!res.ok) throw new Error(`Flux API ${res.status}`);
+    const data = await res.json();
+    // BFL returns a task ID, need to poll for result
+    if (data.id) {
+      const pollUrl = `https://api.bfl.ai/v1/get_result?id=${data.id}`;
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const pRes = await fetch(pollUrl, { headers: { 'Authorization': `Bearer ${config.BFL_API_KEY}` } });
+        const pData = await pRes.json();
+        if (pData.status === 'Ready' && pData.result?.sample) {
+          return { success: true, url: pData.result.sample };
+        }
+        if (pData.status === 'Error') throw new Error('Flux generation failed');
+      }
+      throw new Error('Flux generation timed out');
+    }
+    return { success: true, url: data.sample || data.url || data.image_url };
+  } catch (e) {
+    logError('flux', e);
+    return { success: false, error: e.message };
+  }
+}
+
+// ─── WEB SEARCH (DuckDuckGo HTML scraping) ──────────────────────────────────
+async function webSearch(query, maxResults = 5) {
+  return await _webSearchStructured(query, maxResults);
+}
+
+async function _webSearchStructured(query, maxResults = 5) {
+  // Primary: Perplexity Sonar via OpenRouter (live web search with real URLs)
+  const sonarResults = await _searchPerplexitySonar(query, maxResults);
+  if (sonarResults.length > 0) {
+    return { success: true, results: sonarResults, query, source: 'perplexity_sonar' };
+  }
+  
+  // Fallback: DuckDuckGo JSON API (limited but always available)
+  const ddgResults = await _searchDuckDuckGoJSON(query, maxResults);
+  if (ddgResults.length > 0) {
+    return { success: true, results: ddgResults, query, source: 'duckduckgo_json' };
+  }
+  
+  console.log('[SEARCH] All backends returned 0 results for:', query);
+  return { success: false, results: [], query, error: 'All search backends returned 0 results' };
+}
+
+async function _searchPerplexitySonar(query, maxResults = 5) {
+  try {
+    const res = await fetch(config.OPENROUTER_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(25000),
+      headers: {
+        'Authorization': `Bearer ${config.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://solomon-bot.local',
+        'X-Title': 'Sol Search'
+      },
+      body: JSON.stringify({
+        model: 'perplexity/sonar',
+        messages: [{
+          role: 'user',
+          content: `Search the web for: ${query}\n\nReturn EXACTLY this JSON format (no other text, no markdown):\n{"results": [{"title": "...", "url": "https://...", "snippet": "..."}]}\n\nReturn up to ${maxResults} results. Each must have a real URL from the web. Snippets should be 1-2 sentences summarizing the page content.`
+        }],
+        max_tokens: 1000,
+        temperature: 0.1
+      })
+    });
+    
+    if (!res.ok) {
+      console.log('[SEARCH] Perplexity Sonar HTTP error:', res.status);
+      return [];
+    }
+    
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content;
+    
+    if (!content) return [];
+    
+    // Parse JSON from response (handle markdown code fences)
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+    
+    const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.log('[SEARCH] Sonar response not JSON-parseable, extracting from text');
+      return _extractResultsFromText(content, maxResults);
+    }
+    
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.results && Array.isArray(parsed.results)) {
+        return parsed.results
+          .filter(r => r.title && r.url && r.url.startsWith('http'))
+          .slice(0, maxResults)
+          .map(r => ({
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet || ''
+          }));
+      }
+    } catch (parseErr) {
+      console.log('[SEARCH] JSON parse failed:', parseErr.message);
+      return _extractResultsFromText(content, maxResults);
+    }
+    
+    return [];
+  } catch (e) {
+    console.log('[SEARCH] Perplexity Sonar error:', e.message);
+    return [];
+  }
+}
+
+function _extractResultsFromText(text, maxResults = 5) {
+  const results = [];
+  const urlRegex = /\b(https?:\/\/[^\s<>"'\)\]]+)/g;
+  let match;
+  while ((match = urlRegex.exec(text)) !== null && results.length < maxResults) {
+    const url = match[1].replace(/[.,;:!?]+$/, '');
+    const start = Math.max(0, match.index - 100);
+    const end = Math.min(text.length, match.index + match[0].length + 100);
+    const context = text.slice(start, end);
+    const titleMatch = context.match(/\*\*([^*]+)\*\*/);
+    const title = titleMatch ? titleMatch[1] : url.split('/').slice(2, 4).join('/');
+    results.push({ title, url, snippet: context.replace(/\*\*/g, '').replace(url, '').trim().slice(0, 150) });
+  }
+  return results;
+}
+
+async function _searchDuckDuckGoJSON(query, maxResults = 5) {
+  try {
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SolBot/1.0)' }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    
+    const results = [];
+    if (data.AbstractText && data.AbstractURL) {
+      results.push({ title: data.Heading || query, url: data.AbstractURL, snippet: data.AbstractText.slice(0, 200) });
+    }
+    if (data.RelatedTopics && Array.isArray(data.RelatedTopics)) {
+      for (const topic of data.RelatedTopics.slice(0, maxResults - results.length)) {
+        if (topic.FirstURL && topic.Text) {
+          results.push({ title: topic.Text.split(' - ')[0] || topic.Text.slice(0, 60), url: topic.FirstURL, snippet: topic.Text.slice(0, 200) });
+        }
+        if (topic.Topics && Array.isArray(topic.Topics)) {
+          for (const sub of topic.Topics.slice(0, 2)) {
+            if (sub.FirstURL && sub.Text && results.length < maxResults) {
+              results.push({ title: sub.Text.split(' - ')[0], url: sub.FirstURL, snippet: sub.Text.slice(0, 200) });
+            }
+          }
+        }
+      }
+    }
+    return results.slice(0, maxResults);
+  } catch (e) {
+    console.log('[SEARCH] DuckDuckGo JSON error:', e.message);
+    return [];
+  }
+}
+
+// ─── DAVINCI RESOLVE CONTROL ────────────────────────────────────────────────
+async function resolveEdit(action, params = {}) {
+  const scripts = {
+    launch: 'Start-Process "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\Resolve.exe" -ErrorAction SilentlyContinue; Start-Sleep 10; Write-Output "DaVinci Resolve launched"',
+    status: 'Get-Process -Name "Resolve" -ErrorAction SilentlyContinue | Select-Object ProcessName, Id, CPU | Format-Table | Out-String',
+    import_media: `$resolve = [System.Runtime.InteropServices.Marshal]::GetActiveObject("DaVinciResolve.Application"); $pm = $resolve.GetProjectManager(); $proj = $pm.GetCurrentProject(); $mp = $proj.GetMediaPool(); $mp.ImportMedia(@("${params.path || ''}")); Write-Output "Media imported"`,
+    open_project: `$resolve = [System.Runtime.InteropServices.Marshal]::GetActiveObject("DaVinciResolve.Application"); $pm = $resolve.GetProjectManager(); $proj = $pm.LoadProject("${params.name || ''}"); Write-Output "Project opened: ${params.name || ''}"`,
+    render: `$resolve = [System.Runtime.InteropServices.Marshal]::GetActiveObject("DaVinciResolve.Application"); $pm = $resolve.GetProjectManager(); $proj = $pm.GetCurrentProject(); $proj.SetRenderSettings(@{TargetDir="${params.output || 'C:\\Users\\Ashle\\Desktop\\Renders'}"}); $proj.AddRenderJob(); $proj.StartRendering(); Write-Output "Render started"`,
+    list_projects: '$resolve = [System.Runtime.InteropServices.Marshal]::GetActiveObject("DaVinciResolve.Application"); $pm = $resolve.GetProjectManager(); $pm.GetProjectListInCurrentFolder() | ForEach-Object { Write-Output $_ }',
+    timeline_info: '$resolve = [System.Runtime.InteropServices.Marshal]::GetActiveObject("DaVinciResolve.Application"); $pm = $resolve.GetProjectManager(); $proj = $pm.GetCurrentProject(); $tl = $proj.GetCurrentTimeline(); Write-Output "Timeline: $($tl.GetName()) | Tracks: $($tl.GetTrackCount(\"video\")) video, $($tl.GetTrackCount(\"audio\")) audio | Duration: $($tl.GetEndFrame() - $tl.GetStartFrame()) frames"'
+  };
+  
+  const script = scripts[action];
+  if (!script) return { success: false, output: `Unknown action: ${action}. Available: ${Object.keys(scripts).join(', ')}` };
+  
+  return await executeOnPC(script, 'powershell', 30000);
+}
+
+
+  // ─── COMMAND: /imagine (DALL-E 3) ──────────────────────────────────────────
+  bot.onText(/^\/imagine(?:-flux)?\s+(.+)/s, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const prompt = match[1].trim();
+    const isFlux = msg.text.startsWith('/imagine-flux');
+    
+    await safeSend(bot, chatId, `🎨 Generating image${isFlux ? ' (Flux)' : ' (DALL-E 3)'}...\n_Prompt: "${prompt.slice(0, 100)}"_`);
+    await bot.sendChatAction(chatId, 'upload_photo');
+    
+    const result = isFlux ? await generateImageFlux(prompt) : await generateImageDALLE(prompt);
+    
+    if (result.success && result.url) {
+      try {
+        await bot.sendPhoto(chatId, result.url, { caption: `🎨 "${prompt.slice(0, 200)}"` });
+      } catch (sendErr) {
+        // If sending URL fails, try downloading first
+        try {
+          const imgRes = await fetch(result.url);
+          const buffer = Buffer.from(await imgRes.arrayBuffer());
+          await bot.sendPhoto(chatId, buffer, { caption: `🎨 "${prompt.slice(0, 200)}"` });
+        } catch (e2) {
+          await safeSend(bot, chatId, `Image generated but couldn't send it. URL: ${result.url}`);
+        }
+      }
+    } else {
+      await safeSend(bot, chatId, `❌ Image generation failed: ${result.error || 'Unknown error'}\n\nTip: Make sure the API key has image generation access.`);
+    }
+  });
+
+  // ─── COMMAND: /edit (DaVinci Resolve) ─────────────────────────────────────
+  bot.onText(/^\/edit(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const args = (match[1] || '').trim();
+    
+    if (!args) {
+      await safeSend(bot, chatId, `🎬 *DaVinci Resolve Editor*\n\nUsage:\n• /edit status — Check if Resolve is running\n• /edit launch — Start DaVinci Resolve\n• /edit projects — List available projects\n• /edit open [name] — Open a project\n• /edit import [path] — Import media file\n• /edit timeline — Current timeline info\n• /edit render — Start rendering current timeline\n\nOr describe what you want edited and I'll build the workflow.`);
+      return;
+    }
+    
+    const parts = args.split(/\s+/);
+    const action = parts[0].toLowerCase();
+    const param = parts.slice(1).join(' ');
+    
+    const directActions = ['status', 'launch', 'list_projects', 'timeline_info', 'render'];
+    const paramActions = { 'open': 'open_project', 'import': 'import_media', 'projects': 'list_projects', 'timeline': 'timeline_info' };
+    
+    let resolveAction = paramActions[action] || action;
+    let params = {};
+    if (action === 'open') params = { name: param };
+    else if (action === 'import') params = { path: param };
+    else if (action === 'render') params = { output: param || 'C:\\Users\\Ashle\\Desktop\\Renders' };
+    
+    if (directActions.includes(resolveAction) || Object.values(paramActions).includes(resolveAction)) {
+      await bot.sendChatAction(chatId, 'typing');
+      const result = await resolveEdit(resolveAction, params);
+      await safeSend(bot, chatId, `🎬 *Resolve — ${action}*\n\n\`\`\`\n${result.output || 'No output'}\n\`\`\``);
+    } else {
+      // Natural language edit request — use LLM to plan the workflow
+      await bot.sendChatAction(chatId, 'typing');
+      const messages = [
+        { role: 'system', content: config.SYSTEM_PROMPT },
+        { role: 'user', content: `I want to edit video in DaVinci Resolve. Here's what I need: ${args}\n\nPlan the steps using DaVinci Resolve scripting API. Be specific about what commands to run.` }
+      ];
+      const plan = await callLLM(messages);
+      await safeSend(bot, chatId, `🎬 *Edit Plan:*\n\n${plan}`);
+    }
+  });
+
+
+  // ─── COMMAND: /queue ────────────────────────────────────────────────────────
+  bot.onText(/^\/queue$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const summary = taskQueueModule.getQueueSummary();
+    let response = '📋 *Task Queue*\n\n';
+    
+    if (summary.active.length > 0) {
+      response += '*Active:*\n';
+      summary.active.forEach(t => {
+        response += `⚡ ${t.title} — ${t.progress}% (step ${t.currentStep}/${t.totalSteps})\n`;
+      });
+    }
+    
+    if (summary.pending.length > 0) {
+      response += '\n*Pending:*\n';
+      summary.pending.slice(0, 5).forEach((t, i) => {
+        response += `${i + 1}. [P${t.priority}] ${t.title}\n`;
+      });
+      if (summary.pending.length > 5) response += `   ...and ${summary.pending.length - 5} more\n`;
+    }
+    
+    if (summary.completed.length > 0) {
+      response += '\n*Recently Completed:*\n';
+      summary.completed.slice(-3).forEach(t => {
+        const ago = Math.round((Date.now() - t.completedAt) / 60000);
+        response += `✅ ${t.title} (${ago}m ago)\n`;
+      });
+    }
+    
+    if (summary.active.length === 0 && summary.pending.length === 0) {
+      response += '_Queue empty. I\'ll proactively add tasks based on business priorities._';
+    }
+    
+    response += `\n\n📊 Stats: ${summary.stats.completed} completed, ${summary.stats.failed} failed, ${summary.stats.total} total`;
+    await safeSend(bot, chatId, response);
+  });
+
+  // ─── COMMAND: /memory ───────────────────────────────────────────────────────
+  bot.onText(/^\/memory(?:\s+(.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const args = (match[1] || '').trim();
+    
+    if (!args) {
+      await safeSend(bot, chatId, getFullKBReport());
+      return;
+    }
+    
+    if (args.startsWith('add ')) {
+      const parts = args.slice(4).split(' ');
+      const category = parts[0];
+      const info = parts.slice(1).join(' ');
+      if (!category || !info) {
+        await safeSend(bot, chatId, 'Usage: /memory add [category] [info]\nCategories: research_findings, lessons_learned, content_ideas, next_moves');
+        return;
+      }
+      addToKB(category, { title: info, addedBy: 'manual', date: new Date().toISOString() });
+      await safeSend(bot, chatId, `✅ Added to ${category}: "${info}"`);
+      return;
+    }
+    
+    // Show specific category
+    const kb = loadKB();
+    if (kb[args]) {
+      const data = kb[args];
+      const display = Array.isArray(data) ? data.slice(-10).map(d => `• ${d.title || d.lesson || d.decision || JSON.stringify(d).slice(0, 100)}`).join('\n') : JSON.stringify(data, null, 2).slice(0, 2000);
+      await safeSend(bot, chatId, `📚 *${args}:*\n${display}`);
+    } else {
+      await safeSend(bot, chatId, `Unknown category. Available: ${Object.keys(kb).join(', ')}`);
+    }
+  });
+
+  // ─── COMMAND: /status (OVERHAULED) ──────────────────────────────────────────
+  bot.onText(/^\/status$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const summary = taskQueueModule.getQueueSummary();
+    const uptime = process.uptime();
+    const uptimeStr = uptime > 3600 ? `${Math.floor(uptime/3600)}h ${Math.floor((uptime%3600)/60)}m` : `${Math.floor(uptime/60)}m`;
+    
+    let status = '📊 *Sol Status*\n\n';
+    
+    // Current work
+    if (summary.active.length > 0) {
+      const t = summary.active[0];
+      status += `*Working on:* ${t.title} (${t.progress}% — step ${t.currentStep}/${t.totalSteps})\n`;
+    } else {
+      status += '*Working on:* Nothing active (checking queue every 60s)\n';
+    }
+    
+    // Queue
+    status += `*Queue:* ${summary.pending.length} pending`;
+    if (summary.pending.length > 0) {
+      status += ` — next: ${summary.pending[0].title}`;
+    }
+    status += '\n';
+    
+    // Last completed
+    if (summary.completed.length > 0) {
+      const last = summary.completed[summary.completed.length - 1];
+      const ago = Math.round((Date.now() - last.completedAt) / 60000);
+      status += `*Last completed:* ${last.title} (${ago}m ago)\n`;
+    }
+    
+    // System health
+    status += `\n*Uptime:* ${uptimeStr}\n`;
+    status += `*Model:* ${config.MODEL}\n`;
+    status += `*Tasks completed:* ${summary.stats.completed}/${summary.stats.total}\n`;
+    
+    await safeSend(bot, chatId, status);
+  });
+
+  // ─── COMMAND: /addtask ──────────────────────────────────────────────────────
+  bot.onText(/^\/addtask\s+(.+)/s, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const desc = match[1].trim();
+    const task = taskQueueModule.addTask({
+      title: desc.slice(0, 100),
+      description: desc,
+      type: 'research',
+      priority: 5
+    });
+    await safeSend(bot, chatId, `✅ Task added: "${task.title}"\nID: ${task.id}\nPosition: will execute based on priority.`);
+  });
+
+  // ─── COMMAND: /websearch ──────────────────────────────────────────────────
+  bot.onText(/^\/websearch\s+(.+)/s, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const query = match[1].trim();
+    
+    await bot.sendChatAction(chatId, 'typing');
+    const searchResult = await webSearch(query, 8);
+    
+    if (searchResult.success && searchResult.results.length > 0) {
+      let response = `🔍 *Web Search: "${query}"*\n\n`;
+      searchResult.results.forEach((r, i) => {
+        response += `${i + 1}. **${r.title}**\n${r.snippet}\n🔗 ${r.url}\n\n`;
+      });
+      await safeSend(bot, chatId, response);
+    } else {
+      await safeSend(bot, chatId, `🔍 No results found for "${query}". ${searchResult.error || ''}`);
+    }
+  });
+
+
+  
+// /updateagent — Sol self-updates his PC agent code
+bot.onText(/^\/updateagent(?:\s+([\s\S]+))?$/i, async (msg, match) => {
+  const chatId = msg.chat.id;
+  if (chatId.toString() !== config.OWNER_CHAT_ID.toString()) return;
+  const subCmd = (match[1] || '').trim().toLowerCase();
+  if (subCmd === 'status') {
+    const s = await pcAgentStatus();
+    return safeSend(bot, chatId, s.online
+      ? '✅ PC Agent is ONLINE. Last heartbeat: ' + new Date(s.lastHeartbeat).toLocaleTimeString()
+      : '❌ PC Agent is OFFLINE.');
+  }
+  if (subCmd === 'check') {
+    // Check watchdog is running
+    const r = await executeOnPC('Get-Process wscript -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq \'\' } | Select-Object Id, CPU | Format-Table | Out-String', 'powershell', 15000);
+    return safeSend(bot, chatId, '🔍 Watchdog check:\n' + (r.output || 'No output'));
+  }
+  return safeSend(bot, chatId,
+    '🔧 *PC Agent Self-Update Commands:*\n' +
+    '`/updateagent status` — Check if agent is online\n' +
+    '`/updateagent check` — Verify watchdog is running\n\n' +
+    'To update agent code, I write the new file and the watchdog auto-restarts me.\n' +
+    'I NEVER kill node.exe directly — that would kill my own connection.');
+});
+
+bot.on('photo', async (msg) => {
+    const chatId = msg.chat.id;
+    console.log(`[PHOTO] from ${chatId}`);
+    await bot.sendChatAction(chatId, 'typing');
+    try {
+      const photo = msg.photo[msg.photo.length - 1];
+      const fileLink = await bot.getFileLink(photo.file_id);
+      const caption = msg.caption || '';
+      const analysis = await analyzeImage(fileLink, caption);
+      saveMessage(chatId, 'user', `[Image sent] ${caption}`);
+      saveMessage(chatId, 'assistant', analysis);
+      await safeSend(bot, chatId, analysis);
+      if (caption.toLowerCase().includes('thumbnail') || caption.toLowerCase().includes('thumb')) {
+        addToStyleGuide('analyses', { caption, analysis: analysis.slice(0, 500), source: 'user_upload' });
+        await safeSend(bot, chatId, '_✔ Added to thumbnail style guide._');
+      }
+    } catch (e) {
+      logError('photo_handler', e);
+      await safeSend(bot, chatId, 'Had trouble analyzing that image. Try again.');
+    }
+  });
+
+  // ─── VOICE MESSAGES ────────────────────────────────────────────────────
+  bot.on('voice', async (msg) => {
+    const chatId = msg.chat.id;
+    console.log(`[VOICE] from ${chatId}`);
+    await bot.sendChatAction(chatId, 'typing');
+    const transcript = await transcribeVoice(bot, msg.voice.file_id);
+    if (!transcript || transcript.startsWith('[')) {
+      await bot.sendMessage(chatId, transcript || 'Could not process voice.');
+      return;
+    }
+    await handleText(bot, chatId, transcript, `🎤 *"${transcript}"*\n\n`);
+  });
+
+  // ─── REGULAR MESSAGES ──────────────────────────────────────────────────
+  bot.on('message', async (msg) => {
+    if (!msg.text || msg.text.startsWith('/')) return;
+    if (msg.voice || msg.photo) return;
+    const chatId = msg.chat.id;
+    console.log(`[MSG] from ${chatId}: ${msg.text.slice(0, 80)}`);
+    await bot.sendChatAction(chatId, 'typing');
+    await handleText(bot, chatId, msg.text);
+  });
+
+  // ─── REMINDER CHECKER (every 30s) ─────────────────────────────────────
+  setInterval(() => {
+    const reminders = loadReminders();
+    const now = Date.now();
+    const due = reminders.filter(r => r.triggerTime <= now);
+    const remaining = reminders.filter(r => r.triggerTime > now);
+    if (due.length > 0) {
+      saveReminders(remaining);
+      for (const r of due) { safeSend(bot, r.chatId, `⏰ *Reminder:* ${r.text}`); }
+    }
+  }, 30000);
+
+  // ─── HEALTH CHECK (every 60s) ──────────────────────────────────────────
+  setInterval(() => { healthCheck(bot).catch(e => logError('health_interval', e)); }, 60000);
+
+  // ─── DAILY CHECK-IN (every minute) ─────────────────────────────────────
+  setInterval(() => {
+    if (shouldDoCheckin()) dailyCheckin(bot).catch(e => logError('checkin', e));
+  }, 60000);
+
+  // ─── PROACTIVE WORK QUEUE (every 5 min) ────────────────────────────────
+
+  // ─── WEEKLY BUSINESS INTELLIGENCE BRIEF (Mondays 6 AM CDT) ─────────────────
+  let lastWeeklyBriefDate = null;
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      const cdt = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+      const isMonday = cdt.getDay() === 1;
+      const isRightHour = cdt.getHours() === 6 && cdt.getMinutes() < 5;
+      const weekKey = `${cdt.getFullYear()}-W${Math.ceil(cdt.getDate()/7)}`;
+      if (!isMonday || !isRightHour || lastWeeklyBriefDate === weekKey) return;
+      lastWeeklyBriefDate = weekKey;
+      console.log('[WEEKLY_BRIEF] Generating Business Intelligence Brief...');
+      const projects = loadProjects();
+      const kb = loadKnowledgeBase();
+      const NEXT_MOVES_PATH = path.join(__dirname, 'next_moves.json');
+      let moves = { items: [] };
+      if (fs.existsSync(NEXT_MOVES_PATH)) { try { moves = JSON.parse(fs.readFileSync(NEXT_MOVES_PATH, 'utf8')); } catch {} }
+      const messages = [
+        { role: 'system', content: config.SYSTEM_PROMPT },
+        { role: 'user', content: `Generate this week's Business Intelligence Brief for Shultz Enterprises. Monday morning.\n\nActive projects: ${JSON.stringify(Object.values(projects).filter(p=>p.status==='active').map(p=>({name:p.name,phase:p.phase})))}\nRecent decisions: ${JSON.stringify(kb.decisions?.slice(-3)||[])}\nLast Next Moves: ${moves.items?.[0]?.text?.slice(0,400)||'none'}\n\nBrief (under 300 words):\n1. WEEK IN REVIEW\n2. THIS WEEK PRIORITIES (top 3)\n3. OPPORTUNITIES SPOTTED\n4. WATCH LIST\n5. PROACTIVE SUGGESTION\n\nSharp. Direct. Chief of Staff thinking.` }
+      ];
+      const brief = await callLLM(messages);
+      const dateStr = cdt.toLocaleDateString('en-US', {weekday:'long', month:'long', day:'numeric'});
+      await safeSend(bot, config.OWNER_CHAT_ID, `\u{1F4CA} *Weekly Business Intelligence Brief*\n_${dateStr}_\n\n${brief}`);
+      console.log('[WEEKLY_BRIEF] Sent.');
+    } catch (e) { logError('weekly_brief', e); }
+  }, 60000);
+
+  setInterval(() => { processWorkQueue(bot).catch(e => logError('work_queue_interval', e)); }, config.WORK_QUEUE_INTERVAL);
+
+  // ─── BACKUP (every hour) ───────────────────────────────────────────────
+  setInterval(saveBackupConfig, 3600000);
+
+  // ─── HEALTH SERVER ─────────────────────────────────────────────────────
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok', bot: 'Sol v5.0', mode: 'autonomous+vision+browser',
+      model: config.MODEL, uptime: Math.floor(process.uptime()),
+      health: healthStatus,
+      tasks: { active: activeTasks.length, queued: taskQueue.length },
+      projects: Object.keys(loadProjects()).length,
+      timestamp: new Date().toISOString()
+    }));
+  });
+  server.listen(config.PORT, '0.0.0.0', () => { console.log(`🟢 Health: http://0.0.0.0:${config.PORT}/`); });
+  server.on('error', (e) => {
+    if (e.code === 'EADDRINUSE') console.log(`⚠️ Port ${config.PORT} in use (bot still works)`);
+  });
+
+  // Shutdown handlers
+  process.on('SIGINT', () => { fs.writeFileSync(path.join(__dirname, '.last_clean_shutdown'), String(Date.now())); process.exit(0); });
+  process.on('SIGTERM', () => { fs.writeFileSync(path.join(__dirname, '.last_clean_shutdown'), String(Date.now())); process.exit(0); });
+
+  console.log('🟢 Sol v5.0 is online. Vision + Browser + SEO + Autonomous.');
+  return bot;
+}
+
+process.on('uncaughtException', (e) => { logError('uncaught', e); });
+process.on('unhandledRejection', (e) => { logError('unhandled', e); });
+
+main().catch(e => { logError('fatal', e); process.exit(1); });

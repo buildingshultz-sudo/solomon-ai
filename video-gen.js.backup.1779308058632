@@ -1,0 +1,93 @@
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
+
+// Helper function to make API calls
+async function makeApiCall(url, method = 'GET', body = null) {
+  try {
+    const response = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : null
+    });
+    if (!response.ok) {
+      throw new Error(`API call failed with status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error(`Error making API call: ${error.message}`);
+    throw error;
+  }
+}
+
+// Function to generate a video using the Luma Dream Machine API
+async function generateVideoLuma(prompt, options) {
+  const apiUrl = 'https://api.luma-dream-machine.com/video-generate';
+  const body = { prompt, ...options };
+  try {
+    const data = await makeApiCall(apiUrl, 'POST', body);
+    return data.videoId;
+  } catch (error) {
+    console.error(`Error generating video: ${error.message}`);
+    throw error;
+  }
+}
+
+// Function to check the status of a video generation job
+async function checkVideoStatusLuma(id) {
+  const apiUrl = `https://api.luma-dream-machine.com/video-status/${id}`;
+  try {
+    const statusData = await makeApiCall(apiUrl);
+    return statusData.status;
+  } catch (error) {
+    console.error(`Error checking video status: ${error.message}`);
+    throw error;
+  }
+}
+
+// Function to download the video once it's ready
+async function downloadVideoToFile(url, outputPath) {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to download video with status: ${response.status}`);
+    }
+    const fileStream = fs.createWriteStream(outputPath);
+    await new Promise((resolve, reject) => {
+      response.body.pipe(fileStream);
+      response.body.on('error', reject);
+      fileStream.on('finish', resolve);
+    });
+    return outputPath;
+  } catch (error) {
+    console.error(`Error downloading video: ${error.message}`);
+    throw error;
+  }
+}
+
+// Main function to handle the video generation process
+async function generateVideo(prompt, options = {}) {
+  try {
+    const videoId = await generateVideoLuma(prompt, options);
+    let status = await checkVideoStatusLuma(videoId);
+
+    // Polling until video is ready
+    while (status !== 'ready') {
+      if (status === 'error') {
+        throw new Error('Video generation failed');
+      }
+      console.log('Waiting for video to be ready...');
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      status = await checkVideoStatusLuma(videoId);
+    }
+
+    const videoUrl = `https://api.luma-dream-machine.com/video-download/${videoId}`;
+    const outputPath = path.join(__dirname, `${videoId}.mp4`);
+    return await downloadVideoToFile(videoUrl, outputPath);
+  } catch (error) {
+    console.error(`Error in generateVideo: ${error.message}`);
+    throw error;
+  }
+}
+
+module.exports = { generateVideo, checkVideoStatus: checkVideoStatusLuma, downloadVideo: downloadVideoToFile };

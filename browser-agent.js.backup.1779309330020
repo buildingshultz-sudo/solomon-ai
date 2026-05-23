@@ -1,0 +1,71 @@
+const { chromium } = require('playwright');
+
+// Launches a browser instance
+async function launchBrowserUnique(headless = true) {
+    try {
+        const browserInstance = await chromium.launch({ headless });
+        return browserInstance;
+    } catch (error) {
+        return `Error launching browser: ${error.message}`;
+    }
+}
+
+// Navigates to a URL and returns the page text content
+async function navigateToUnique(browser, url) {
+    try {
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await page.goto(url);
+        const content = await page.textContent('body');
+        await context.close();
+        return content;
+    } catch (error) {
+        return `Error navigating to URL: ${error.message}`;
+    }
+}
+
+// Scrapes text from a CSS selector on a page
+async function scrapeSelectorUnique(browser, url, cssSelector) {
+    try {
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await page.goto(url);
+        const textContent = await page.textContent(cssSelector);
+        await context.close();
+        return textContent;
+    } catch (error) {
+        return `Error scraping selector: ${error.message}`;
+    }
+}
+
+// Takes a screenshot and saves it to outputPath
+async function takeScreenshotUnique(browser, url, outputPath) {
+    try {
+        const context = await browser.newContext();
+        const page = await context.newPage();
+        await page.goto(url);
+        await page.screenshot({ path: outputPath });
+        await context.close();
+        return `Screenshot saved to ${outputPath}`;
+    } catch (error) {
+        return `Error taking screenshot: ${error.message}`;
+    }
+}
+
+// Closes the browser instance
+async function closeBrowserUnique(browser) {
+    try {
+        await browser.close();
+        return 'Browser closed successfully';
+    } catch (error) {
+        return `Error closing browser: ${error.message}`;
+    }
+}
+
+module.exports = {
+    launchBrowserUnique,
+    navigateToUnique,
+    scrapeSelectorUnique,
+    takeScreenshotUnique,
+    closeBrowserUnique
+};

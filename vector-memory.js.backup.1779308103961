@@ -1,0 +1,54 @@
+const { ChromaDB } = require('chromadb');
+
+let chromaInstance;
+let memoryCollection;
+
+// Initialize the ChromaDB and collection
+async function initCollection() {
+  try {
+    chromaInstance = new ChromaDB();
+    memoryCollection = await chromaInstance.createCollection('memory');
+  } catch (error) {
+    console.error('Error initializing collection:', error);
+    throw error;
+  }
+}
+
+// Add a memory to the collection
+async function addMemoryToCollection(text, metadata) {
+  try {
+    await memoryCollection.add(text, metadata);
+  } catch (error) {
+    console.error('Error adding memory:', error);
+    throw error;
+  }
+}
+
+// Search for memories based on a query
+async function searchMemoryInCollection(query, limit = 10) {
+  try {
+    const results = await memoryCollection.search(query, { limit });
+    return results;
+  } catch (error) {
+    console.error('Error searching memory:', error);
+    throw error;
+  }
+}
+
+// Retrieve all memories from the collection
+async function getAllMemoriesFromCollection() {
+  try {
+    const memories = await memoryCollection.getAll();
+    return memories;
+  } catch (error) {
+    console.error('Error retrieving memories:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  initCollection,
+  addMemoryToCollection,
+  searchMemoryInCollection,
+  getAllMemoriesFromCollection,
+};
