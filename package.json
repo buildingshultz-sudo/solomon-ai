@@ -12,7 +12,8 @@
   "dependencies": {
     "better-sqlite3": "^11.10.0",
     "formdata-node": "^6.0.3",
-    "node-telegram-bot-api": "^0.66.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "playwright": "^1.60.0"
   },
   "engines": {
     "node": ">=18.0.0"

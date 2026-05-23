@@ -114,6 +114,8 @@ function safeLoadPendingTasks(limit) {
 }
 
 // ── PROOF-OF-WORK VERIFIER (stricter than v5) ────────────────────────────────
+// ANTI-FAKING: Tasks that require EXECUTION (browser, PC, code deploy) cannot be
+// marked complete just because the LLM wrote a report ABOUT doing them.
 function verifyArtifact(taskId, result, taskType) {
   const recentThreshold = Date.now() - (5 * 60 * 1000); // Only count files from last 5 min
   // Check for file artifacts in deliverables dir
@@ -127,6 +129,25 @@ function verifyArtifact(taskId, result, taskType) {
     if (stat.size > 200 && stat.mtimeMs > recentThreshold) { // Only count recent files
       return { verified: true, artifact: artifactPath, reason: `File: ${files[0]} (${stat.size} bytes)` };
     }
+  }
+
+  // ── EXECUTION TASKS: Require proof of actual execution, not just text ──
+  const executionTypes = ['browser_action', 'pc_command', 'deploy', 'upload', 'install'];
+  if (executionTypes.includes(taskType)) {
+    // For execution tasks, a text-only result is NOT sufficient
+    // Must have a screenshot, command output, or file artifact
+    if (typeof result === 'string') {
+      // Check if result contains evidence of actual execution
+      const hasScreenshot = result.includes('screenshot') && result.includes('.png');
+      const hasCommandOutput = result.includes('exitCode') || result.includes('output:');
+      const hasNavigation = result.includes('Navigated to') || result.includes('Page title:');
+      if (hasScreenshot || hasCommandOutput || hasNavigation) {
+        return { verified: true, artifact: null, reason: `Execution verified: ${result.slice(0, 100)}` };
+      }
+      // If it's just a report/description about what SHOULD be done, reject it
+      return { verified: false, artifact: null, reason: `Execution task produced text report instead of actual execution. Task type '${taskType}' requires real browser/PC action, not a description.` };
+    }
+    return { verified: false, artifact: null, reason: 'Execution task produced no actionable result' };
   }
 
   if (typeof result === 'string') {
@@ -531,8 +552,45 @@ CRITICAL RULES:
 
   async function executeBrowserTask(task) {
     const url = task.url || task.description;
-    const result = await executeOnPC(`start chrome "${url}"`, 'cmd');
-    if (!result || !result.success) return null;
+    // Sanitize URL
+    const cleanUrl = (url || '').replace(/^["'*]+|["'*]+$/g, '').replace(/\*\*/g, '').trim();
+    const targetUrl = cleanUrl.startsWith('http') ? cleanUrl : 'https://' + cleanUrl;
+
+    // STRATEGY 1: Use local Playwright (preferred — works without PC Agent)
+    try {
+      const pw = require('playwright');
+      const browser = await pw.chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        viewport: { width: 1920, height: 1080 }
+      });
+      const page = await context.newPage();
+      await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      
+      // Take screenshot as proof of execution
+      const ssPath = path.join(DELIVERABLES_DIR, `screenshot_${task.id}_${Date.now()}.png`);
+      await page.screenshot({ path: ssPath, fullPage: false });
+      
+      // Extract page content
+      const pageText = await page.evaluate(() => document.body.innerText).catch(() => '');
+      const pageTitle = await page.title().catch(() => '');
+      
+      await context.close();
+      await browser.close();
+      
+      console.log(`[WORKER v6] [${task.id}] Browser task completed via local Playwright`);
+      return `Navigated to ${targetUrl}\nPage title: ${pageTitle}\nScreenshot: ${ssPath}\nContent preview: ${(pageText || '').slice(0, 500)}`;
+    } catch (playwrightErr) {
+      console.log(`[WORKER v6] [${task.id}] Local Playwright failed: ${playwrightErr.message}. Trying PC Agent...`);
+    }
+
+    // STRATEGY 2: Fall back to PC Agent (if online)
+    const result = await executeOnPC(`start chrome "${targetUrl}"`, 'cmd');
+    if (!result || !result.success) {
+      // HONEST FAILURE: Don't fake it
+      console.log(`[WORKER v6] [${task.id}] Browser task FAILED: both Playwright and PC Agent unavailable`);
+      return null;
+    }
     await new Promise(r => setTimeout(r, 5000));
     // Take screenshot for proof
     const ssResult = await executeOnPC(
@@ -543,9 +601,9 @@ CRITICAL RULES:
       const imgData = Buffer.from(ssResult.output.trim(), 'base64');
       const imgPath = path.join(DELIVERABLES_DIR, `screenshot_${task.id}_${Date.now()}.png`);
       fs.writeFileSync(imgPath, imgData);
-      return `Opened ${url}. Screenshot: ${imgPath}`;
+      return `Opened ${targetUrl}. Screenshot: ${imgPath}`;
     }
-    return `Opened ${url} (screenshot unavailable)`;
+    return `Opened ${targetUrl} (screenshot unavailable)`;
   }
 
   async function executeFileTask(task) {
