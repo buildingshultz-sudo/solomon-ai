@@ -10,8 +10,10 @@
     "health": "node -e \"require('./health-monitor').runFullCheck(require('./core/config')).then(r => console.log(JSON.stringify(r, null, 2)))\""
   },
   "dependencies": {
+    "axios": "^1.16.1",
     "better-sqlite3": "^11.10.0",
     "formdata-node": "^6.0.3",
+    "googleapis": "^172.0.0",
     "node-telegram-bot-api": "^0.66.0",
     "playwright": "^1.60.0"
   },
