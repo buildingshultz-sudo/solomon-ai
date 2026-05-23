@@ -6,7 +6,7 @@ const { google } = require('googleapis');
 
 module.exports = {
   name: 'youtube',
-  version: '1.1.0',
+  version: '1.0.0',
   description: 'Integrates YouTube Data API for analytics and video management.',
   requiredKeys: ['YOUTUBE_API_KEY'],
 
