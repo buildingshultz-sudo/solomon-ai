@@ -1,5 +1,146 @@
-CRITICAL RULE: You are an EXECUTION agent, NOT an advisor. NEVER explain steps to the user. NEVER give tutorials. NEVER say 'here are the steps' or 'let me know if you want me to proceed.' When the user asks you to do something, DO IT IMMEDIATELY using your tools (PC Agent, Playwright, APIs). If a task fails, try a different approach — do NOT report failure and ask what to do next. Just fix it and complete the task silently. The user has granted FULL AUTONOMY. Act on it.
+/**
+ * Solomon Configuration Manager v6.1
+ *
+ * Centralized configuration with:
+ * - Environment variable support (secrets never in code)
+ * - Validation of required vs optional keys
+ * - Runtime config reload without restart
+ * - Default values for all settings
+ */
 
+const fs = require('fs');
+const path = require('path');
+
+const ENV_FILE = path.join(__dirname, '..', '.env');
+const CONFIG_FILE = path.join(__dirname, '..', 'sol-config.json');
+
+// Load .env file if it exists
+function loadEnvFile() {
+  if (!fs.existsSync(ENV_FILE)) return;
+  const lines = fs.readFileSync(ENV_FILE, 'utf8').split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let val = trimmed.slice(eqIdx + 1).trim();
+    // Remove surrounding quotes
+    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+      val = val.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
+
+loadEnvFile();
+
+// ── CONFIGURATION SCHEMA ───────────────────────────────────────────────────
+const config = {
+  // ─── CORE ────────────────────────────────────────────────────────────────
+  TELEGRAM_TOKEN: process.env.TELEGRAM_TOKEN || '',
+  OWNER_CHAT_ID: process.env.OWNER_CHAT_ID || '',
+  RELAY_URL: process.env.RELAY_URL || 'http://127.0.0.1:3001',
+  RELAY_SECRET: process.env.RELAY_SECRET || '7f3a9b2e-1d4c-4e8f-b6a5-3c7d8e9f0a1b',
+
+  // ─── LLM ────────────────────────────────────────────────────────────────
+  OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
+  OPENROUTER_URL: process.env.OPENROUTER_URL || 'https://openrouter.ai/api/v1/chat/completions',
+  MODEL: process.env.SOL_MODEL || 'openai/gpt-4o',
+  MODEL_FALLBACK: process.env.SOL_MODEL_FALLBACK || 'openai/gpt-4o-mini',
+  MODEL_CODEX: process.env.SOL_MODEL_CODEX || 'openai/gpt-4o',
+  LLM_TIMEOUT: parseInt(process.env.LLM_TIMEOUT) || 60000,
+  LLM_MAX_TOKENS: parseInt(process.env.LLM_MAX_TOKENS) || 4096,
+
+  // ─── OPENAI DIRECT ──────────────────────────────────────────────────────
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+
+  // ─── ELEVENLABS ─────────────────────────────────────────────────────────
+  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || '',
+  ELEVENLABS_VOICE_ID: process.env.ELEVENLABS_VOICE_ID || '',
+
+  // ─── FLUX/BFL ───────────────────────────────────────────────────────────
+  BFL_API_KEY: process.env.BFL_API_KEY || '',
+
+  // ─── STRIPE ─────────────────────────────────────────────────────────────
+  STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
+  STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || '',
+
+  // ─── YOUTUBE ────────────────────────────────────────────────────────────
+  YOUTUBE_API_KEY: process.env.YOUTUBE_API_KEY || '',
+  YOUTUBE_CHANNEL_ID: process.env.YOUTUBE_CHANNEL_ID || '',
+  YOUTUBE_OAUTH_CLIENT_ID: process.env.YOUTUBE_OAUTH_CLIENT_ID || '',
+  YOUTUBE_OAUTH_CLIENT_SECRET: process.env.YOUTUBE_OAUTH_CLIENT_SECRET || '',
+  YOUTUBE_OAUTH_REFRESH_TOKEN: process.env.YOUTUBE_OAUTH_REFRESH_TOKEN || '',
+
+  // ─── GOOGLE ─────────────────────────────────────────────────────────────
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
+  GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET || '',
+  GOOGLE_REFRESH_TOKEN: process.env.GOOGLE_REFRESH_TOKEN || '',
+
+  // ─── INSTAGRAM / META ───────────────────────────────────────────────────
+  INSTAGRAM_ACCESS_TOKEN: process.env.INSTAGRAM_ACCESS_TOKEN || '',
+  INSTAGRAM_BUSINESS_ID: process.env.INSTAGRAM_BUSINESS_ID || '',
+  META_PAGE_ACCESS_TOKEN: process.env.META_PAGE_ACCESS_TOKEN || '',
+  META_PAGE_ID_IRISH_CRAFTSMAN: process.env.META_PAGE_ID_IRISH_CRAFTSMAN || '',
+  META_PAGE_ID_BUILDING_SHULTZ: process.env.META_PAGE_ID_BUILDING_SHULTZ || '',
+
+  // ─── TIKTOK ─────────────────────────────────────────────────────────────
+  TIKTOK_ACCESS_TOKEN: process.env.TIKTOK_ACCESS_TOKEN || '',
+  TIKTOK_OPEN_ID: process.env.TIKTOK_OPEN_ID || '',
+
+  // ─── EMAIL MARKETING ────────────────────────────────────────────────────
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY || '',
+  MAILCHIMP_API_KEY: process.env.MAILCHIMP_API_KEY || '',
+  MAILCHIMP_SERVER: process.env.MAILCHIMP_SERVER || '',
+
+  // ─── GUMROAD ────────────────────────────────────────────────────────────
+  GUMROAD_ACCESS_TOKEN: process.env.GUMROAD_ACCESS_TOKEN || '',
+
+  // ─── AMAZON KDP ─────────────────────────────────────────────────────────
+  KDP_EMAIL: process.env.KDP_EMAIL || '',
+  KDP_PASSWORD: process.env.KDP_PASSWORD || '',
+
+  // ─── VIDIQ ──────────────────────────────────────────────────────────────
+  VIDIQ_API_KEY: process.env.VIDIQ_API_KEY || '',
+
+  // ─── CANVA ──────────────────────────────────────────────────────────────
+  CANVA_API_KEY: process.env.CANVA_API_KEY || '',
+
+  // ─── HUBSPOT ────────────────────────────────────────────────────────────
+  HUBSPOT_API_KEY: process.env.HUBSPOT_API_KEY || '',
+
+  // ─── CLICKUP ────────────────────────────────────────────────────────────
+  CLICKUP_API_KEY: process.env.CLICKUP_API_KEY || '',
+  CLICKUP_WORKSPACE_ID: process.env.CLICKUP_WORKSPACE_ID || '',
+
+  // ─── ZAPIER ─────────────────────────────────────────────────────────────
+  ZAPIER_WEBHOOK_URL: process.env.ZAPIER_WEBHOOK_URL || '',
+
+  // ─── PAYPAL ─────────────────────────────────────────────────────────────
+  PAYPAL_CLIENT_ID: process.env.PAYPAL_CLIENT_ID || '',
+  PAYPAL_CLIENT_SECRET: process.env.PAYPAL_CLIENT_SECRET || '',
+  PAYPAL_MODE: process.env.PAYPAL_MODE || 'sandbox',
+
+  // ─── XERO ──────────────────────────────────────────────────────────────
+  XERO_CLIENT_ID: process.env.XERO_CLIENT_ID || '',
+  XERO_CLIENT_SECRET: process.env.XERO_CLIENT_SECRET || '',
+  XERO_TENANT_ID: process.env.XERO_TENANT_ID || '',
+
+  // ─── PERPLEXITY ─────────────────────────────────────────────────────────
+  PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY || '',
+
+  // ─── BOT SETTINGS ───────────────────────────────────────────────────────
+  MAX_MESSAGES: parseInt(process.env.SOL_MAX_MESSAGES) || 30,
+  MAX_WORKERS: parseInt(process.env.SOL_MAX_WORKERS) || 3,
+  WORKER_INTERVAL: parseInt(process.env.SOL_WORKER_INTERVAL) || 15000,
+  WORK_QUEUE_INTERVAL: parseInt(process.env.SOL_WORK_QUEUE_INTERVAL) || 30000,
+  DAILY_CHECKIN_HOUR: parseInt(process.env.SOL_CHECKIN_HOUR) || 7,
+  DAILY_CHECKIN_MINUTE: parseInt(process.env.SOL_CHECKIN_MINUTE) || 0,
+  TIMEZONE: process.env.SOL_TIMEZONE || 'America/Chicago',
+
+  // ─── SYSTEM PROMPT ──────────────────────────────────────────────────────
+  SYSTEM_PROMPT: `CRITICAL RULE: You are an EXECUTION agent, NOT an advisor. NEVER explain steps to the user. NEVER give tutorials. NEVER say 'here are the steps' or 'let me know if you want me to proceed.' When the user asks you to do something, DO IT IMMEDIATELY using your tools (PC Agent, Playwright, APIs). If a task fails, try a different approach — do NOT report failure and ask what to do next. Just fix it and complete the task silently. The user has granted FULL AUTONOMY. Act on it.
 When the user requests any work that takes more than one step, you MUST call queue_task with a title, description, and steps array BEFORE responding. Never just acknowledge work verbally without queuing it.
 
 You are Sol — Solomon's Forge AI. You are Jedidiah Shultz's autonomous Chief of Staff, Marketing Director, CPA/Tax Lawyer, Venture Capitalist, Product Dev Lead, and Organizational Director. You operate with FULL AUTONOMY — you handle everything without asking permission (except purchases over $50).
@@ -76,7 +217,7 @@ NEVER ask Jed for permission to proceed. NEVER say 'let me know if you want me t
 
 === CAPABILITIES ===
 - Web research (Perplexity Sonar + DuckDuckGo fallback, anti-hallucination enforced)
-- PC Agent control (PowerShell, Chrome automation, file management on Jed's Windows PC at C:\Users\Ashle\Desktop\)
+- PC Agent control (PowerShell, Chrome automation, file management on Jed's Windows PC at C:\\Users\\Ashle\\Desktop\\)
 - Background task execution with true parallelism (up to 3 concurrent tasks)
 - PDF report generation via weasyprint + Telegram delivery
 - Image generation (DALL-E 3, Flux/BFL)
@@ -197,4 +338,83 @@ When you need to log into a platform, write a plugin that:
 5. On subsequent runs, loads cookies first (skip login if session still valid)
 
 === CURRENT PRIORITIES (as of May 2026) ===
-1. Get all API integrations connected
+1. Get all API integrations connected (YouTube Data API, Stripe, HubSpot, etc.)
+2. IronEdit MVP development — Electron + FFmpeg + AI metadata
+3. YouTube content optimization (SEO, thumbnails, posting schedule)
+4. Build email list via lead magnets
+5. Launch Builders AI Blueprint on Amazon KDP
+6. Grow Building Shultz from 1,450 to 10,000 subscribers
+7. Establish consistent cross-platform posting (YouTube + Instagram + TikTok)`
+};
+
+// ── VALIDATION ─────────────────────────────────────────────────────────────
+function validateConfig() {
+  const critical = ['TELEGRAM_TOKEN', 'OWNER_CHAT_ID', 'OPENROUTER_API_KEY'];
+  const missing = critical.filter(k => !config[k]);
+  if (missing.length > 0) {
+    console.error(`[CONFIG] CRITICAL: Missing required keys: ${missing.join(', ')}`);
+    console.error('[CONFIG] Set these in .env file or environment variables');
+  }
+  return missing;
+}
+
+function getConfiguredIntegrations() {
+  const integrations = {
+    openai: !!config.OPENAI_API_KEY,
+    elevenlabs: !!config.ELEVENLABS_API_KEY,
+    flux: !!config.BFL_API_KEY,
+    stripe: !!config.STRIPE_SECRET_KEY,
+    youtube: !!config.YOUTUBE_API_KEY,
+    google: !!config.GOOGLE_CLIENT_ID && !!config.GOOGLE_REFRESH_TOKEN,
+    instagram: !!config.INSTAGRAM_ACCESS_TOKEN,
+    tiktok: !!config.TIKTOK_ACCESS_TOKEN,
+    meta: !!config.META_PAGE_ACCESS_TOKEN,
+    sendgrid: !!config.SENDGRID_API_KEY,
+    mailchimp: !!config.MAILCHIMP_API_KEY,
+    gumroad: !!config.GUMROAD_ACCESS_TOKEN,
+    vidiq: !!config.VIDIQ_API_KEY,
+    canva: !!config.CANVA_API_KEY,
+    hubspot: !!config.HUBSPOT_API_KEY,
+    clickup: !!config.CLICKUP_API_KEY,
+    zapier: !!config.ZAPIER_WEBHOOK_URL,
+    paypal: !!config.PAYPAL_CLIENT_ID,
+    xero: !!config.XERO_CLIENT_ID,
+    perplexity: !!config.PERPLEXITY_API_KEY
+  };
+  return integrations;
+}
+
+function getMissingKeys() {
+  const all = getConfiguredIntegrations();
+  return Object.entries(all).filter(([_, v]) => !v).map(([k]) => k);
+}
+
+// ── RUNTIME RELOAD ─────────────────────────────────────────────────────────
+function reloadConfig() {
+  loadEnvFile();
+  for (const key of Object.keys(config)) {
+    if (process.env[key] !== undefined) {
+      config[key] = process.env[key];
+    }
+  }
+  console.log('[CONFIG] Reloaded from environment');
+}
+
+// ── PERSIST RUNTIME CONFIG ─────────────────────────────────────────────────
+function saveRuntimeConfig(updates) {
+  Object.assign(config, updates);
+  const safeKeys = ['MODEL', 'MODEL_FALLBACK', 'MAX_MESSAGES', 'MAX_WORKERS',
+    'WORKER_INTERVAL', 'DAILY_CHECKIN_HOUR', 'DAILY_CHECKIN_MINUTE', 'TIMEZONE'];
+  const toSave = {};
+  for (const key of safeKeys) {
+    if (config[key] !== undefined) toSave[key] = config[key];
+  }
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(toSave, null, 2));
+}
+
+module.exports = config;
+module.exports.validateConfig = validateConfig;
+module.exports.getConfiguredIntegrations = getConfiguredIntegrations;
+module.exports.getMissingKeys = getMissingKeys;
+module.exports.reloadConfig = reloadConfig;
+module.exports.saveRuntimeConfig = saveRuntimeConfig;
