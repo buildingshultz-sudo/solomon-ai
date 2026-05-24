@@ -1,54 +1,5 @@
 [
   {
-    "timestamp": "2026-05-23T01:11:56.333Z",
-    "overall": "healthy",
-    "checks": {
-      "memory": {
-        "totalMB": 1968,
-        "usedMB": 756,
-        "freeMB": 1212,
-        "percentUsed": 38
-      },
-      "disk": {
-        "total": "48G",
-        "used": "7.8G",
-        "available": "40G",
-        "percentUsed": 17
-      },
-      "queue": {
-        "ok": true,
-        "issues": [],
-        "stats": {
-          "total": 77,
-          "pending": 4,
-          "active": 0,
-          "completed": 68,
-          "failed": 0,
-          "blocked": 5
-        }
-      },
-      "pdf": {
-        "manus-md-to-pdf": "exists but may not work",
-        "weasyprint": "available"
-      },
-      "telegram": {
-        "ok": true,
-        "botName": "Shultz_Solomon_bot"
-      },
-      "openrouter": {
-        "ok": true,
-        "response": "OK"
-      },
-      "pcAgent": {
-        "ok": true,
-        "stale": false,
-        "version": "5.0.0",
-        "ageSeconds": 8,
-        "tabs": 0
-      }
-    }
-  },
-  {
     "timestamp": "2026-05-23T01:16:56.334Z",
     "overall": "healthy",
     "checks": {
@@ -14107,6 +14058,55 @@
         "stale": false,
         "version": "5.0.0",
         "ageSeconds": 7,
+        "tabs": 0
+      }
+    }
+  },
+  {
+    "timestamp": "2026-05-24T02:33:59.793Z",
+    "overall": "healthy",
+    "checks": {
+      "memory": {
+        "totalMB": 1968,
+        "usedMB": 889,
+        "freeMB": 1079,
+        "percentUsed": 45
+      },
+      "disk": {
+        "total": "48G",
+        "used": "8.3G",
+        "available": "40G",
+        "percentUsed": 18
+      },
+      "queue": {
+        "ok": true,
+        "issues": [],
+        "stats": {
+          "total": 78,
+          "pending": 1,
+          "active": 0,
+          "completed": 72,
+          "failed": 0,
+          "blocked": 5
+        }
+      },
+      "pdf": {
+        "manus-md-to-pdf": "exists but may not work",
+        "weasyprint": "available"
+      },
+      "telegram": {
+        "ok": true,
+        "botName": "Shultz_Solomon_bot"
+      },
+      "openrouter": {
+        "ok": true,
+        "response": "OK"
+      },
+      "pcAgent": {
+        "ok": true,
+        "stale": false,
+        "version": "5.0.0",
+        "ageSeconds": 8,
         "tabs": 0
       }
     }
