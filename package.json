@@ -1,0 +1,24 @@
+{
+  "name": "solomon-v4",
+  "version": "4.0.0",
+  "description": "Solomon — Chief of Staff for Shultz Enterprises",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "relay": "node pc-relay.js",
+    "db:test": "node -e \"require('./memory').testDB()\"",
+    "db:reset": "node -e \"require('./memory').resetDB()\""
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.25.0",
+    "axios": "^1.16.1",
+    "better-sqlite3": "^9.4.0",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.0",
+    "form-data": "^4.0.5",
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.66.0",
+    "nodemailer": "^8.0.8",
+    "playwright": "^1.60.0"
+  }
+}
