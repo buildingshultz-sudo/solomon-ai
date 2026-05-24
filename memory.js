@@ -9,7 +9,7 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// ── SCHEMA — 4 tables, nothing more ────────────────────────────────────
+// ── SCHEMA — 7 tables ────────────────────────────────────────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +49,43 @@ db.exec(`
     output_tokens INTEGER DEFAULT 0,
     cost_usd REAL DEFAULT 0,
     model TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS code_lessons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project TEXT NOT NULL,
+    phase TEXT,
+    session_type TEXT,
+    what_worked TEXT,
+    what_failed TEXT,
+    error_patterns TEXT,
+    code_snippets TEXT,
+    time_taken_minutes INTEGER,
+    applied_to_next INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS project_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    repo_url TEXT,
+    local_path TEXT,
+    current_phase TEXT DEFAULT 'spec',
+    status TEXT DEFAULT 'active',
+    spec_summary TEXT,
+    last_commit TEXT,
+    tech_stack TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS error_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    error_signature TEXT UNIQUE NOT NULL,
+    error_context TEXT,
+    solution TEXT NOT NULL,
+    times_encountered INTEGER DEFAULT 1,
+    times_applied INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -133,6 +170,79 @@ const budget = {
   }
 };
 
+// ── CODE LESSONS (Phase 7) ──────────────────────────────────────────────
+const lessons = {
+  add({ project, phase, sessionType, whatWorked, whatFailed, errorPatterns, codeSnippets, timeTaken }) {
+    db.prepare(`INSERT INTO code_lessons
+      (project, phase, session_type, what_worked, what_failed, error_patterns, code_snippets, time_taken_minutes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(project, phase, sessionType, whatWorked, whatFailed, errorPatterns || null, codeSnippets || null, timeTaken || null);
+  },
+  getForProject(project) {
+    return db.prepare('SELECT * FROM code_lessons WHERE project = ? ORDER BY id DESC').all(project);
+  },
+  getTop(limit = 10) {
+    return db.prepare('SELECT * FROM code_lessons ORDER BY id DESC LIMIT ?').all(limit);
+  },
+  markApplied(id) {
+    db.prepare('UPDATE code_lessons SET applied_to_next = 1 WHERE id = ?').run(id);
+  }
+};
+
+// ── PROJECT STATE (Phase 7) ─────────────────────────────────────────────
+const projects = {
+  upsert({ name, repoUrl, localPath, phase, status, specSummary, lastCommit, techStack }) {
+    db.prepare(`INSERT INTO project_state
+      (name, repo_url, local_path, current_phase, status, spec_summary, last_commit, tech_stack, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(name) DO UPDATE SET
+        repo_url = COALESCE(excluded.repo_url, project_state.repo_url),
+        local_path = COALESCE(excluded.local_path, project_state.local_path),
+        current_phase = COALESCE(excluded.current_phase, project_state.current_phase),
+        status = COALESCE(excluded.status, project_state.status),
+        spec_summary = COALESCE(excluded.spec_summary, project_state.spec_summary),
+        last_commit = COALESCE(excluded.last_commit, project_state.last_commit),
+        tech_stack = COALESCE(excluded.tech_stack, project_state.tech_stack),
+        updated_at = CURRENT_TIMESTAMP`
+    ).run(
+      name,
+      repoUrl || null,
+      localPath || null,
+      phase || null,
+      status || null,
+      specSummary || null,
+      lastCommit || null,
+      techStack || null
+    );
+  },
+  get(name) {
+    return db.prepare('SELECT * FROM project_state WHERE name = ?').get(name);
+  },
+  getAll() {
+    return db.prepare('SELECT * FROM project_state ORDER BY updated_at DESC').all();
+  }
+};
+
+// ── ERROR PATTERNS (Phase 7) ────────────────────────────────────────────
+const errorDB = {
+  record(signature, context, solution) {
+    db.prepare(`INSERT INTO error_patterns (error_signature, error_context, solution)
+      VALUES (?, ?, ?)
+      ON CONFLICT(error_signature) DO UPDATE SET
+        times_encountered = times_encountered + 1,
+        solution = excluded.solution,
+        error_context = excluded.error_context`
+    ).run(signature, context, solution);
+  },
+  find(signature) {
+    const searchTerm = `%${(signature || '').slice(0, 50)}%`;
+    return db.prepare('SELECT * FROM error_patterns WHERE error_signature LIKE ? LIMIT 3').all(searchTerm);
+  },
+  markApplied(id) {
+    db.prepare('UPDATE error_patterns SET times_applied = times_applied + 1 WHERE id = ?').run(id);
+  }
+};
+
 // ── TEST / RESET ─────────────────────────────────────────────────────────
 function testDB() {
   mem.set('identity', 'name', 'Solomon');
@@ -150,4 +260,4 @@ function resetDB() {
   console.log('[DB] Reset complete. Memory preserved.');
 }
 
-module.exports = { messages, tasks, mem, budget, testDB, resetDB, db };
+module.exports = { messages, tasks, mem, budget, lessons, projects, errorDB, testDB, resetDB, db };

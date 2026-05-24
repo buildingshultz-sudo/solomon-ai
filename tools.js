@@ -2,10 +2,34 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, tasks } = require('./memory');
+const { mem, tasks, lessons, projects, errorDB } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
+
+// ── PATH SAFETY (Phase 7) ─────────────────────────────────────────────────
+// Solomon has FULL access to C:\, D:\, E:\ drives.
+// ONLY restriction: cannot touch /root/solomon-v4/ (self-patch protection)
+function workshopSafe(targetPath) {
+  if (!targetPath || typeof targetPath !== 'string') {
+    throw new Error('PATH_VIOLATION: No path provided');
+  }
+  const norm = targetPath.replace(/\//g, '\\').toLowerCase();
+  // Block Solomon's own code — NEVER allow self-patching
+  if (norm.includes('solomon-v4') || norm.includes('solomon\\bot') || norm.includes('solomon/bot')) {
+    throw new Error('PATH_VIOLATION: Cannot touch Solomon core files. Solomon NEVER self-patches.');
+  }
+  // Block .env files
+  if (norm.endsWith('.env') || norm.includes('\\.env.')) {
+    throw new Error('PATH_VIOLATION: Cannot access .env files');
+  }
+  // Must be on C:\, D:\, or E:\ drives
+  const driveMatch = /^[cde]:\\/.test(norm);
+  if (!driveMatch) {
+    throw new Error(`PATH_VIOLATION: Only C:\\, D:\\, and E:\\ drives are accessible. Got: ${targetPath}`);
+  }
+  return true;
+}
 
 // ── TOOL DEFINITIONS (sent to Claude) ────────────────────────────────────
 const TOOL_DEFINITIONS = [
@@ -218,14 +242,338 @@ const TOOL_DEFINITIONS = [
       },
       required: ['text']
     }
+  },
+  // ══════════════════════════════════════════════════════════════════════════
+  // PHASE 7 — CODE AGENT / WORKSHOP TOOLS
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    name: 'file_read',
+    description: 'Read the contents of a file on Jed\'s PC. Works on any path on C:\\, D:\\, or E:\\ drives.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Full Windows path to the file' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'file_write',
+    description: 'Create or overwrite a file on Jed\'s PC. Creates parent directories automatically. Max 50KB per write.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Full Windows path for the file' },
+        content: { type: 'string', description: 'File content to write' }
+      },
+      required: ['path', 'content']
+    }
+  },
+  {
+    name: 'file_edit',
+    description: 'Find and replace text within an existing file. Replaces ALL occurrences of the find string.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Full Windows path to the file' },
+        find: { type: 'string', description: 'Exact text to find (case-sensitive)' },
+        replace: { type: 'string', description: 'Replacement text' }
+      },
+      required: ['path', 'find', 'replace']
+    }
+  },
+  {
+    name: 'file_delete',
+    description: 'Delete a file on Jed\'s PC. Cannot delete non-empty directories.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Full Windows path to the file to delete' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'file_rename',
+    description: 'Rename or move a file. Both source and destination must be on C:\\, D:\\, or E:\\ drives.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', description: 'Current full path of the file' },
+        to: { type: 'string', description: 'New full path for the file' }
+      },
+      required: ['from', 'to']
+    }
+  },
+  {
+    name: 'dir_tree',
+    description: 'Show the directory tree of a folder. Skips node_modules and .git. Use before reading/writing to understand project structure.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Directory path. Defaults to D:\\Projects if omitted.' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'dir_create',
+    description: 'Create a directory (and parent directories) on Jed\'s PC.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Full Windows path for the new directory' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'project_run',
+    description: 'Run a command inside a project directory (npm install, npm test, npm run build). WARNING: Do NOT use for persistent processes (npm run electron, npm run dev) — those will hang.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project folder name under D:\\Projects\\' },
+        command: { type: 'string', description: 'Command to run, e.g. "npm install"' },
+        timeout_ms: { type: 'integer', description: 'Timeout in ms. Default 300000 (5 min).' }
+      },
+      required: ['project', 'command']
+    }
+  },
+  {
+    name: 'git_commit',
+    description: 'Commit current state of a project to git. ALWAYS commit before making changes (checkpoint).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project folder name under D:\\Projects\\' },
+        message: { type: 'string', description: 'Commit message. Format: feat:/fix:/test:/docs: description' }
+      },
+      required: ['project', 'message']
+    }
+  },
+  {
+    name: 'git_push',
+    description: 'Push committed changes to GitHub remote.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project folder name under D:\\Projects\\' }
+      },
+      required: ['project']
+    }
+  },
+  {
+    name: 'git_rollback',
+    description: 'Revert project to the previous git commit. Use when a change broke something.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project folder name under D:\\Projects\\' }
+      },
+      required: ['project']
+    }
+  },
+  {
+    name: 'write_lesson',
+    description: 'REQUIRED after every coding session. Write what worked and what failed to learning memory.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project name (e.g. "ironedit")' },
+        phase: { type: 'string', description: 'Current phase (e.g. "scaffold")' },
+        session_type: { type: 'string', enum: ['scaffold', 'feature', 'bugfix', 'test', 'deploy'], description: 'Type of work done' },
+        what_worked: { type: 'string', description: 'What went well' },
+        what_failed: { type: 'string', description: 'What went wrong' },
+        code_snippets: { type: 'string', description: 'Key code that worked, for future reuse' },
+        time_taken_minutes: { type: 'integer', description: 'Approximate time spent' }
+      },
+      required: ['project', 'session_type', 'what_worked', 'what_failed']
+    }
+  },
+  {
+    name: 'get_lessons',
+    description: 'Read past learning lessons before starting a new project or feature. ALWAYS call this first.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project name to filter by, or omit for all recent lessons' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'update_project_state',
+    description: 'Update the project tracker with current phase, status, and last commit.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Project name (e.g. "ironedit")' },
+        repo_url: { type: 'string', description: 'GitHub repo URL' },
+        local_path: { type: 'string', description: 'Local path on PC' },
+        phase: { type: 'string', enum: ['spec', 'scaffold', 'phase1', 'phase2', 'phase3', 'phase4', 'phase5', 'beta', 'live'], description: 'Current phase' },
+        status: { type: 'string', enum: ['active', 'paused', 'blocked', 'complete'], description: 'Project status' },
+        spec_summary: { type: 'string', description: 'One-line summary' },
+        last_commit: { type: 'string', description: 'Last commit message' },
+        tech_stack: { type: 'string', description: 'Tech stack' }
+      },
+      required: ['name']
+    }
   }
 ];
+
+// ── WORKSHOP TOOL EXECUTOR (Phase 7) ────────────────────────────────────
+async function executeWorkshopTool(name, input) {
+  switch (name) {
+    case 'file_read': {
+      workshopSafe(input.path);
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/file-read`,
+        { path: input.path },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: true, path: input.path, content: res.data.content, size: res.data.size };
+    }
+    case 'file_write': {
+      workshopSafe(input.path);
+      if (input.content.length > 51200) {
+        return { ok: false, error: 'File exceeds 50KB limit. Break into smaller files.' };
+      }
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/file-write`,
+        { path: input.path, content: input.content },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: true, path: input.path, bytes_written: res.data.bytes };
+    }
+    case 'file_edit': {
+      workshopSafe(input.path);
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/file-edit`,
+        { path: input.path, find: input.find, replace: input.replace },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: res.data.replaced > 0, replacements: res.data.replaced, path: input.path };
+    }
+    case 'file_delete': {
+      workshopSafe(input.path);
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/file-delete`,
+        { path: input.path },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: res.data.ok, deleted: res.data.deleted || input.path };
+    }
+    case 'file_rename': {
+      workshopSafe(input.from);
+      workshopSafe(input.to);
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/file-rename`,
+        { from: input.from, to: input.to },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: res.data.ok, from: input.from, to: input.to };
+    }
+    case 'dir_tree': {
+      const targetPath = input.path || 'D:\\Projects';
+      workshopSafe(targetPath);
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/dir-tree`,
+        { path: targetPath },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: true, root: res.data.root, entries: res.data.entries, count: res.data.count };
+    }
+    case 'dir_create': {
+      workshopSafe(input.path);
+      const res = await axios.post(`${process.env.PC_RELAY_URL}/file-write`,
+        { path: input.path + '\\.gitkeep', content: '' },
+        { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
+      );
+      return { ok: true, path: input.path };
+    }
+    case 'project_run': {
+      const projectPath = `D:\\Projects\\${input.project}`;
+      workshopSafe(projectPath);
+      const cmd = `cd /d "${projectPath}" && ${input.command}`;
+      const res = await executeTool('pc_execute', {
+        command: cmd,
+        timeout_ms: input.timeout_ms || 300000
+      });
+      return {
+        ok: res.exit_code === 0,
+        stdout: (res.stdout || '').slice(-2000),
+        stderr: (res.stderr || '').slice(-2000),
+        exit_code: res.exit_code
+      };
+    }
+    case 'git_commit': {
+      const projectPath = `D:\\Projects\\${input.project}`;
+      workshopSafe(projectPath);
+      const safeMsg = input.message.replace(/'/g, '').replace(/"/g, '');
+      const cmd = `cd /d "${projectPath}" && git add . && git commit -m "${safeMsg}"`;
+      const res = await executeTool('pc_execute', { command: cmd, timeout_ms: 30000 });
+      projects.upsert({ name: input.project, lastCommit: safeMsg, localPath: projectPath });
+      return { ok: !res.error, commit_message: safeMsg, output: (res.stdout || '').slice(-500) };
+    }
+    case 'git_push': {
+      const projectPath = `D:\\Projects\\${input.project}`;
+      workshopSafe(projectPath);
+      const res = await executeTool('pc_execute', {
+        command: `cd /d "${projectPath}" && git push`,
+        timeout_ms: 60000
+      });
+      return { ok: !res.error, output: (res.stdout || '').slice(-500) };
+    }
+    case 'git_rollback': {
+      const projectPath = `D:\\Projects\\${input.project}`;
+      workshopSafe(projectPath);
+      const res = await executeTool('pc_execute', {
+        command: `cd /d "${projectPath}" && git revert HEAD --no-edit`,
+        timeout_ms: 30000
+      });
+      return { ok: !res.error, output: (res.stdout || '').slice(-500) };
+    }
+    case 'write_lesson': {
+      lessons.add({
+        project: input.project,
+        phase: input.phase,
+        sessionType: input.session_type,
+        whatWorked: input.what_worked,
+        whatFailed: input.what_failed,
+        errorPatterns: null,
+        codeSnippets: input.code_snippets,
+        timeTaken: input.time_taken_minutes
+      });
+      return { ok: true, message: 'Lesson stored. This will be available for future projects.' };
+    }
+    case 'get_lessons': {
+      const data = input.project
+        ? lessons.getForProject(input.project)
+        : lessons.getTop(10);
+      return { ok: true, count: data.length, lessons: data };
+    }
+    case 'update_project_state': {
+      projects.upsert({
+        name: input.name,
+        repoUrl: input.repo_url || undefined,
+        localPath: input.local_path || undefined,
+        phase: input.phase || undefined,
+        status: input.status || undefined,
+        specSummary: input.spec_summary || undefined,
+        lastCommit: input.last_commit || undefined,
+        techStack: input.tech_stack || undefined
+      });
+      return { ok: true, message: `Project ${input.name} updated to phase: ${input.phase || '(unchanged)'}` };
+    }
+    default:
+      return null; // Not a workshop tool — fall through to existing handlers
+  }
+}
 
 // ── TOOL EXECUTORS ───────────────────────────────────────────────────────
 async function executeTool(name, input) {
   console.log(`[TOOL] ${name}`, JSON.stringify(input).slice(0, 120));
 
   try {
+    // Workshop Module — try workshop tools first
+    const workshopResult = await executeWorkshopTool(name, input);
+    if (workshopResult !== null) return workshopResult;
+
     switch (name) {
 
       case 'remember':
