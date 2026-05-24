@@ -568,7 +568,7 @@ Output format (JSON):
           const genResp = await axios.post('https://api.bfl.ai/v1/flux-pro-1.1', {
             prompt: thumbPrompt,
             width: 1280,
-            height: 736
+            height: 704
           }, {
             headers: { 'x-key': process.env.BFL_API_KEY, 'Content-Type': 'application/json' },
             timeout: 15000
@@ -654,7 +654,7 @@ Output format (JSON):
 
       // ITEM 31 — EMAIL NOTIFICATIONS via nodemailer
       case 'send_email': {
-        if (!process.env.EMAIL_HOST || process.env.EMAIL_HOST === 'PLACEHOLDER') {
+        if (!process.env.SMTP_HOST || process.env.SMTP_HOST === 'PLACEHOLDER') {
           return {
             ok: false,
             error: 'Email not configured. Set EMAIL_HOST, EMAIL_USER, EMAIL_PASS in .env.',
@@ -666,13 +666,16 @@ Output format (JSON):
         try {
           const nodemailer = require('nodemailer');
           const transporter = nodemailer.createTransport({
-            host: process.env.EMAIL_HOST,
-            port: parseInt(process.env.EMAIL_PORT || '587'),
+            host: process.env.SMTP_HOST,
+            connectionTimeout: 8000,
+            greetingTimeout: 8000,
+            socketTimeout: 8000,
+            port: parseInt(process.env.SMTP_PORT || '587'),
             secure: false,
-            auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
           });
           const info = await transporter.sendMail({
-            from: process.env.EMAIL_USER,
+            from: process.env.SMTP_USER,
             to: input.to,
             subject: input.subject,
             text: input.body,
@@ -690,7 +693,7 @@ Output format (JSON):
           return { ok: false, error: 'ELEVENLABS_API_KEY not configured.' };
         }
         try {
-          const voiceId = input.voice || 'pNInz6obpgDQGcFmaJgB'; // Adam voice default
+          const voiceId = input.voice || '21m00Tcm4TlvDq8ikWAM'; // Rachel voice default
           const ttsResp = await axios.post(
             `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
             {
