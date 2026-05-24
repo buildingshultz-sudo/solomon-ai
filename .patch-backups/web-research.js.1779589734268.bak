@@ -8,6 +8,7 @@ async function executeWebResearch(urlsOrQueries) {
 
   for (const target of urlsOrQueries) {
     try {
+      // Basic heuristic: if it looks like a URL, navigate; else treat as search query (e.g., via DuckDuckGo)
       let url = target;
       if (!target.startsWith('http')) {
         url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(target)}`;
@@ -15,12 +16,14 @@ async function executeWebResearch(urlsOrQueries) {
       
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
       
+      // Extract main text content (simplified for this example)
       const textContent = await page.evaluate(() => {
+        // Remove script and style elements
         document.querySelectorAll('script, style').forEach(el => el.remove());
         return document.body.innerText.replace(/\n\s*\n/g, '\n').trim();
       });
       
-      results.push({ target, content: textContent.substring(0, 5000) });
+      results.push({ target, content: textContent.substring(0, 5000) }); // Limit to 5000 chars per page
     } catch (error) {
       results.push({ target, error: error.message });
     }
