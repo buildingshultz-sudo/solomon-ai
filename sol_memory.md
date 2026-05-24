@@ -322,3 +322,62 @@ When in doubt: DO THE WORK FIRST, ask questions later.
 - Revenue model: freemium SaaS (free tier with watermark, paid tiers for full renders and advanced AI features)
 - Tech stack: Node.js API on VPS, FFmpeg for rendering, OpenAI for EDL synthesis, WebSocket for real-time status
 - Future: desktop app (Electron), mobile companion app, plugin for DaVinci Resolve/Premiere
+
+
+═══════════════════════════════════════════════════════════════════════════════
+## IMAGE GENERATION — PROMPT ENGINEERING GUIDE
+═══════════════════════════════════════════════════════════════════════════════
+
+### Core Principle
+When generating ANY image, NEVER use vague one-line prompts. Always craft detailed, cinematic prompts that specify:
+1. **Subject/Scene** — exactly what's in the frame, with specific objects named
+2. **Lighting** — direction, color temperature, quality (e.g., "warm amber under-cabinet LED strip casting upward glow on pegboard, single harsh overhead fluorescent off, deep shadows in corners")
+3. **Atmosphere/Mood** — emotional tone (e.g., "quiet intensity after hours, lived-in workspace")
+4. **Composition/Camera** — angle, lens, framing (e.g., "wide-angle 24mm, low camera position at workbench height, slight Dutch angle")
+5. **Textures/Materials** — surface details (e.g., "sawdust on oak workbench, brushed diamond-plate steel, knotty pine planks")
+6. **Color palette** — dominant and accent colors (e.g., "deep blacks and charcoals with pops of Makita teal and Milwaukee red")
+7. **What NOT to include** — "No text, no watermarks, no people, no logos"
+
+### Size Rules
+- Desktop wallpaper: ALWAYS use size "1536x1024" (landscape)
+- Phone wallpaper: use "1024x1536" (portrait)
+- Square (social/thumbnail): use "1024x1024"
+- When in doubt: use "1536x1024"
+
+### Reference Images
+- When user_images exist for the task, ALWAYS include ALL relevant photos in reference_images array
+- Check /root/solomon-bot/user_images/ for Jed's photos
+- More reference images = better results (up to 16 max)
+- Reference images make the output match the ACTUAL space/objects, not a generic AI interpretation
+
+### Jed's Workshop Description (for any shop-related generation)
+Jed's workshop is a 2-car garage converted into a maker space with these specific elements:
+- **Ceiling:** Exposed knotty pine tongue-and-groove planks, warm honey color
+- **Walls:** Mix of OSB/plywood and painted drywall, one wall has full pegboard (tan/brown)
+- **Pegboard wall:** Holds wrenches (various sizes), pliers, hammers, measuring tools — organized by type
+- **Cabinets:** Diamond-plate aluminum fronts (brushed silver), black countertops
+- **Lighting:** Warm amber LED strip under upper cabinets (the signature look), overhead fluorescents (usually off in moody shots)
+- **Workbench:** Solid wood top, vise mounted on left end, various projects in progress
+- **Notable items:** Red fire extinguisher (right side), Indiana Beach vintage sign, plaid upholstered office chair
+- **Tools visible:** Makita (teal) and Milwaukee (red) power tools, DeWalt yellow drill on shelf
+- **Floor:** Concrete, some sawdust and metal shavings
+- **Window:** Single window on right wall, shows blue twilight when shooting at night
+- **Vibe:** Working-class craftsman's space — not a showroom, genuinely used daily
+
+### Example Prompts (Gold Standard)
+
+**Workshop wallpaper:**
+"A cinematic wide-angle photograph of a craftsman's garage workshop at night. Warm amber LED strip under diamond-plate aluminum cabinets casts dramatic upward light onto a tan pegboard wall covered in organized wrenches and hand tools. Knotty pine tongue-and-groove ceiling catches the warm glow. Deep shadows fill the corners. A solid wood workbench with a mounted vise sits center-frame, scattered with a current project. Red fire extinguisher visible on the right. Concrete floor with sawdust. Shot at workbench height with a 24mm lens. Moody, atmospheric, photorealistic. No text, no people."
+
+**YouTube thumbnail:**
+"A dramatic close-up of calloused hands gripping a red-hot piece of steel with blacksmith tongs, sparks flying in the background. Shallow depth of field, f/1.8. Dark workshop background with a single amber work light creating rim lighting on the forearms. High contrast, cinematic color grade with crushed blacks and warm highlights. Photorealistic, editorial quality."
+
+**Social media graphic:**
+"Overhead flat-lay of a woodworker's workbench: hand plane, chisel set, marking gauge, pencil, and fresh wood shavings arranged artfully on aged oak surface. Soft directional window light from upper left. Shallow depth of field on edges. Warm earth tones. Clean composition with negative space on the right third for text overlay. Photorealistic product photography style."
+
+### Anti-Patterns (NEVER do these)
+- ❌ "A workshop wallpaper with dark lighting" (too vague)
+- ❌ "Generate a moody image of tools" (no specifics)
+- ❌ "Create a cinematic workshop" (what workshop? what tools? what lighting?)
+- ❌ Using 1024x1024 for wallpapers (wrong aspect ratio)
+- ❌ Ignoring reference_images when user photos exist

@@ -485,11 +485,24 @@ async function executeTool(toolName, args, chatId) {
 
     case 'generate_image':
       try {
-        console.log('[TOOL] Generating image:', args.prompt?.slice(0, 80));
-        const imgPath = await generateImage(args.prompt);
-        await bot.sendPhoto(chatId, imgPath, { caption: `🎨 Generated image` });
-        try { fs.unlinkSync(imgPath); } catch(e) {}
-        return { success: true, sent_to_chat: true };
+        console.log('[TOOL] Generating image:', args.prompt?.slice(0, 80), 'refs:', args.reference_images?.length || 0);
+        const openaiPlugin = pluginLoader.getPlugin('openai');
+        let imgResult;
+        if (openaiPlugin) {
+          imgResult = await openaiPlugin.executeTool('generate_image', args);
+        } else {
+          const imgPath = await generateImage(args.prompt);
+          imgResult = { success: true, filePath: imgPath };
+        }
+        if (imgResult && imgResult.success && imgResult.filePath) {
+          const caption = imgResult.usedReferences ? '🎨 Generated image (using your reference photos)' : '🎨 Generated image';
+          await bot.sendPhoto(chatId, imgResult.filePath, { caption });
+          try { fs.unlinkSync(imgResult.filePath); } catch(e) {}
+          return { success: true, sent_to_chat: true };
+        } else {
+          console.error('[TOOL] Image generation failed:', imgResult?.error);
+          return { success: false, error: imgResult?.error || 'Unknown error' };
+        }
       } catch (e) {
         console.error('[TOOL] Image generation failed:', e.message);
         return { success: false, error: e.message };
@@ -889,14 +902,28 @@ bot.on('message', async (msg) => {
     while (response.tool_calls && response.tool_calls.length > 0 && iterations < maxIterations) {
       iterations++;
       const toolResults = [];
+      // Dedup: only allow ONE generate_image call per iteration
+      let imageGenDone = false;
 
       for (const toolCall of response.tool_calls) {
         const name = toolCall.function.name;
         let args = {};
         try { args = JSON.parse(toolCall.function.arguments); } catch {}
 
+        // Skip duplicate generate_image calls (LLM sometimes issues one per reference photo)
+        if (name === 'generate_image' && imageGenDone) {
+          console.log(`[TOOL] Skipping duplicate generate_image (already generated one this iteration)`);
+          toolResults.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: JSON.stringify({ success: true, note: 'Skipped duplicate — one image per request.' })
+          });
+          continue;
+        }
+
         console.log(`[TOOL] Iteration ${iterations}: ${name}`, JSON.stringify(args).slice(0, 200));
         const result = await executeTool(name, args, chatId);
+        if (name === 'generate_image') imageGenDone = true;
         toolResults.push({
           role: 'tool',
           tool_call_id: toolCall.id,
