@@ -180,20 +180,22 @@ const TOOL_DEFINITIONS = [
   // ══════════════════════════════════════════════════════════════════════════
   {
     name: 'social_post',
-    description: 'Post content to a social media page (Facebook). Currently supports Building Shultz and Irish Craftsman pages.',
+    description: 'Post content to Facebook or Instagram. Supports Building Shultz and Irish Craftsman pages/accounts.',
     input_schema: {
       type: 'object',
       properties: {
-        page: { type: 'string', enum: ['building_shultz', 'irish_craftsman'], description: 'Which Facebook page to post to' },
+        page: { type: 'string', enum: ['building_shultz', 'irish_craftsman'], description: 'Which page/account to post to' },
+        platform: { type: 'string', enum: ['facebook', 'instagram'], default: 'facebook', description: 'Platform: facebook or instagram' },
         message: { type: 'string', description: 'Post text content' },
-        link: { type: 'string', description: 'Optional URL to include' }
+        link: { type: 'string', description: 'Optional URL to include (Facebook only)' },
+        image_url: { type: 'string', description: 'Optional image URL for Instagram posts' }
       },
       required: ['page', 'message']
     }
   },
   {
     name: 'send_email',
-    description: 'Send an email notification via configured SMTP.',
+    description: 'Send an email notification via Gmail API (HTTPS-based, no SMTP port needed).',
     input_schema: {
       type: 'object',
       properties: {
@@ -627,66 +629,86 @@ Output format (JSON):
         }
       }
 
-      // ITEM 30 — SOCIAL POSTING (Facebook pages)
+      // ITEM 30 — SOCIAL POSTING (Facebook + Instagram)
       case 'social_post': {
-        if (!process.env.FACEBOOK_PAGE_TOKEN || process.env.FACEBOOK_PAGE_TOKEN === 'PLACEHOLDER') {
-          return {
-            ok: false,
-            error: 'Facebook Page Token not configured. Set FACEBOOK_PAGE_TOKEN in .env to enable social posting.',
-            stub: true,
-            page: input.page,
-            message_preview: input.message.slice(0, 100)
-          };
+        const pageToken = input.page === 'building_shultz'
+          ? process.env.FB_BUILDING_SHULTZ_TOKEN
+          : process.env.FB_IRISH_CRAFTSMAN_TOKEN;
+        const pageId = input.page === 'building_shultz'
+          ? process.env.FB_BUILDING_SHULTZ_ID
+          : process.env.FB_IRISH_CRAFTSMAN_ID;
+        if (!pageToken || pageToken === 'PLACEHOLDER') {
+          return { ok: false, error: 'No token for page: ' + input.page + '. Set FB_BUILDING_SHULTZ_TOKEN or FB_IRISH_CRAFTSMAN_TOKEN in .env.' };
         }
-        // Real implementation when token is available
+        const platform = input.platform || 'facebook';
         try {
-          const pageId = input.page === 'building_shultz' ? process.env.FB_BUILDING_SHULTZ_ID : process.env.FB_IRISH_CRAFTSMAN_ID;
-          const fbResp = await axios.post(`https://graph.facebook.com/v18.0/${pageId}/feed`, {
-            message: input.message,
-            link: input.link || undefined,
-            access_token: process.env.FACEBOOK_PAGE_TOKEN
-          }, { timeout: 10000 });
-          return { ok: true, post_id: fbResp.data.id, page: input.page };
+          if (platform === 'instagram') {
+            const igResp = await axios.get(
+              'https://graph.facebook.com/v19.0/' + pageId + '?fields=instagram_business_account&access_token=' + pageToken,
+              { timeout: 10000 }
+            );
+            const igId = igResp.data.instagram_business_account && igResp.data.instagram_business_account.id;
+            const containerResp = await axios.post(
+              'https://graph.facebook.com/v19.0/' + igId + '/media',
+              { caption: input.message, image_url: input.image_url, access_token: pageToken },
+              { timeout: 15000 }
+            );
+            const publishResp = await axios.post(
+              'https://graph.facebook.com/v19.0/' + igId + '/media_publish',
+              { creation_id: containerResp.data.id, access_token: pageToken },
+              { timeout: 15000 }
+            );
+            return { ok: true, post_id: publishResp.data.id, platform: 'instagram', page: input.page };
+          } else {
+            const fbBody = { message: input.message, access_token: pageToken };
+            if (input.link) fbBody.link = input.link;
+            const fbResp = await axios.post(
+              'https://graph.facebook.com/v19.0/' + pageId + '/feed',
+              fbBody,
+              { timeout: 10000 }
+            );
+            return { ok: true, post_id: fbResp.data.id, platform: 'facebook', page: input.page };
+          }
         } catch (fbErr) {
-          return { ok: false, error: `Facebook post failed: ${fbErr.response?.data?.error?.message || fbErr.message}` };
+          const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
+          return { ok: false, error: 'Social post failed: ' + msg };
         }
       }
-
-      // ITEM 31 — EMAIL NOTIFICATIONS via nodemailer
+      // ITEM 31 - EMAIL via Gmail API (HTTPS - bypasses DigitalOcean SMTP block)
       case 'send_email': {
-        if (!process.env.SMTP_HOST || process.env.SMTP_HOST === 'PLACEHOLDER') {
-          return {
-            ok: false,
-            error: 'Email not configured. Set EMAIL_HOST, EMAIL_USER, EMAIL_PASS in .env.',
-            stub: true,
-            to: input.to,
-            subject: input.subject
-          };
+        const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+        if (!refreshToken || refreshToken === 'PLACEHOLDER') {
+          return { ok: false, error: 'Gmail API requires YOUTUBE_REFRESH_TOKEN. Authorize YouTube first.' };
         }
         try {
-          const nodemailer = require('nodemailer');
-          const transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST,
-            connectionTimeout: 8000,
-            greetingTimeout: 8000,
-            socketTimeout: 8000,
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: false,
-            auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-          });
-          const info = await transporter.sendMail({
-            from: process.env.SMTP_USER,
-            to: input.to,
-            subject: input.subject,
-            text: input.body,
-            html: input.body.includes('<') ? input.body : undefined
-          });
-          return { ok: true, message_id: info.messageId, to: input.to, subject: input.subject };
+          const tokenResp = await axios.post('https://oauth2.googleapis.com/token', {
+            client_id: process.env.YOUTUBE_CLIENT_ID,
+            client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token'
+          }, { timeout: 10000 });
+          const accessToken = tokenResp.data.access_token;
+          const rawEmail = [
+            'To: ' + input.to,
+            'From: ' + (process.env.SMTP_USER || 'buildingshultz@gmail.com'),
+            'Subject: ' + input.subject,
+            'Content-Type: text/plain; charset=utf-8',
+            '',
+            input.body
+          ].join('\r\n');
+          const encoded = Buffer.from(rawEmail).toString('base64')
+            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+          const gmailResp = await axios.post(
+            'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+            { raw: encoded },
+            { headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, timeout: 15000 }
+          );
+          return { ok: true, message_id: gmailResp.data.id, to: input.to, subject: input.subject };
         } catch (emailErr) {
-          return { ok: false, error: `Email send failed: ${emailErr.message}` };
+          const errMsg = (emailErr.response && emailErr.response.data && (emailErr.response.data.error_description || (emailErr.response.data.error && emailErr.response.data.error.message))) || emailErr.message;
+          return { ok: false, error: 'Gmail API send failed: ' + errMsg };
         }
       }
-
       // ITEM 32 — ELEVENLABS VOICE GENERATION
       case 'generate_voice': {
         if (!process.env.ELEVENLABS_API_KEY || process.env.ELEVENLABS_API_KEY === 'PLACEHOLDER') {

@@ -1,10 +1,10 @@
-const axios = require('axios');
 'use strict';
 // bot.js — Solomon V4 main entry point.
 // ONE file. ONE model. NO self-patching. NO Ollama. NO local LLM.
 // If it breaks, you can read the whole thing in 10 minutes.
 require('dotenv').config();
 
+const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
 const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
@@ -12,6 +12,48 @@ const fs = require('fs');
 const path = require('path');
 const { messages, tasks, mem, budget } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool } = require('./tools');
+
+// ══ STRUCTURED LOGGING (Item 36) ═════════════════════════════════════════
+const LOG_DIR = path.join(__dirname, 'logs');
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+
+function getLogFile() {
+  const d = new Date();
+  const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return path.join(LOG_DIR, `solomon-${ds}.log`);
+}
+
+function log(level, category, message, data) {
+  const ts = new Date().toISOString();
+  const entry = { ts, level, category, message, ...(data ? { data } : {}) };
+  try { fs.appendFileSync(getLogFile(), JSON.stringify(entry) + '\n'); } catch (_) {}
+  const prefix = `[${ts.slice(11,19)}][${level}][${category}]`;
+  if (level === 'ERROR') {
+    console.error(`${prefix} ${message}`, data ? JSON.stringify(data).slice(0,200) : '');
+  } else {
+    console.log(`${prefix} ${message}`, data ? JSON.stringify(data).slice(0,200) : '');
+  }
+}
+
+// Rotate logs older than 7 days (runs every 6h)
+function rotateLogs() {
+  try {
+    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    fs.readdirSync(LOG_DIR).filter(f => f.startsWith('solomon-') && f.endsWith('.log')).forEach(f => {
+      const fp = path.join(LOG_DIR, f);
+      if (fs.statSync(fp).mtimeMs < cutoff) { fs.unlinkSync(fp); log('INFO', 'SYSTEM', `Rotated old log: ${f}`); }
+    });
+  } catch (_) {}
+}
+setInterval(rotateLogs, 6 * 60 * 60 * 1000);
+
+// ══ GLOBAL ERROR HANDLERS (Item 35) ══════════════════════════════════════
+process.on('uncaughtException', (err) => {
+  log('ERROR', 'PROCESS', 'Uncaught exception - bot continues', { error: err.message });
+});
+process.on('unhandledRejection', (reason) => {
+  log('ERROR', 'PROCESS', 'Unhandled rejection - bot continues', { reason: String(reason).slice(0,300) });
+});
 
 // ── VALIDATE CONFIG ──────────────────────────────────────────────────────
 const REQUIRED = ['ANTHROPIC_API_KEY', 'TELEGRAM_BOT_TOKEN', 'OWNER_CHAT_ID'];
@@ -28,9 +70,7 @@ const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID);
 const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '2048');
 
-console.log('[SOLOMON V4] Starting...');
-console.log('[SOLOMON V4] Model:', MODEL);
-console.log('[SOLOMON V4] Owner ID:', OWNER_ID);
+log('INFO', 'SYSTEM', 'Solomon V4 starting', { model: MODEL, owner: OWNER_ID });
 
 // ── SYSTEM PROMPT ────────────────────────────────────────────────────────
 function buildSystemPrompt() {
@@ -72,15 +112,21 @@ FULL AUTONOMY GRANTED: Post to Facebook, queue tasks, manage files, run PC comma
 ALWAYS ASK FIRST: Purchases over $50, permanent file deletion, account changes.`;
 }
 
-// ── BUDGET CHECK ─────────────────────────────────────────────────────────
+// ── BUDGET CHECK (Item 37) ────────────────────────────────────────────────
 async function checkBudget() {
   const total = budget.getMonthTotal();
   const hard = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100');
-  const alert = parseFloat(process.env.MONTHLY_BUDGET_ALERT || '50');
+  const alertPct80 = hard * 0.80;
+  const alertPct50 = parseFloat(process.env.MONTHLY_BUDGET_ALERT || '50');
   if (total >= hard) {
+    log('ERROR', 'BUDGET', `Hard stop reached: $${total.toFixed(2)} of $${hard}`);
     throw new Error(`Monthly budget hard stop: $${total.toFixed(2)} >= $${hard}. No more API calls this month.`);
   }
-  if (total >= alert) {
+  if (total >= alertPct80) {
+    log('WARN', 'BUDGET', `80% budget alert: $${total.toFixed(2)} of $${hard}`);
+    bot.sendMessage(OWNER_ID, `⚠️ Budget Alert: $${total.toFixed(2)} of $${hard} used this month (${Math.round(total/hard*100)}%). Approaching limit.`).catch(() => {});
+  } else if (total >= alertPct50) {
+    log('WARN', 'BUDGET', `50% budget alert: $${total.toFixed(2)} of $${hard}`);
     bot.sendMessage(OWNER_ID, `⚠️ Budget Alert: $${total.toFixed(2)} of $${hard} used this month.`).catch(() => {});
   }
   return total;
@@ -122,7 +168,7 @@ async function askSolomon(userMessage) {
 
     for (const tu of toolUses) {
       const result = await executeTool(tu.name, tu.input);
-      console.log(`[TOOL RESULT] ${tu.name}:`, JSON.stringify(result).slice(0, 200));
+      log('INFO', 'TOOL', `${tu.name} result`, { result: JSON.stringify(result).slice(0,200) });
       toolResults.push({
         type: 'tool_result',
         tool_use_id: tu.id,
@@ -170,7 +216,7 @@ bot.on('message', async (msg) => {
   const text = msg.text || msg.caption || '';
   if (!text) return;
 
-  console.log(`[MSG] Jed: ${text.slice(0, 100)}`);
+  log('INFO', 'MSG', `Jed: ${text.slice(0, 100)}`);
 
   // Show typing indicator
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
@@ -187,7 +233,7 @@ bot.on('message', async (msg) => {
       await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
     }
   } catch (err) {
-    console.error('[ERROR]', err.message);
+    log('ERROR', 'MSG', 'Message handler error', { error: err.message });
     const errorMsg = err.message.includes('budget')
       ? `🛑 Monthly budget limit reached. Use /budget to check.`
       : `❌ Error: ${err.message.slice(0, 200)}`;
@@ -241,13 +287,13 @@ app.use(express.json());
 app.post('/inject', async (req, res) => {
   const { text } = req.body;
   if (!text) return res.status(400).json({ error: 'No text provided' });
-  console.log(`[INJECT] ${text.slice(0, 100)}`);
+  log('INFO', 'INJECT', text.slice(0, 100));
   try {
     const reply = await askSolomon(text);
     await bot.sendMessage(OWNER_ID, reply);
     res.json({ ok: true, reply });
   } catch (err) {
-    console.error('[INJECT ERROR]', err.message);
+    log('ERROR', 'INJECT', 'Inject error', { error: err.message });
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -273,7 +319,8 @@ app.get('/oauth/start', (req, res) => {
   const scopes = [
     'https://www.googleapis.com/auth/youtube.upload',
     'https://www.googleapis.com/auth/youtube',
-    'https://www.googleapis.com/auth/youtube.readonly'
+    'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/gmail.send'
   ].join(' ');
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -388,15 +435,15 @@ app.get('/oauth/callback', (req, res) => {
 
 // ── LISTEN ───────────────────────────────────────────────────────────────
 app.listen(parseInt(process.env.PORT || '3000'), '0.0.0.0', () => {
-  console.log(`[SOLOMON V4] Inject endpoint listening on port ${process.env.PORT || 3000}`);
-  console.log(`[SOLOMON V4] OAuth: visit http://167.99.237.26:3000/oauth/start to authorize YouTube`);
+  log('INFO', 'SYSTEM', `Inject endpoint listening on port ${process.env.PORT || 3000}`);
+  log('INFO', 'SYSTEM', 'OAuth: visit http://167.99.237.26:3000/oauth/start to authorize YouTube');
 });
 
 // ── STARTUP MESSAGE ──────────────────────────────────────────────────────
 setTimeout(() => {
   bot.sendMessage(OWNER_ID, '🔥 Solomon V4 online. Ready for commands.')
-    .then(() => console.log('[SOLOMON V4] Startup message sent to Jed'))
-    .catch(err => console.error('[STARTUP MSG ERROR]', err.message));
+    .then(() => log('INFO', 'SYSTEM', 'Startup message sent to Jed'))
+    .catch(err => log('ERROR', 'SYSTEM', 'Startup msg error', { error: err.message }));
 }, 2000);
 
-console.log('[SOLOMON V4] Running. Waiting for messages...');
+log('INFO', 'SYSTEM', 'Running. Waiting for messages...');
