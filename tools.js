@@ -124,6 +124,18 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'vps_execute',
+    description: 'Execute a shell command on the VPS (Linux) where Solomon runs. Use for git commands, system checks, or any Linux shell operation in /root/solomon-v4/. Cannot modify core bot files (bot.js, tools.js, memory.js, scheduler.js, pc-relay.js).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Bash shell command to execute on the VPS' },
+        timeout_ms: { type: "integer", default: 30000 }
+      },
+      required: ['command']
+    }
+  },
+  {
     name: 'pc_list_files',
     description: 'List files in a directory on Jed\'s PC.',
     input_schema: {
@@ -1373,6 +1385,26 @@ async function executeTool(name, input) {
         return { ok: true, stdout: res.data.stdout, stderr: res.data.stderr, exit_code: res.data.exitCode };
       }
 
+      case 'vps_execute': {
+        const { execSync } = require('child_process');
+        const cmd = input.command;
+        // Safety: block commands that could modify core bot files
+        const isCoreFileWrite = /(?:sed|tee|echo|cat|>|nano|vi|vim).*\/root\/solomon-v4\/(bot|tools|memory|scheduler|pc-relay)\.js/.test(cmd);
+        if (isCoreFileWrite) {
+          return { ok: false, error: 'VPS_SAFETY: Cannot modify core Solomon files via shell. Dashboard files only.' };
+        }
+        try {
+          const stdout = execSync(cmd, {
+            timeout: input.timeout_ms || 30000,
+            encoding: 'utf8',
+            cwd: '/root/solomon-v4',
+            maxBuffer: 1024 * 1024
+          });
+          return { ok: true, stdout: stdout.trim(), stderr: '', exit_code: 0 };
+        } catch (err) {
+          return { ok: true, stdout: err.stdout || '', stderr: err.stderr || err.message, exit_code: err.status || 1 };
+        }
+      }
       case 'pc_list_files': {
         if (!process.env.PC_RELAY_URL || process.env.PC_RELAY_URL === 'PLACEHOLDER') {
           return { ok: false, error: 'PC_RELAY_URL not configured.' };
