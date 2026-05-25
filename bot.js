@@ -13,6 +13,129 @@ const path = require('path');
 const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool } = require('./tools');
 const activityLogger = require("./activity-logger");
+const sharp = require('sharp');
+
+// ══ IMAGE PROCESSING QUEUE (Rate Limit Fix) ═════════════════════════════════
+// Processes photos one at a time with a delay to avoid 429 rate limit errors
+const _imageQueue = [];
+let _imageProcessing = false;
+const IMAGE_QUEUE_DELAY_MS = 10000; // 10 seconds between vision API calls
+const _reportedPhotoErrors = new Set(); // Dedup error messages per photo
+
+async function processImageQueue() {
+  if (_imageProcessing || _imageQueue.length === 0) return;
+  _imageProcessing = true;
+
+  while (_imageQueue.length > 0) {
+    const job = _imageQueue.shift();
+    try {
+      await processPhoto(job.msg);
+    } catch (err) {
+      const errorKey = `${job.msg.message_id}_${err.message}`;
+      if (!_reportedPhotoErrors.has(errorKey)) {
+        _reportedPhotoErrors.add(errorKey);
+        log('ERROR', 'PHOTO', 'Photo handler error', { error: err.message });
+        bot.sendMessage(job.msg.chat.id, `❌ Photo processing error: ${err.message.slice(0, 200)}`).catch(() => {});
+        // Cleanup old error keys after 5 minutes
+        setTimeout(() => _reportedPhotoErrors.delete(errorKey), 5 * 60 * 1000);
+      }
+    }
+    // Wait between processing to respect rate limits
+    if (_imageQueue.length > 0) {
+      log('INFO', 'PHOTO', `Queue: ${_imageQueue.length} remaining. Waiting ${IMAGE_QUEUE_DELAY_MS/1000}s before next...`);
+      await new Promise(r => setTimeout(r, IMAGE_QUEUE_DELAY_MS));
+    }
+  }
+
+  _imageProcessing = false;
+}
+
+async function processPhoto(msg) {
+  bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+  // Get the highest-resolution photo (last in array)
+  const photo = msg.photo[msg.photo.length - 1];
+  const caption = msg.caption || '';
+  log('INFO', 'PHOTO', 'Processing photo from queue', { file_id: photo.file_id, caption: caption.slice(0, 100) });
+
+  // Step 1: Get file path from Telegram
+  const fileInfo = await bot.getFile(photo.file_id);
+  const telegramFilePath = fileInfo.file_path;
+  const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${telegramFilePath}`;
+
+  // Step 2: Download the image
+  const imgResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+  const rawBuffer = Buffer.from(imgResponse.data);
+  const ext = telegramFilePath.split('.').pop() || 'jpg';
+  const localPath = `${TELEGRAM_IMG_DIR}/${photo.file_id}.${ext}`;
+  fs.writeFileSync(localPath, rawBuffer);
+  log('INFO', 'PHOTO', 'Image downloaded', { path: localPath, bytes: rawBuffer.length });
+
+  // Step 3: Resize/compress image before sending to Claude (max 1024px longest side)
+  let processedBuffer;
+  try {
+    const metadata = await sharp(rawBuffer).metadata();
+    const maxDim = 1024;
+    if (metadata.width > maxDim || metadata.height > maxDim) {
+      processedBuffer = await sharp(rawBuffer)
+        .resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      log('INFO', 'PHOTO', 'Image resized', { original: `${metadata.width}x${metadata.height}`, newBytes: processedBuffer.length });
+    } else {
+      // Still compress to JPEG for consistent token usage
+      processedBuffer = await sharp(rawBuffer)
+        .jpeg({ quality: 85 })
+        .toBuffer();
+      log('INFO', 'PHOTO', 'Image compressed (no resize needed)', { newBytes: processedBuffer.length });
+    }
+  } catch (sharpErr) {
+    log('WARN', 'PHOTO', 'Sharp processing failed, using original', { error: sharpErr.message });
+    processedBuffer = rawBuffer;
+  }
+
+  // Step 4: Encode as base64 for Anthropic Claude Vision
+  const base64Image = processedBuffer.toString('base64');
+  const mimeType = 'image/jpeg'; // Always JPEG after sharp processing
+
+  // Step 5: Analyze with Anthropic Claude Vision
+  const visionPrompt = caption
+    ? `The user sent this image with the caption: "${caption}". Please analyze the image and respond helpfully to their request.`
+    : 'Please analyze this image and describe what you see in detail. If it contains text, read it. If it shows code or a screenshot, explain what it shows. Be thorough and helpful.';
+  const visionResponse = await anthropic.messages.create({
+    model: 'claude-opus-4-5',
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mimeType,
+            data: base64Image
+          }
+        },
+        { type: 'text', text: visionPrompt }
+      ]
+    }]
+  });
+  const imageDescription = visionResponse.content.find(b => b.type === 'text')?.text || 'Unable to analyze image.';
+  log('INFO', 'PHOTO', 'Vision analysis complete', { chars: imageDescription.length });
+
+  // Step 6: Pass the Anthropic vision analysis to Solomon as context
+  const contextMessage = caption
+    ? `[User sent a photo with caption: "${caption}"]\n\n[Image analysis: ${imageDescription}]\n\nPlease respond to the user's request based on this image.`
+    : `[User sent a photo — no caption]\n\n[Image analysis: ${imageDescription}]\n\nPlease respond helpfully about this image. You can use it for any task (generating wallpapers, analyzing screenshots, reading documents, etc.) as needed.`;
+
+  const reply = await askSolomon(contextMessage);
+  await sendLongMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
+  activityLogger.logActivity('message_sent', { summary: reply.slice(0, 100) });
+  activityLogger.setStatus('IDLE', '');
+
+  // Cleanup temp file
+  try { fs.unlinkSync(localPath); } catch (_) {}
+}
+
 
 // ══ STRUCTURED LOGGING (Item 36) ═════════════════════════════════════════
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -374,80 +497,12 @@ bot.on('message', async (msg) => {
   const text = msg.text || msg.caption || '';
   if (!text && !msg.photo) return;
 
-  // ── PHOTO HANDLER (Phase 8B) ────────────────────────────────────────
+  // ── PHOTO HANDLER (Phase 8B — Rate-Limited Queue) ────────────────────
   if (msg.photo) {
+    log('INFO', 'PHOTO', 'Received photo, adding to queue', { message_id: msg.message_id, queue_size: _imageQueue.length });
     bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
-    try {
-      // Get the highest-resolution photo (last in array)
-      const photo = msg.photo[msg.photo.length - 1];
-      const caption = msg.caption || '';
-      log('INFO', 'PHOTO', 'Received photo', { file_id: photo.file_id, caption: caption.slice(0, 100) });
-
-      // Step 1: Get file path from Telegram
-      const fileInfo = await bot.getFile(photo.file_id);
-      const telegramFilePath = fileInfo.file_path;
-      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${telegramFilePath}`;
-
-      // Step 2: Download the image
-      const imgResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
-      const imgBuffer = Buffer.from(imgResponse.data);
-      const ext = telegramFilePath.split('.').pop() || 'jpg';
-      const localPath = `${TELEGRAM_IMG_DIR}/${photo.file_id}.${ext}`;
-      fs.writeFileSync(localPath, imgBuffer);
-      log('INFO', 'PHOTO', 'Image saved', { path: localPath, bytes: imgBuffer.length });
-
-      // Step 3: Encode as base64 for Anthropic Claude Vision
-      const base64Image = imgBuffer.toString('base64');
-      const mimeType = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-      // Step 4: Analyze with Anthropic Claude Vision (same API key as main brain)
-      const visionPrompt = caption
-        ? `The user sent this image with the caption: "${caption}". Please analyze the image and respond helpfully to their request.`
-        : 'Please analyze this image and describe what you see in detail. If it contains text, read it. If it shows code or a screenshot, explain what it shows. Be thorough and helpful.';
-      const visionResponse = await anthropic.messages.create({
-        model: 'claude-opus-4-5',
-        max_tokens: 1024,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: base64Image
-              }
-            },
-            { type: 'text', text: visionPrompt }
-          ]
-        }]
-      });
-      const imageDescription = visionResponse.content.find(b => b.type === 'text')?.text || 'Unable to analyze image.';
-      log('INFO', 'PHOTO', 'Vision analysis complete', { chars: imageDescription.length });
-
-      // Step 5: Pass the Anthropic vision analysis to Solomon as context
-      const contextMessage = caption
-        ? `[User sent a photo with caption: "${caption}"]
-
-[Image analysis: ${imageDescription}]
-
-Please respond to the user's request based on this image.`
-        : `[User sent a photo — no caption]
-
-[Image analysis: ${imageDescription}]
-
-Please respond helpfully about this image. You can use it for any task (generating wallpapers, analyzing screenshots, reading documents, etc.) as needed.`;
-
-      const reply = await askSolomon(contextMessage);
-      await sendLongMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
-    activityLogger.logActivity('message_sent', { summary: reply.slice(0, 100) });
-    activityLogger.setStatus('IDLE', '');
-
-      // Cleanup temp file
-      try { fs.unlinkSync(localPath); } catch (_) {}
-    } catch (err) {
-      log('ERROR', 'PHOTO', 'Photo handler error', { error: err.message });
-      bot.sendMessage(msg.chat.id, `❌ Photo processing error: ${err.message.slice(0, 200)}`).catch(() => {});
-    }
+    _imageQueue.push({ msg });
+    processImageQueue(); // Starts processing if not already running
     return;
   }
   // ── END PHOTO HANDLER ────────────────────────────────────────────────
