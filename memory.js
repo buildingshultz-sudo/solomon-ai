@@ -141,6 +141,16 @@ db.exec(`
     content TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS batch_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT NOT NULL,
+    custom_id TEXT,
+    purpose TEXT,
+    status TEXT DEFAULT 'processing',
+    result TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+  );
 `);
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {
@@ -457,4 +467,27 @@ const nativeMem = {
   }
 };
 
-module.exports = { messages, tasks, mem, nativeMem, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };
+// ── BATCH JOBS (Anthropic Batch API) ────────────────────────────────────
+const batchJobs = {
+  add({ batch_id, custom_id, purpose }) {
+    const info = db.prepare('INSERT INTO batch_jobs (batch_id, custom_id, purpose) VALUES (?, ?, ?)')
+      .run(batch_id, custom_id || null, purpose || 'general');
+    return info.lastInsertRowid;
+  },
+  getPending() {
+    return db.prepare("SELECT * FROM batch_jobs WHERE status = 'processing'").all();
+  },
+  updateStatus(batch_id, status, result = null) {
+    if (result) {
+      db.prepare("UPDATE batch_jobs SET status = ?, result = ?, completed_at = CURRENT_TIMESTAMP WHERE batch_id = ?")
+        .run(status, result, batch_id);
+    } else {
+      db.prepare("UPDATE batch_jobs SET status = ? WHERE batch_id = ?").run(status, batch_id);
+    }
+  },
+  getByBatchId(batch_id) {
+    return db.prepare("SELECT * FROM batch_jobs WHERE batch_id = ?").get(batch_id);
+  }
+};
+
+module.exports = { messages, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };

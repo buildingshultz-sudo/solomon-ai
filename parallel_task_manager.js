@@ -4,7 +4,7 @@
 // runs up to 5 concurrently, and notifies Jed on failures via Telegram API.
 // NO self-patching. NO Ollama. NO local LLM.
 require('dotenv').config();
-const { db } = require('./memory');
+const { db, batchJobs } = require('./memory');
 const { executeTool } = require('./tools');
 const axios = require('axios');
 
@@ -66,10 +66,41 @@ async function processTaskQueue() {
   }
 }
 
+// ── BATCH JOB POLLING (Anthropic Batch API) ──────────────────────────────
+async function pollBatchJobs() {
+  const pending = batchJobs.getPending();
+  if (!pending.length) return;
+
+  const Anthropic = require('@anthropic-ai/sdk');
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  for (const job of pending) {
+    try {
+      const batch = await anthropic.beta.messages.batches.retrieve(job.batch_id);
+      if (batch.status === 'ended') {
+        const results = [];
+        for await (const result of await anthropic.beta.messages.batches.results(job.batch_id)) {
+          results.push(result);
+        }
+        batchJobs.updateStatus(job.batch_id, 'ended', JSON.stringify(results));
+        console.log(`[BATCH] Job #${job.id} (${job.batch_id}) complete. Notify owner.`);
+        notifyOwner(`✅ <b>Anthropic Batch Job Complete</b>\nID: <code>${job.batch_id}</code>\nPurpose: ${job.purpose || 'General'}\nUse <code>get_batch_results</code> to see data.`);
+      } else if (batch.status !== job.status) {
+        batchJobs.updateStatus(job.batch_id, batch.status);
+      }
+    } catch (err) {
+      console.error(`[BATCH] Error polling job ${job.batch_id}:`, err.message);
+    }
+  }
+}
+
 // ── START THE PROCESSING LOOP ────────────────────────────────────────────
 const POLL_INTERVAL_MS = 5000;
+const BATCH_POLL_INTERVAL_MS = 300000; // 5 minutes
 const intervalId = setInterval(processTaskQueue, POLL_INTERVAL_MS);
+const batchIntervalId = setInterval(pollBatchJobs, BATCH_POLL_INTERVAL_MS);
 console.log(`[PARALLEL] Task manager started. Polling every ${POLL_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_TASKS} concurrent.`);
+console.log(`[BATCH] Polling pending batch jobs every ${BATCH_POLL_INTERVAL_MS / 60000}m.`);
 
 // ── EXPORTED FUNCTIONS ───────────────────────────────────────────────────
 function enqueueTask(taskName, toolName, args, priority = 5) {

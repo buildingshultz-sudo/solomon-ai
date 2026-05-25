@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, nativeMem, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles } = require('./memory');
+const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -787,6 +787,41 @@ const TOOL_DEFINITIONS = [
         limit: { type: 'integer', default: 20, description: 'Max number of files to return' }
       }
     }
+  },
+  {
+    name: 'create_batch_task',
+    description: 'Queue a prompt for batch processing (50% cheaper). Use for non-urgent background tasks like data extraction, summarization, or analysis.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        custom_id: { type: 'string', description: 'Unique identifier for this task' },
+        prompt: { type: 'string', description: 'The prompt to process in batch' },
+        purpose: { type: 'string', description: 'Short description of why this batch was created' }
+      },
+      required: ['custom_id', 'prompt']
+    }
+  },
+  {
+    name: 'check_batch_status',
+    description: 'Check the status of a specific batch job by its batch_id.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        batch_id: { type: 'string', description: 'The Anthropic batch_id to check' }
+      },
+      required: ['batch_id']
+    }
+  },
+  {
+    name: 'get_batch_results',
+    description: 'Retrieve results for a completed batch job.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        batch_id: { type: 'string', description: 'The Anthropic batch_id to retrieve' }
+      },
+      required: ['batch_id']
+    }
   }
 
 ];
@@ -1188,6 +1223,51 @@ async function executeTool(name, input) {
           default:
             return `Unknown memory command: ${command}`;
         }
+      }
+
+      case 'create_batch_task': {
+        const anthropic = new (require('@anthropic-ai/sdk'))({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const batch = await anthropic.beta.messages.batches.create({
+          requests: [
+            {
+              custom_id: input.custom_id,
+              params: {
+                model: MODEL,
+                max_tokens: 4096,
+                messages: [{ role: 'user', content: input.prompt }]
+              }
+            }
+          ]
+        });
+        batchJobs.add({ batch_id: batch.id, custom_id: input.custom_id, purpose: input.purpose });
+        return { ok: true, batch_id: batch.id, status: batch.status };
+      }
+
+      case 'check_batch_status': {
+        const anthropic = new (require('@anthropic-ai/sdk'))({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const batch = await anthropic.beta.messages.batches.retrieve(input.batch_id);
+        batchJobs.updateStatus(batch.id, batch.status);
+        return { ok: true, batch_id: batch.id, status: batch.status };
+      }
+
+      case 'get_batch_results': {
+        const job = batchJobs.getByBatchId(input.batch_id);
+        if (!job) return { ok: false, error: 'Batch job not found in local database' };
+        if (job.status !== 'ended') {
+          const anthropic = new (require('@anthropic-ai/sdk'))({ apiKey: process.env.ANTHROPIC_API_KEY });
+          const batch = await anthropic.beta.messages.batches.retrieve(input.batch_id);
+          if (batch.status !== 'ended') return { ok: false, status: batch.status, message: 'Batch not yet complete' };
+          
+          // If ended, retrieve results
+          const results = [];
+          for await (const result of await anthropic.beta.messages.batches.results(input.batch_id)) {
+            results.push(result);
+          }
+          const resultStr = JSON.stringify(results);
+          batchJobs.updateStatus(batch.id, 'ended', resultStr);
+          return { ok: true, status: 'ended', results };
+        }
+        return { ok: true, status: 'ended', results: JSON.parse(job.result) };
       }
 
       case 'queue_task': {
