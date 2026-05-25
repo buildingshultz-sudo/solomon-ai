@@ -113,6 +113,19 @@ db.exec(`
     status TEXT DEFAULT 'unread',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS parallel_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_name TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    tool_args TEXT NOT NULL,
+    status TEXT DEFAULT 'queued',
+    priority INTEGER DEFAULT 5,
+    result TEXT,
+    error_message TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    started_at DATETIME,
+    completed_at DATETIME
+  );
 `);
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {

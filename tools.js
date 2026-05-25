@@ -705,7 +705,57 @@ const TOOL_DEFINITIONS = [
       },
       required: ['url']
     }
+  },
+  // ── PHASE 9.0 PARALLEL TASK MANAGEMENT TOOLS ────────────────────────────
+  {
+    name: 'enqueue_parallel_task',
+    description: 'Queue a tool to run in the background as a parallel task. Use for long-running operations that should not block the conversation.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_name: { type: 'string', description: 'Human-readable name for this task' },
+        tool_name: { type: 'string', description: 'Name of the tool to execute (must be a valid tool name)' },
+        tool_args: { type: 'object', description: 'Arguments to pass to the tool' },
+        priority: { type: 'number', description: '1=highest priority, 10=lowest. Default 5.' }
+      },
+      required: ['task_name', 'tool_name', 'tool_args']
+    }
+  },
+  {
+    name: 'check_task_status',
+    description: 'Check the status of a specific parallel task by its ID.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The ID of the task to check' }
+      },
+      required: ['task_id']
+    }
+  },
+  {
+    name: 'list_parallel_tasks',
+    description: 'List parallel tasks, optionally filtered by status.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['queued', 'running', 'complete', 'failed', 'cancelled', 'all'], description: 'Filter by status. Default: all.' },
+        limit: { type: 'number', description: 'Max number of tasks to return. Default 10.' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'cancel_parallel_task',
+    description: 'Cancel a queued parallel task. Cannot cancel tasks that are already running.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'The ID of the task to cancel' }
+      },
+      required: ['task_id']
+    }
   }
+
 ];
 
 // ── WORKSHOP TOOL EXECUTOR (Phase 7) ────────────────────────────────────
@@ -1868,6 +1918,39 @@ public class Wallpaper {
         } else {
           return { ok: false, error: `Unknown action: ${action}. Use 'open' or 'screenshot'.` };
         }
+      }
+
+
+      // ── PHASE 9.0 PARALLEL TASK MANAGEMENT ──────────────────────────────
+      case 'enqueue_parallel_task': {
+        const { enqueueTask } = require('./parallel_task_manager');
+        const priority = input.priority || 5;
+        try {
+          const taskId = enqueueTask(input.task_name, input.tool_name, input.tool_args, priority);
+          return { ok: true, task_id: taskId, message: `Task '${input.task_name}' queued with ID #${taskId}.` };
+        } catch (error) {
+          return { ok: false, error: error.message };
+        }
+      }
+
+      case 'check_task_status': {
+        const { getTaskStatus } = require('./parallel_task_manager');
+        const task = getTaskStatus(input.task_id);
+        if (!task) return { ok: false, error: `Task #${input.task_id} not found.` };
+        return { ok: true, data: task };
+      }
+
+      case 'list_parallel_tasks': {
+        const { getAllTasks } = require('./parallel_task_manager');
+        const status = input.status || 'all';
+        const limit = input.limit || 10;
+        const tasks = getAllTasks(status, limit);
+        return { ok: true, count: tasks.length, tasks };
+      }
+
+      case 'cancel_parallel_task': {
+        const { cancelTask } = require('./parallel_task_manager');
+        return cancelTask(input.task_id);
       }
 
       default:

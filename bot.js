@@ -13,6 +13,7 @@ const path = require('path');
 const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool } = require('./tools');
 const activityLogger = require("./activity-logger");
+const parallelTaskManager = require('./parallel_task_manager');
 const sharp = require('sharp');
 
 // ══ IMAGE PROCESSING QUEUE (Rate Limit Fix) ═════════════════════════════════
