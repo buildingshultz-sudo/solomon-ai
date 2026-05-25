@@ -10,12 +10,14 @@ const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { messages, tasks, mem, budget } = require('./memory');
+const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool } = require('./tools');
 
 // ══ STRUCTURED LOGGING (Item 36) ═════════════════════════════════════════
 const LOG_DIR = path.join(__dirname, 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
+const TELEGRAM_IMG_DIR = '/tmp/telegram_images';
+if (!fs.existsSync(TELEGRAM_IMG_DIR)) fs.mkdirSync(TELEGRAM_IMG_DIR, { recursive: true });
 
 function getLogFile() {
   const d = new Date();
@@ -71,6 +73,71 @@ const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '2048');
 
 log('INFO', 'SYSTEM', 'Solomon V4 starting', { model: MODEL, owner: OWNER_ID });
+
+
+// ── SMART MESSAGE SPLITTING (Phase 8B) ───────────────────────────────────
+// Splits long messages at paragraph boundaries with 500ms delay between chunks
+async function sendLongMessage(chatId, text, opts = {}) {
+  const MAX_LEN = 4000;
+  if (text.length <= MAX_LEN) {
+    try {
+      await bot.sendMessage(chatId, text, opts);
+    } catch (mdErr) {
+      // Markdown parse error fallback — send without formatting
+      if (mdErr.message && mdErr.message.includes("can't parse")) {
+        await bot.sendMessage(chatId, text, { ...opts, parse_mode: undefined });
+      } else {
+        throw mdErr;
+      }
+    }
+    return;
+  }
+
+  // Split at paragraph boundaries (double newline)
+  const paragraphs = text.split(/\n\n/);
+  const chunks = [];
+  let current = '';
+
+  for (const para of paragraphs) {
+    if (current.length + para.length + 2 > MAX_LEN) {
+      if (current) chunks.push(current.trim());
+      // If a single paragraph is too long, split it at single newlines
+      if (para.length > MAX_LEN) {
+        const lines = para.split(/\n/);
+        let subChunk = '';
+        for (const line of lines) {
+          if (subChunk.length + line.length + 1 > MAX_LEN) {
+            if (subChunk) chunks.push(subChunk.trim());
+            subChunk = line;
+          } else {
+            subChunk += (subChunk ? '\n' : '') + line;
+          }
+        }
+        if (subChunk) current = subChunk;
+      } else {
+        current = para;
+      }
+    } else {
+      current += (current ? '\n\n' : '') + para;
+    }
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  for (let i = 0; i < chunks.length; i++) {
+    try {
+      await bot.sendMessage(chatId, chunks[i], opts);
+    } catch (mdErr) {
+      if (mdErr.message && mdErr.message.includes("can't parse")) {
+        await bot.sendMessage(chatId, chunks[i], { ...opts, parse_mode: undefined });
+      } else {
+        throw mdErr;
+      }
+    }
+    if (i < chunks.length - 1) {
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
+}
 
 // ── SYSTEM PROMPT ────────────────────────────────────────────────────────
 function buildSystemPrompt() {
@@ -260,8 +327,83 @@ bot.on('message', async (msg) => {
   }
 
   const text = msg.text || msg.caption || '';
-  if (!text) return;
+  if (!text && !msg.photo) return;
 
+  // ── PHOTO HANDLER (Phase 8B) ────────────────────────────────────────
+  if (msg.photo) {
+    bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+    try {
+      // Get the highest-resolution photo (last in array)
+      const photo = msg.photo[msg.photo.length - 1];
+      const caption = msg.caption || '';
+      log('INFO', 'PHOTO', 'Received photo', { file_id: photo.file_id, caption: caption.slice(0, 100) });
+
+      // Step 1: Get file path from Telegram
+      const fileInfo = await bot.getFile(photo.file_id);
+      const telegramFilePath = fileInfo.file_path;
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${telegramFilePath}`;
+
+      // Step 2: Download the image
+      const imgResponse = await axios.get(fileUrl, { responseType: 'arraybuffer' });
+      const imgBuffer = Buffer.from(imgResponse.data);
+      const ext = telegramFilePath.split('.').pop() || 'jpg';
+      const localPath = `${TELEGRAM_IMG_DIR}/${photo.file_id}.${ext}`;
+      fs.writeFileSync(localPath, imgBuffer);
+      log('INFO', 'PHOTO', 'Image saved', { path: localPath, bytes: imgBuffer.length });
+
+      // Step 3: Encode as base64 for Anthropic Claude Vision
+      const base64Image = imgBuffer.toString('base64');
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+      // Step 4: Analyze with Anthropic Claude Vision (same API key as main brain)
+      const visionPrompt = caption
+        ? `The user sent this image with the caption: "${caption}". Please analyze the image and respond helpfully to their request.`
+        : 'Please analyze this image and describe what you see in detail. If it contains text, read it. If it shows code or a screenshot, explain what it shows. Be thorough and helpful.';
+      const visionResponse = await anthropic.messages.create({
+        model: 'claude-opus-4-5',
+        max_tokens: 1024,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mimeType,
+                data: base64Image
+              }
+            },
+            { type: 'text', text: visionPrompt }
+          ]
+        }]
+      });
+      const imageDescription = visionResponse.content.find(b => b.type === 'text')?.text || 'Unable to analyze image.';
+      log('INFO', 'PHOTO', 'Vision analysis complete', { chars: imageDescription.length });
+
+      // Step 5: Pass the Anthropic vision analysis to Solomon as context
+      const contextMessage = caption
+        ? `[User sent a photo with caption: "${caption}"]
+
+[Image analysis: ${imageDescription}]
+
+Please respond to the user's request based on this image.`
+        : `[User sent a photo — no caption]
+
+[Image analysis: ${imageDescription}]
+
+Please respond helpfully about this image. You can use it for any task (generating wallpapers, analyzing screenshots, reading documents, etc.) as needed.`;
+
+      const reply = await askSolomon(contextMessage);
+      await sendLongMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
+
+      // Cleanup temp file
+      try { fs.unlinkSync(localPath); } catch (_) {}
+    } catch (err) {
+      log('ERROR', 'PHOTO', 'Photo handler error', { error: err.message });
+      bot.sendMessage(msg.chat.id, `❌ Photo processing error: ${err.message.slice(0, 200)}`).catch(() => {});
+    }
+    return;
+  }
+  // ── END PHOTO HANDLER ────────────────────────────────────────────────
   log('INFO', 'MSG', `Jed: ${text.slice(0, 100)}`);
 
   // Show typing indicator
@@ -270,14 +412,7 @@ bot.on('message', async (msg) => {
   try {
     const reply = await askSolomon(text);
 
-    // Telegram max message length is 4096
-    if (reply.length > 4000) {
-      for (let i = 0; i < reply.length; i += 4000) {
-        await bot.sendMessage(msg.chat.id, reply.slice(i, i + 4000), { parse_mode: 'Markdown' });
-      }
-    } else {
-      await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
-    }
+    await sendLongMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
   } catch (err) {
     log('ERROR', 'MSG', 'Message handler error', { error: err.message });
     const errorMsg = err.message.includes('budget')
@@ -311,18 +446,96 @@ bot.onText(/^\/memory/, async (msg) => {
 
 bot.onText(/^\/status/, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
-  const pending = tasks.getPending();
-  const budgetTotal = budget.getMonthTotal();
-  bot.sendMessage(msg.chat.id,
-    `*Solomon V4 Status*\n✅ Online\n🧠 Model: ${MODEL}\n📋 Tasks pending: ${pending.length}\n💰 Month spend: $${budgetTotal.toFixed(4)}\n⏱ Uptime: ${Math.floor(process.uptime() / 60)}m`,
-    { parse_mode: 'Markdown' }
-  );
+  try {
+    const pending = tasks.getPending();
+    const budgetTotal = budget.getMonthTotal();
+    const activeProject = projectQueue.getActive();
+    const queuedApps = projectQueue.getByStatus('queued');
+    const pendingFeatures = featureRequests.getPending();
+    const lastLesson = lessons.getTop(1)[0];
+    const uptimeMin = Math.floor(process.uptime() / 60);
+    const uptimeStr = uptimeMin >= 60 ? `${Math.floor(uptimeMin/60)}h ${uptimeMin%60}m` : `${uptimeMin}m`;
+
+    // PC relay ping
+    let pcStatus = '❓ Unknown';
+    try {
+      const pcResp = await axios.get(`${process.env.PC_RELAY_URL}/health`, {
+        headers: { 'X-Secret': process.env.PC_RELAY_SECRET },
+        timeout: 3000
+      });
+      pcStatus = pcResp.data && pcResp.data.ok ? '✅ Connected' : '⚠️ Unhealthy';
+    } catch (pcErr) {
+      pcStatus = '❌ Offline';
+    }
+
+    const statusLines = [
+      `*Solomon V4 Status*`,
+      `✅ Online | 🧠 ${MODEL}`,
+      `⏱ Uptime: ${uptimeStr}`,
+      ``,
+      `*App Factory:*`,
+      `  🔨 Active: ${activeProject ? activeProject.app_name + ' (' + activeProject.phases_complete + '/' + activeProject.phases_total + ')' : 'None'}`,
+      `  ⏳ Queued: ${queuedApps.length}`,
+      ``,
+      `*Tasks & Budget:*`,
+      `  📋 Pending tasks: ${pending.length}`,
+      `  💰 Month spend: ${budgetTotal.toFixed(2)}`,
+      `  🎯 Feature requests: ${pendingFeatures.length} pending`,
+      ``,
+      `*Systems:*`,
+      `  🖥 PC Relay: ${pcStatus}`,
+      `  📚 Last lesson: ${lastLesson ? lastLesson.what_worked ? lastLesson.what_worked.slice(0, 60) : lastLesson.project : 'None yet'}`,
+    ];
+
+    await sendLongMessage(msg.chat.id, statusLines.join('\n'), { parse_mode: 'Markdown' });
+  } catch (err) {
+    bot.sendMessage(msg.chat.id, `❌ Status error: ${err.message.slice(0, 200)}`).catch(() => {});
+  }
+});
+
+bot.onText(/^\/queue/, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const { projectQueue } = require('./memory');
+  const all = projectQueue.getAll();
+  if (!all.length) { bot.sendMessage(msg.chat.id, 'No apps in queue.'); return; }
+  const text = all.map(a => `${a.status === 'active' ? '🔨' : a.status === 'complete' ? '✅' : '⏳'} ${a.app_name} [${a.status}] $${a.spent_usd}/$${a.budget_usd}`).join('\n');
+  bot.sendMessage(msg.chat.id, `*App Factory Queue:*\n${text}`, { parse_mode: 'Markdown' });
 });
 
 bot.onText(/^\/clear/, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
   messages.clear();
   bot.sendMessage(msg.chat.id, '🧹 Conversation history cleared.');
+});
+
+// ── TELEGRAM DOCUMENT HANDLER (Phase 8) ─────────────────────────────────
+// Handles incoming file messages — downloads and saves to PC via relay
+bot.on('document', async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const doc = msg.document;
+  const caption = msg.caption || '';
+  log('INFO', 'FILE', `Received file: ${doc.file_name} (${doc.file_size} bytes)`);
+  try {
+    bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+    let savePath;
+    if (caption && caption.includes(':\\')) {
+      savePath = caption.trim();
+    } else {
+      savePath = `D:\\Projects\\__inbox\\${doc.file_name}`;
+    }
+    const result = await executeTool('receive_telegram_file', {
+      file_id: doc.file_id,
+      save_path: savePath
+    });
+    if (result.ok) {
+      await bot.sendMessage(msg.chat.id, `📁 File saved: ${doc.file_name}\nPath: ${savePath}\nSize: ${result.size_bytes} bytes`);
+    } else {
+      await bot.sendMessage(msg.chat.id, `❌ Failed to save file: ${result.error}`);
+    }
+  } catch (err) {
+    log('ERROR', 'FILE', 'Document handler error', { error: err.message });
+    bot.sendMessage(msg.chat.id, `❌ File handling error: ${err.message.slice(0, 200)}`).catch(() => {});
+  }
 });
 
 // ── EXPRESS APP (Inject + OAuth) ─────────────────────────────────────────
@@ -346,6 +559,56 @@ app.post('/inject', async (req, res) => {
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, version: '4.0.0', model: MODEL, uptime: process.uptime() });
+});
+
+// ── API ENDPOINTS (Phase 8B) ─────────────────────────────────────────────
+app.get('/api/nathan-inbox', (req, res) => {
+  try {
+    const rows = nathanInbox.getUnread();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/feature-requests', (req, res) => {
+  try {
+    const rows = featureRequests.getPending();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/status', (req, res) => {
+  try {
+    const activeProject = projectQueue.getActive();
+    const queuedApps = projectQueue.getByStatus('queued');
+    const pendingFeatures = featureRequests.getPending();
+    const nathanUnread = nathanInbox.getUnread();
+    const budgetTotal = budget.getMonthTotal();
+    const pendingTasks = tasks.getPending();
+    res.json({
+      ok: true,
+      uptime_seconds: Math.floor(process.uptime()),
+      model: MODEL,
+      active_project: activeProject ? {
+        name: activeProject.app_name,
+        type: activeProject.app_type,
+        phases_complete: activeProject.phases_complete,
+        phases_total: activeProject.phases_total,
+        spent_usd: activeProject.spent_usd,
+        budget_usd: activeProject.budget_usd
+      } : null,
+      queue_count: queuedApps.length,
+      pending_tasks: pendingTasks.length,
+      feature_requests_pending: pendingFeatures.length,
+      nathan_inbox_unread: nathanUnread.length,
+      budget_month_usd: parseFloat(budgetTotal.toFixed(4))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════════

@@ -4,7 +4,7 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
-const { tasks, mem, budget, db } = require('./memory');
+const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox } = require('./memory');
 const { executeTool } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -16,29 +16,88 @@ const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 console.log('[SCHEDULER] Starting cron jobs...');
 
 // ══════════════════════════════════════════════════════════════════════════
-// ITEM 15 — MORNING BRIEF: 4:00 AM CT daily
-// Summarize pending tasks, budget, channel stats.
+// ITEM 15A — MORNING BRIEF PREPARATION: 3:45 AM CT daily
+// Compile all data into a structured brief and store it.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('45 3 * * *', async () => {
+  console.log('[SCHEDULER] Morning brief preparation running (3:45 AM)...');
+  try {
+    const result = await executeTool('prepare_morning_brief', {});
+    if (result.ok) {
+      console.log('[SCHEDULER] Morning brief compiled and stored.');
+    } else {
+      console.error('[SCHEDULER] Morning brief preparation failed:', result.error);
+    }
+  } catch (err) {
+    console.error('[SCHEDULER] Morning brief preparation error:', err.message);
+  }
+}, { timezone: 'America/Chicago' });
+
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 15B — MORNING BRIEF SEND: 4:00 AM CT daily
+// Read the compiled brief and send a formatted summary to Jed via Claude.
 // ══════════════════════════════════════════════════════════════════════════
 cron.schedule('0 4 * * *', async () => {
-  console.log('[SCHEDULER] Morning brief running...');
+  console.log('[SCHEDULER] Morning brief send running (4:00 AM)...');
   try {
-    const pending = tasks.getPending();
-    const budgetTotal = budget.getMonthTotal();
-    const ytSubs = mem.get('business', 'youtube_subscribers') || 'unknown';
+    const compiledRaw = mem.get('system', 'morning_brief_compiled');
     const stale = getStaleTaskCount();
+    const ytSubs = mem.get('business', 'youtube_subscribers') || 'unknown';
 
-    const resp = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 512,
-      messages: [{
-        role: 'user',
-        content: `Generate a concise morning brief for Jedidiah Shultz.
+    let briefData;
+    if (compiledRaw) {
+      try { briefData = JSON.parse(compiledRaw); } catch (_) { briefData = null; }
+    }
+
+    let context;
+    if (briefData) {
+      const activeDesc = briefData.project_status.active
+        ? `${briefData.project_status.active.name} (progress: ${briefData.project_status.active.progress}, spent: $${briefData.project_status.active.spent})`
+        : 'None';
+      const completedDesc = briefData.project_status.completed_last_24h > 0
+        ? `${briefData.project_status.completed_last_24h} (${briefData.project_status.completed_names.join(', ')})`
+        : '0';
+      const featureDesc = briefData.feature_requests.items.map(f => `  - [${f.priority}] ${f.desc}`).join('\n') || '  None';
+      const nathanDesc = briefData.nathan_inbox.items.map(m => `  - [${m.priority}] ${m.subject}`).join('\n') || '  None';
+      const errorDesc = briefData.errors_24h.length
+        ? briefData.errors_24h.map(e => `${e.signature} (x${e.times})`).join(', ')
+        : 'None';
+
+      context = `Generate a concise morning brief for Jedidiah Shultz based on this compiled data:
+
+PROJECT STATUS:
+- Active project: ${activeDesc}
+- Queued apps: ${briefData.project_status.queued_count}
+- Completed last 24h: ${completedDesc}
+
+FEATURE REQUESTS (${briefData.feature_requests.pending_count} pending):
+${featureDesc}
+
+NATHAN INBOX (${briefData.nathan_inbox.unread_count} unread):
+${nathanDesc}
+
+BUDGET: $${briefData.budget.month_total} / $${briefData.budget.hard_stop} this month
+ERRORS (24h): ${errorDesc}
+PENDING TASKS: ${briefData.pending_tasks}
+STALE TASKS (>24h): ${stale}
+YouTube subs: ${ytSubs}
+
+Format: Short, bullet points, what needs his attention today. Highlight any urgent items. Keep under 400 words.`;
+    } else {
+      const pending = tasks.getPending();
+      const budgetTotal = budget.getMonthTotal();
+      context = `Generate a concise morning brief for Jedidiah Shultz.
 Pending tasks: ${pending.length} (${JSON.stringify(pending.slice(0, 3).map(t => t.title))})
 Stale tasks (>24h): ${stale}
 Month spend: $${budgetTotal.toFixed(2)}
 YouTube subs: ${ytSubs}
-Format: Short, bullet points, what needs his attention today. Keep under 300 words.`
-      }]
+Format: Short, bullet points, what needs his attention today. Keep under 300 words.`;
+    }
+
+    const resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 600,
+      messages: [{ role: 'user', content: context }]
     });
 
     budget.log({
@@ -63,7 +122,6 @@ Format: Short, bullet points, what needs his attention today. Keep under 300 wor
 cron.schedule('*/30 * * * *', async () => {
   console.log('[SCHEDULER] Shorts check running...');
 
-  // Skip gracefully if PC relay not configured
   if (!process.env.PC_RELAY_URL || process.env.PC_RELAY_URL === 'PLACEHOLDER') {
     console.log('[SCHEDULER] Shorts check skipped — PC relay not configured');
     return;
@@ -73,7 +131,6 @@ cron.schedule('*/30 * * * *', async () => {
     const result = await executeTool('pc_list_files', { path: 'D:\\RawFootage\\Inbox' });
 
     if (!result.ok) {
-      // PC relay unreachable — skip gracefully, do NOT alert every 30 min
       console.log('[SCHEDULER] Shorts check skipped — PC relay unreachable:', result.error);
       return;
     }
@@ -84,7 +141,6 @@ cron.schedule('*/30 * * * *', async () => {
       return;
     }
 
-    // Filter for video files
     const videoExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
     const videoFiles = files.filter(f => {
       const name = (f.Name || '').toLowerCase();
@@ -102,7 +158,6 @@ cron.schedule('*/30 * * * *', async () => {
       console.log(`[SCHEDULER] Shorts check: ${files.length} files but no videos`);
     }
   } catch (err) {
-    // Graceful skip — don't spam errors if PC is offline
     console.log('[SCHEDULER] Shorts check error (skipping):', err.message);
   }
 });
@@ -153,13 +208,11 @@ cron.schedule('*/5 * * * *', async () => {
   const pending = tasks.getPending();
   if (!pending.length) return;
 
-  // Take highest priority task
   const task = pending[0];
 
-  // Exponential backoff: skip if not enough time has passed since last attempt
   if (task.retries > 0 && task.started_at) {
     const lastAttempt = new Date(task.started_at).getTime();
-    const backoffMinutes = Math.pow(5, task.retries); // 5, 25, 125 minutes
+    const backoffMinutes = Math.pow(5, task.retries);
     const waitUntil = lastAttempt + (backoffMinutes * 60 * 1000);
     if (Date.now() < waitUntil) {
       console.log(`[WORKER] Task #${task.id} backing off (retry ${task.retries}, wait ${backoffMinutes}m)`);
@@ -223,7 +276,6 @@ cron.schedule('0 * * * *', async () => {
       return;
     }
 
-    // Mark as stale (failed with stale reason)
     for (const task of staleTasks) {
       tasks.fail(task.id, 'Marked stale: pending > 24 hours without completion');
     }
@@ -240,6 +292,85 @@ cron.schedule('0 * * * *', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// PHASE 8 — APP FACTORY SCHEDULER (every 30 minutes, offset by 15 min)
+// Checks project_queue for next queued app, starts building if none active.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('15,45 * * * *', async () => {
+  console.log('[APP-FACTORY] Queue check running...');
+  try {
+    const active = projectQueue.getActive();
+    if (active) {
+      console.log(`[APP-FACTORY] Project "${active.app_name}" is active (phase ${active.phases_complete}/${active.phases_total}). Skipping.`);
+      return;
+    }
+
+    const next = projectQueue.getNext();
+    if (!next) {
+      console.log('[APP-FACTORY] No queued projects. Idle.');
+      return;
+    }
+
+    console.log(`[APP-FACTORY] Starting project: ${next.app_name} (type: ${next.app_type}, budget: $${next.budget_usd})`);
+
+    const monthTotal = budget.getMonthTotal();
+    if (monthTotal >= parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100')) {
+      console.log('[APP-FACTORY] Monthly budget exceeded. Cannot start new project.');
+      await bot.sendMessage(OWNER_ID, `⚠️ App Factory: Cannot start "${next.app_name}" — monthly budget exceeded ($${monthTotal.toFixed(2)})`);
+      return;
+    }
+
+    const pastLessons = lessons.getTop(5);
+    console.log(`[APP-FACTORY] Loaded ${pastLessons.length} past lessons for context.`);
+
+    projectQueue.start(next.app_name);
+
+    await bot.sendMessage(OWNER_ID,
+      `🏭 *App Factory Started*\nProject: ${next.app_name}\nType: ${next.app_type}\nBudget: $${next.budget_usd}\nBrief: ${next.brief.slice(0, 200)}`,
+      { parse_mode: 'Markdown' }
+    );
+
+    const templateResult = await executeTool('select_template', {
+      app_type: next.app_type,
+      app_name: next.app_name
+    });
+
+    if (!templateResult.ok) {
+      console.error(`[APP-FACTORY] Template selection failed for ${next.app_name}:`, templateResult.error);
+      projectQueue.block(next.app_name);
+      await bot.sendMessage(OWNER_ID, `❌ App Factory: Template copy failed for "${next.app_name}": ${templateResult.error}`);
+      return;
+    }
+
+    projectQueue.updateProgress(next.app_name, 1, 0);
+    console.log(`[APP-FACTORY] Template copied for ${next.app_name}. Phase 1/6 complete.`);
+
+    tasks.add({
+      title: `Build app: ${next.app_name}`,
+      description: `Continue building "${next.app_name}" (${next.app_type}).
+Brief: ${next.brief}
+Template has been copied to D:\\Projects\\${next.app_name}.
+Past lessons: ${pastLessons.map(l => l.what_worked).filter(Boolean).join('; ').slice(0, 500)}
+
+Steps remaining:
+1. npm install in project directory
+2. Implement the app according to the brief
+3. Run tests (vitest/jest based on type)
+4. Git commit and push
+5. Deploy (${next.app_type === 'react-web' ? 'Vercel' : next.app_type === 'electron-react' ? 'npm run dist' : next.app_type === 'node-api' ? 'DigitalOcean App' : 'eas build'})
+6. Mark complete
+
+Per-project budget: $${next.budget_usd}. Alert at $${(next.budget_usd * 0.8).toFixed(0)} (80%). Hard stop at $${next.budget_usd}.
+ALWAYS call write_lesson after completing.`,
+      type: 'pc_task',
+      priority: 2
+    });
+
+  } catch (err) {
+    console.error('[APP-FACTORY] Error:', err.message);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // ITEM 20 — STARTUP SELF-TEST
 // Verifies all scheduler components are working on startup.
 // ══════════════════════════════════════════════════════════════════════════
@@ -249,7 +380,13 @@ setTimeout(async () => {
     const pending = tasks.getPending();
     const budgetTotal = budget.getMonthTotal();
     const stale = getStaleTaskCount();
+    const queuedApps = projectQueue.getByStatus('queued');
+    const activeApp = projectQueue.getActive();
+    const pendingFeatures = featureRequests.getPending();
+    const nathanUnread = nathanInbox.getUnread();
     console.log(`[SCHEDULER] Self-test PASS — Pending: ${pending.length}, Budget: $${budgetTotal.toFixed(4)}, Stale: ${stale}`);
+    console.log(`[SCHEDULER] App Factory — Queued: ${queuedApps.length}, Active: ${activeApp ? activeApp.app_name : 'none'}`);
+    console.log(`[SCHEDULER] Phase 8B — Feature requests: ${pendingFeatures.length}, Nathan inbox: ${nathanUnread.length}`);
     console.log('[SCHEDULER] All cron jobs registered and active.');
   } catch (err) {
     console.error('[SCHEDULER] Self-test FAILED:', err.message);
@@ -257,8 +394,10 @@ setTimeout(async () => {
 }, 3000);
 
 console.log('[SCHEDULER] Running. Cron jobs active:');
-console.log('  • Morning brief: 4:00 AM CT daily');
+console.log('  • Morning brief prep: 3:45 AM CT daily');
+console.log('  • Morning brief send: 4:00 AM CT daily');
 console.log('  • Shorts check: every 30 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');
 console.log('  • Stale task cleanup: every hour');
+console.log('  • App Factory queue check: every 30 minutes (at :15 and :45)');

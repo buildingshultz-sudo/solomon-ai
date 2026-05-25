@@ -1,15 +1,12 @@
 'use strict';
 const Database = require('better-sqlite3');
 const path = require('path');
-
 const DB_PATH = path.join(__dirname, 'solomon.db');
 const db = new Database(DB_PATH);
-
 // WAL mode for better concurrent performance
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
-
-// ── SCHEMA — 7 tables ────────────────────────────────────────────────────
+// ── SCHEMA — 10 tables ───────────────────────────────────────────────────
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -17,7 +14,6 @@ db.exec(`
     content TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -32,7 +28,6 @@ db.exec(`
     started_at DATETIME,
     completed_at DATETIME
   );
-
   CREATE TABLE IF NOT EXISTS memory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     category TEXT NOT NULL,
@@ -41,7 +36,6 @@ db.exec(`
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(category, key)
   );
-
   CREATE TABLE IF NOT EXISTS budget (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id INTEGER,
@@ -51,7 +45,6 @@ db.exec(`
     model TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
   CREATE TABLE IF NOT EXISTS code_lessons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project TEXT NOT NULL,
@@ -65,7 +58,6 @@ db.exec(`
     applied_to_next INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
   CREATE TABLE IF NOT EXISTS project_state (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE NOT NULL,
@@ -78,7 +70,6 @@ db.exec(`
     tech_stack TEXT,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
   CREATE TABLE IF NOT EXISTS error_patterns (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     error_signature TEXT UNIQUE NOT NULL,
@@ -88,8 +79,41 @@ db.exec(`
     times_applied INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS project_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    app_name TEXT UNIQUE NOT NULL,
+    priority INTEGER DEFAULT 5,
+    status TEXT DEFAULT 'queued',
+    brief TEXT NOT NULL,
+    app_type TEXT,
+    budget_usd REAL DEFAULT 15.0,
+    spent_usd REAL DEFAULT 0.0,
+    phases_complete INTEGER DEFAULT 0,
+    phases_total INTEGER DEFAULT 6,
+    github_repo TEXT,
+    deploy_url TEXT,
+    started_at DATETIME,
+    completed_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS feature_requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    description TEXT NOT NULL,
+    priority TEXT DEFAULT 'medium',
+    status TEXT DEFAULT 'pending',
+    requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME,
+    notes TEXT
+  );
+  CREATE TABLE IF NOT EXISTS nathan_inbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    priority TEXT DEFAULT 'normal',
+    status TEXT DEFAULT 'unread',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
-
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {
   add(role, content) {
@@ -98,49 +122,49 @@ const messages = {
   getLast(n = 20) {
     return db.prepare('SELECT role, content FROM messages ORDER BY id DESC LIMIT ?').all(n).reverse();
   },
+  getCount() {
+    return db.prepare('SELECT COUNT(*) as count FROM messages').get().count;
+  },
   clear() {
     db.prepare('DELETE FROM messages').run();
   }
 };
-
 // ── TASKS ───────────────────────────────────────────────────────────────
 const tasks = {
-  add({ title, description, type = 'general', priority = 5 }) {
-    const r = db.prepare(
+  add({ title, description, type, priority }) {
+    const info = db.prepare(
       'INSERT INTO tasks (title, description, type, priority) VALUES (?, ?, ?, ?)'
-    ).run(title, description, type, priority);
-    return r.lastInsertRowid;
-  },
-  start(id) {
-    db.prepare("UPDATE tasks SET status='in_progress', started_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
-  },
-  complete(id, result) {
-    db.prepare("UPDATE tasks SET status='complete', result=?, completed_at=CURRENT_TIMESTAMP WHERE id=?").run(result, id);
-  },
-  fail(id, error) {
-    db.prepare("UPDATE tasks SET status='failed', error=? WHERE id=?").run(error, id);
-  },
-  incrementRetry(id) {
-    db.prepare("UPDATE tasks SET retries=retries+1, status='pending' WHERE id=?").run(id);
-    const row = db.prepare('SELECT retries FROM tasks WHERE id=?').get(id);
-    return row ? row.retries : 0;
-  },
-  getPending() {
-    // Max 3 retries enforced here
-    return db.prepare("SELECT * FROM tasks WHERE status='pending' AND retries < 3 ORDER BY priority ASC, id ASC").all();
+    ).run(title, description, type || 'general', priority || 5);
+    return info.lastInsertRowid;
   },
   getAll() {
     return db.prepare('SELECT * FROM tasks ORDER BY id DESC LIMIT 20').all();
+  },
+  getPending() {
+    return db.prepare("SELECT * FROM tasks WHERE status='pending' ORDER BY priority ASC, id ASC").all();
+  },
+  start(id) {
+    db.prepare("UPDATE tasks SET status='running', started_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
+  },
+  complete(id, result) {
+    db.prepare("UPDATE tasks SET status='done', result=?, completed_at=CURRENT_TIMESTAMP WHERE id=?").run(result, id);
+  },
+  fail(id, error) {
+    db.prepare("UPDATE tasks SET status='failed', error=?, completed_at=CURRENT_TIMESTAMP WHERE id=?").run(error, id);
+  },
+  incrementRetry(id) {
+    db.prepare("UPDATE tasks SET retries = retries + 1, started_at = CURRENT_TIMESTAMP WHERE id=?").run(id);
+    const task = db.prepare("SELECT retries FROM tasks WHERE id=?").get(id);
+    return task ? task.retries : 0;
   }
 };
-
-// ── MEMORY ───────────────────────────────────────────────────────────────
+// ── MEMORY (key-value) ──────────────────────────────────────────────────
 const mem = {
   set(category, key, value) {
-    db.prepare(`INSERT INTO memory (category, key, value, updated_at)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(category, key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`
-    ).run(category, key, String(value));
+    db.prepare(
+      `INSERT INTO memory (category, key, value) VALUES (?, ?, ?)
+       ON CONFLICT(category, key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP`
+    ).run(category, key, value);
   },
   get(category, key) {
     const row = db.prepare('SELECT value FROM memory WHERE category=? AND key=?').get(category, key);
@@ -151,9 +175,11 @@ const mem = {
   },
   getAll() {
     return db.prepare('SELECT category, key, value FROM memory ORDER BY category, key').all();
+  },
+  delete(category, key) {
+    db.prepare('DELETE FROM memory WHERE category=? AND key=?').run(category, key);
   }
 };
-
 // ── BUDGET ──────────────────────────────────────────────────────────────
 const budget = {
   log({ taskId, inputTokens, outputTokens, model }) {
@@ -169,7 +195,6 @@ const budget = {
     return row ? (row.total || 0) : 0;
   }
 };
-
 // ── CODE LESSONS (Phase 7) ──────────────────────────────────────────────
 const lessons = {
   add({ project, phase, sessionType, whatWorked, whatFailed, errorPatterns, codeSnippets, timeTaken }) {
@@ -188,7 +213,6 @@ const lessons = {
     db.prepare('UPDATE code_lessons SET applied_to_next = 1 WHERE id = ?').run(id);
   }
 };
-
 // ── PROJECT STATE (Phase 7) ─────────────────────────────────────────────
 const projects = {
   upsert({ name, repoUrl, localPath, phase, status, specSummary, lastCommit, techStack }) {
@@ -222,7 +246,6 @@ const projects = {
     return db.prepare('SELECT * FROM project_state ORDER BY updated_at DESC').all();
   }
 };
-
 // ── ERROR PATTERNS (Phase 7) ────────────────────────────────────────────
 const errorDB = {
   record(signature, context, solution) {
@@ -240,9 +263,91 @@ const errorDB = {
   },
   markApplied(id) {
     db.prepare('UPDATE error_patterns SET times_applied = times_applied + 1 WHERE id = ?').run(id);
+  },
+  getRecent(hours = 24) {
+    return db.prepare(`SELECT * FROM error_patterns WHERE created_at >= datetime('now', '-' || ? || ' hours') ORDER BY id DESC`).all(hours);
   }
 };
-
+// ── PROJECT QUEUE (Phase 8) ─────────────────────────────────────────────
+const projectQueue = {
+  add({ appName, priority, brief, appType, budgetUsd }) {
+    db.prepare(`INSERT INTO project_queue (app_name, priority, brief, app_type, budget_usd)
+      VALUES (?, ?, ?, ?, ?)`)
+      .run(appName, priority || 5, brief, appType || 'react-web', budgetUsd || 15.0);
+    return db.prepare('SELECT * FROM project_queue WHERE app_name = ?').get(appName);
+  },
+  getAll() {
+    return db.prepare('SELECT * FROM project_queue ORDER BY priority ASC, created_at ASC').all();
+  },
+  getByStatus(status) {
+    return db.prepare('SELECT * FROM project_queue WHERE status = ? ORDER BY priority ASC').all(status);
+  },
+  getNext() {
+    return db.prepare("SELECT * FROM project_queue WHERE status = 'queued' ORDER BY priority ASC LIMIT 1").get();
+  },
+  getActive() {
+    return db.prepare("SELECT * FROM project_queue WHERE status = 'active' LIMIT 1").get();
+  },
+  start(appName) {
+    db.prepare("UPDATE project_queue SET status = 'active', started_at = CURRENT_TIMESTAMP WHERE app_name = ?").run(appName);
+    return db.prepare('SELECT * FROM project_queue WHERE app_name = ?').get(appName);
+  },
+  complete(appName, deployUrl, githubRepo) {
+    db.prepare(`UPDATE project_queue SET status = 'complete', completed_at = CURRENT_TIMESTAMP,
+      deploy_url = COALESCE(?, deploy_url), github_repo = COALESCE(?, github_repo)
+      WHERE app_name = ?`).run(deployUrl || null, githubRepo || null, appName);
+    return db.prepare('SELECT * FROM project_queue WHERE app_name = ?').get(appName);
+  },
+  updateProgress(appName, phasesComplete, spentUsd) {
+    db.prepare(`UPDATE project_queue SET phases_complete = ?, spent_usd = ? WHERE app_name = ?`)
+      .run(phasesComplete, spentUsd, appName);
+  },
+  block(appName) {
+    db.prepare("UPDATE project_queue SET status = 'blocked' WHERE app_name = ?").run(appName);
+  },
+  getCompletedSince(datetime) {
+    return db.prepare("SELECT * FROM project_queue WHERE status = 'complete' AND completed_at >= ?").all(datetime);
+  }
+};
+// ── FEATURE REQUESTS (Phase 8B) ─────────────────────────────────────────
+const featureRequests = {
+  add(description, priority) {
+    const info = db.prepare('INSERT INTO feature_requests (description, priority) VALUES (?, ?)')
+      .run(description, priority || 'medium');
+    return { id: info.lastInsertRowid, description, priority: priority || 'medium', status: 'pending' };
+  },
+  getPending() {
+    return db.prepare("SELECT * FROM feature_requests WHERE status = 'pending' ORDER BY CASE priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 END, id ASC").all();
+  },
+  getAll() {
+    return db.prepare('SELECT * FROM feature_requests ORDER BY id DESC').all();
+  },
+  resolve(id, status, notes) {
+    db.prepare("UPDATE feature_requests SET status = ?, notes = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(status || 'done', notes || null, id);
+    return db.prepare('SELECT * FROM feature_requests WHERE id = ?').get(id);
+  }
+};
+// ── NATHAN INBOX (Phase 8B) ─────────────────────────────────────────────
+const nathanInbox = {
+  send(subject, body, priority) {
+    const info = db.prepare('INSERT INTO nathan_inbox (subject, body, priority) VALUES (?, ?, ?)')
+      .run(subject, body, priority || 'normal');
+    return { id: info.lastInsertRowid, subject, priority: priority || 'normal' };
+  },
+  getUnread() {
+    return db.prepare("SELECT * FROM nathan_inbox WHERE status = 'unread' ORDER BY CASE priority WHEN 'urgent' THEN 1 ELSE 2 END, id DESC").all();
+  },
+  getAll() {
+    return db.prepare('SELECT * FROM nathan_inbox ORDER BY id DESC LIMIT 50').all();
+  },
+  markRead(id) {
+    db.prepare("UPDATE nathan_inbox SET status = 'read' WHERE id = ?").run(id);
+  },
+  markActioned(id) {
+    db.prepare("UPDATE nathan_inbox SET status = 'actioned' WHERE id = ?").run(id);
+  }
+};
 // ── TEST / RESET ─────────────────────────────────────────────────────────
 function testDB() {
   mem.set('identity', 'name', 'Solomon');
@@ -254,10 +359,8 @@ function testDB() {
   if (val !== 'Solomon') throw new Error('DB TEST FAILED');
   console.log('[DB TEST] PASS');
 }
-
 function resetDB() {
   db.exec('DELETE FROM messages; DELETE FROM tasks; DELETE FROM budget;');
   console.log('[DB] Reset complete. Memory preserved.');
 }
-
-module.exports = { messages, tasks, mem, budget, lessons, projects, errorDB, testDB, resetDB, db };
+module.exports = { messages, tasks, mem, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, testDB, resetDB, db };

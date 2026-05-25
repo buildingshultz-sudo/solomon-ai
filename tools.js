@@ -2,9 +2,10 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, tasks, lessons, projects, errorDB } = require('./memory');
+const { mem, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox } = require('./memory');
 const axios = require('axios');
 const path = require('path');
+const fs = require('fs');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 
 // ── PATH SAFETY (Phase 7) ─────────────────────────────────────────────────
@@ -419,6 +420,214 @@ const TOOL_DEFINITIONS = [
       },
       required: ['name']
     }
+  },
+  // ══════════════════════════════════════════════════════════════════════════
+  // PHASE 8 — APP FACTORY TOOLS
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    name: 'add_to_queue',
+    description: 'Add an app to the project_queue for the App Factory to build. Solomon picks these up automatically every 30 minutes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        app_name: { type: 'string', description: 'Unique name for the app (e.g. "budget-tracker")' },
+        brief: { type: 'string', description: 'One-paragraph description of what the app does' },
+        app_type: { type: 'string', enum: ['electron-react', 'node-api', 'react-web', 'mobile'], description: 'App type determines template and deploy method' },
+        priority: { type: 'integer', description: '1=build first, 5=normal, 10=low priority' },
+        budget_usd: { type: 'number', description: 'Max budget for this app in USD. Default $15.' }
+      },
+      required: ['app_name', 'brief', 'app_type']
+    }
+  },
+  {
+    name: 'get_queue',
+    description: 'List all apps in the project queue. Filter by status or get all.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['queued', 'active', 'complete', 'blocked', 'all'], description: 'Filter by status. Default: all.' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'start_project',
+    description: 'Mark an app as active and scaffold it from the template. Called by the scheduler when picking up the next queued app.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        app_name: { type: 'string', description: 'App name from the queue' },
+        brief: { type: 'string', description: 'App brief/description for context' }
+      },
+      required: ['app_name']
+    }
+  },
+  {
+    name: 'complete_project',
+    description: 'Mark an app as complete in the queue. Record deploy URL and GitHub repo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        app_name: { type: 'string', description: 'App name to mark complete' },
+        deploy_url: { type: 'string', description: 'Where the app is deployed' },
+        github_repo: { type: 'string', description: 'GitHub repository URL' }
+      },
+      required: ['app_name']
+    }
+  },
+  {
+    name: 'select_template',
+    description: 'Copy a template folder to a new project directory. Templates: electron-react, node-api, react-web, mobile.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        app_type: { type: 'string', enum: ['electron-react', 'node-api', 'react-web', 'mobile'], description: 'Template type to use' },
+        app_name: { type: 'string', description: 'Name for the new project folder' }
+      },
+      required: ['app_type', 'app_name']
+    }
+  },
+  {
+    name: 'run_tests',
+    description: 'Run the test suite for a project. Max 3 attempts — if tests fail 3 times, stops and alerts Jed.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project folder name under D:\\Projects\\' },
+        test_command: { type: 'string', description: 'Test command to run. Auto-detected if omitted (vitest/jest/pytest).' }
+      },
+      required: ['project']
+    }
+  },
+  {
+    name: 'send_telegram_file',
+    description: 'Send a file (PDF, image, document) to Jed via Telegram Bot API sendDocument.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Absolute path to the file on VPS (e.g. /root/solomon-v4/output/report.pdf)' },
+        caption: { type: 'string', description: 'Optional caption for the file' }
+      },
+      required: ['file_path']
+    }
+  },
+  {
+    name: 'receive_telegram_file',
+    description: 'Download a file that was sent to the bot via Telegram and save it to Jed\'s PC.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_id: { type: 'string', description: 'Telegram file_id from the incoming message' },
+        save_path: { type: 'string', description: 'Windows path on Jed\'s PC to save the file' }
+      },
+      required: ['file_id', 'save_path']
+    }
+  },
+  // ── PHASE 8B TOOLS ──────────────────────────────────────────────────────
+  {
+    name: 'log_feature_request',
+    description: 'Log something Solomon needs but cannot currently do. Creates a feature request for Nathan/Manus to review.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        description: { type: 'string', description: 'What capability or fix is needed' },
+        priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], description: 'How urgent is this request' }
+      },
+      required: ['description']
+    }
+  },
+  {
+    name: 'get_feature_requests',
+    description: 'Retrieve all pending feature requests. Used by Nathan/Manus to see what Solomon needs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', enum: ['pending', 'in_progress', 'done', 'rejected', 'all'], description: 'Filter by status. Defaults to pending.' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'resolve_feature_request',
+    description: 'Mark a feature request as done or rejected with notes.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Feature request ID to resolve' },
+        status: { type: 'string', enum: ['done', 'rejected', 'in_progress'], description: 'New status' },
+        notes: { type: 'string', description: 'Resolution notes explaining what was done or why rejected' }
+      },
+      required: ['id', 'status']
+    }
+  },
+  {
+    name: 'message_nathan',
+    description: 'Send a message to Nathan (Manus AI) inbox. Use when encountering bugs, missing capabilities, architecture questions, or anything needing Nathan attention.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        subject: { type: 'string', description: 'Brief subject line' },
+        body: { type: 'string', description: 'Detailed message body' },
+        priority: { type: 'string', enum: ['normal', 'urgent'], description: 'Message priority. Use urgent sparingly.' }
+      },
+      required: ['subject', 'body']
+    }
+  },
+  {
+    name: 'get_nathan_inbox',
+    description: 'Retrieve unread messages from Solomon to Nathan. Used by Nathan/Manus to check what Solomon needs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        include_read: { type: 'boolean', description: 'If true, include already-read messages too' }
+      },
+      required: []
+    }
+  },
+  {
+    name: 'mark_nathan_read',
+    description: 'Mark a Nathan inbox message as read or actioned.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'number', description: 'Message ID to mark' },
+        status: { type: 'string', enum: ['read', 'actioned'], description: 'New status' }
+      },
+      required: ['id']
+    }
+  },
+  {
+    name: 'prepare_morning_brief',
+    description: 'Compile a structured morning brief with project status, feature requests, Nathan inbox, errors, and metrics. Called by scheduler at 3:45 AM.',
+    input_schema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'generate_pdf',
+    description: 'Convert a markdown file on the VPS to PDF using pandoc. Returns the output path.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        source_path: { type: 'string', description: 'Path to .md file on VPS to convert' },
+        output_path: { type: 'string', description: 'Output PDF path. Defaults to same name with .pdf extension.' }
+      },
+      required: ['source_path']
+    }
+  },
+  {
+    name: 'markdown_to_pdf',
+    description: 'Convert raw markdown text to a PDF file. Writes to /tmp, converts, returns the PDF path.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        markdown: { type: 'string', description: 'Raw markdown content to convert' },
+        filename: { type: 'string', description: 'Base filename (without extension) for the output' }
+      },
+      required: ['markdown', 'filename']
+    }
   }
 ];
 
@@ -560,10 +769,136 @@ async function executeWorkshopTool(name, input) {
       });
       return { ok: true, message: `Project ${input.name} updated to phase: ${input.phase || '(unchanged)'}` };
     }
+    // ══════════════════════════════════════════════════════════════════════════
+    // PHASE 8 — APP FACTORY TOOL EXECUTORS
+    // ══════════════════════════════════════════════════════════════════════════
+    case 'add_to_queue': {
+      const app = projectQueue.add({
+        appName: input.app_name,
+        priority: input.priority || 5,
+        brief: input.brief,
+        appType: input.app_type,
+        budgetUsd: input.budget_usd || 15.0
+      });
+      return { ok: true, message: `Added "${input.app_name}" to queue (priority ${input.priority || 5})`, app };
+    }
+    case 'get_queue': {
+      const status = input.status || 'all';
+      const items = status === 'all' ? projectQueue.getAll() : projectQueue.getByStatus(status);
+      return { ok: true, count: items.length, queue: items };
+    }
+    case 'start_project': {
+      // Mark as active in queue
+      const app = projectQueue.start(input.app_name);
+      if (!app) return { ok: false, error: `App "${input.app_name}" not found in queue.` };
+      // Also update project_state
+      projects.upsert({
+        name: input.app_name,
+        localPath: `D:\\Projects\\${input.app_name}`,
+        phase: 'scaffold',
+        status: 'active',
+        specSummary: input.brief || app.brief,
+        techStack: app.app_type
+      });
+      return { ok: true, message: `Project "${input.app_name}" started. Type: ${app.app_type}. Budget: $${app.budget_usd}`, app };
+    }
+    case 'complete_project': {
+      const app = projectQueue.complete(input.app_name, input.deploy_url, input.github_repo);
+      if (!app) return { ok: false, error: `App "${input.app_name}" not found in queue.` };
+      projects.upsert({ name: input.app_name, phase: 'live', status: 'complete' });
+      return { ok: true, message: `Project "${input.app_name}" marked complete!`, app };
+    }
+    case 'select_template': {
+      // Copy template from D:\Projects\__templates\{type} to D:\Projects\{app_name}
+      const templatePath = `D:\\Projects\\__templates\\${input.app_type}`;
+      const destPath = `D:\\Projects\\${input.app_name}`;
+      const cmd = `Copy-Item -Path '${templatePath}\\*' -Destination '${destPath}' -Recurse -Force; if (Test-Path '${destPath}\\package.json') { Write-Output 'OK' } else { Write-Error 'Template copy failed' }`;
+      const res = await executeTool('pc_execute', { command: cmd, timeout_ms: 30000 });
+      if (res.stdout && res.stdout.includes('OK')) {
+        return { ok: true, message: `Template "${input.app_type}" copied to ${destPath}`, path: destPath };
+      }
+      return { ok: false, error: `Template copy failed: ${res.stderr || 'unknown error'}`, path: destPath };
+    }
+    case 'run_tests': {
+      const projectPath = `D:\\Projects\\${input.project}`;
+      workshopSafe(projectPath);
+      // Detect test command if not provided
+      let testCmd = input.test_command;
+      if (!testCmd) {
+        // Read package.json to detect test framework
+        try {
+          const pkgRes = await executeTool('file_read', { path: `${projectPath}\\package.json` });
+          const pkg = JSON.parse(pkgRes.content);
+          if (pkg.devDependencies && pkg.devDependencies.vitest) testCmd = 'npx vitest run';
+          else if (pkg.devDependencies && pkg.devDependencies.jest) testCmd = 'npx jest';
+          else if (pkg.scripts && pkg.scripts.test) testCmd = 'npm test';
+          else testCmd = 'npm test';
+        } catch (_) {
+          testCmd = 'npm test';
+        }
+      }
+      // Run tests with max 3 attempts
+      let lastResult = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const res = await executeTool('project_run', { project: input.project, command: testCmd, timeout_ms: 120000 });
+        lastResult = res;
+        if (res.ok) {
+          return { ok: true, message: `Tests PASSED on attempt ${attempt}`, attempt, stdout: res.stdout };
+        }
+        if (attempt < 3) {
+          console.log(`[RUN_TESTS] Attempt ${attempt} failed for ${input.project}. Retrying...`);
+        }
+      }
+      // 3 failures — alert Jed
+      return {
+        ok: false,
+        error: `Tests FAILED after 3 attempts for "${input.project}". Alerting Jed.`,
+        attempts: 3,
+        last_output: (lastResult.stderr || lastResult.stdout || '').slice(-1000)
+      };
+    }
+    case 'send_telegram_file': {
+      const filePath = input.file_path;
+      if (!fs.existsSync(filePath)) {
+        return { ok: false, error: `File not found: ${filePath}` };
+      }
+      const FormData = require('form-data');
+      const formData = new FormData();
+      formData.append('chat_id', OWNER_ID);
+      formData.append('document', fs.createReadStream(filePath));
+      if (input.caption) formData.append('caption', input.caption);
+      const resp = await axios.post(
+        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendDocument`,
+        formData,
+        { headers: formData.getHeaders(), timeout: 60000 }
+      );
+      return { ok: resp.data.ok, message_id: resp.data.result && resp.data.result.message_id, file: filePath };
+    }
+    case 'receive_telegram_file': {
+      // Get file path from Telegram
+      const fileResp = await axios.get(
+        `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${input.file_id}`,
+        { timeout: 10000 }
+      );
+      if (!fileResp.data.ok) return { ok: false, error: 'Could not get file info from Telegram.' };
+      const filePath = fileResp.data.result.file_path;
+      const fileUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`;
+      // Download file content
+      const downloadResp = await axios.get(fileUrl, { responseType: 'arraybuffer', timeout: 60000 });
+      const fileBase64 = Buffer.from(downloadResp.data).toString('base64');
+      // Save to PC via relay
+      workshopSafe(input.save_path);
+      const saveCmd = `[IO.File]::WriteAllBytes('${input.save_path}', [Convert]::FromBase64String('${fileBase64}'))`;
+      const saveRes = await executeTool('pc_execute', { command: saveCmd, timeout_ms: 30000 });
+      return { ok: true, saved_to: input.save_path, size_bytes: downloadResp.data.length };
+    }
     default:
       return null; // Not a workshop tool — fall through to existing handlers
   }
 }
+
+// ── OWNER_ID for Phase 8 tools ──────────────────────────────────────────
+const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID);
 
 // ── TOOL EXECUTORS ───────────────────────────────────────────────────────
 async function executeTool(name, input) {
@@ -771,7 +1106,6 @@ async function executeTool(name, input) {
         }
 
         // Read the audio file from PC and send to Whisper API
-        // Use PC relay to base64 encode and return the audio
         const readCmd = `[Convert]::ToBase64String([IO.File]::ReadAllBytes('${audioPath}'))`;
         const readRes = await axios.post(`${process.env.PC_RELAY_URL}/execute`, {
           command: readCmd, timeout: 60000
@@ -963,14 +1297,13 @@ Output format (JSON):
             grant_type: 'refresh_token'
           });
           const accessToken = tokenResp.data.access_token;
-          // For now, return success with instructions (actual upload needs file transfer from PC)
           return {
             ok: true,
             message: `YouTube OAuth active. Access token obtained. To upload: transfer file from PC to VPS first, then upload via YouTube API.`,
             file_path: input.file_path,
             title: input.title,
             privacy: input.privacy || 'private',
-            note: 'Full upload pipeline: PC relay transfers file → VPS uploads to YouTube'
+            note: 'Full upload pipeline: PC relay transfers file -> VPS uploads to YouTube'
           };
         } catch (ytErr) {
           return { ok: false, error: `YouTube token refresh failed: ${ytErr.response?.data?.error_description || ytErr.message}` };
@@ -1082,12 +1415,127 @@ Output format (JSON):
             }
           );
           const outputPath = path.join('/root/solomon-v4/output', input.output_name || 'output.mp3');
-          const fs = require('fs');
           fs.mkdirSync(path.dirname(outputPath), { recursive: true });
           fs.writeFileSync(outputPath, ttsResp.data);
           return { ok: true, file: outputPath, size_bytes: ttsResp.data.length, text_length: input.text.length };
         } catch (voiceErr) {
           return { ok: false, error: `ElevenLabs error: ${voiceErr.response?.status} ${voiceErr.message}` };
+        }
+      }
+
+      // ── PHASE 8B TOOL EXECUTORS ─────────────────────────────────────────────
+      case 'log_feature_request': {
+        const result = featureRequests.add(input.description, input.priority || 'medium');
+        return { ok: true, ...result, message: `Feature request #${result.id} logged: ${input.description.slice(0, 80)}` };
+      }
+
+      case 'get_feature_requests': {
+        const status = input.status || 'pending';
+        const items = status === 'all' ? featureRequests.getAll() : featureRequests.getPending();
+        return { ok: true, count: items.length, requests: items };
+      }
+
+      case 'resolve_feature_request': {
+        const resolved = featureRequests.resolve(input.id, input.status, input.notes || null);
+        if (!resolved) return { ok: false, error: `Feature request #${input.id} not found` };
+        return { ok: true, ...resolved, message: `Feature request #${input.id} marked as ${input.status}` };
+      }
+
+      case 'message_nathan': {
+        const msg = nathanInbox.send(input.subject, input.body, input.priority || 'normal');
+        return { ok: true, ...msg, message: `Message sent to Nathan: ${input.subject}` };
+      }
+
+      case 'get_nathan_inbox': {
+        const msgs = input.include_read ? nathanInbox.getAll() : nathanInbox.getUnread();
+        return { ok: true, count: msgs.length, messages: msgs };
+      }
+
+      case 'mark_nathan_read': {
+        const newStatus = input.status || 'read';
+        if (newStatus === 'actioned') {
+          nathanInbox.markActioned(input.id);
+        } else {
+          nathanInbox.markRead(input.id);
+        }
+        return { ok: true, id: input.id, status: newStatus };
+      }
+
+      case 'prepare_morning_brief': {
+        const { projectQueue: pq, budget: bgt, db: database } = require('./memory');
+        // Gather all data
+        const activeProject = pq.getActive();
+        const queuedProjects = pq.getByStatus('queued');
+        const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const completedRecent = pq.getCompletedSince(yesterday);
+        const pendingFeatures = featureRequests.getPending();
+        const nathanMsgs = nathanInbox.getUnread();
+        const budgetTotal = bgt.getMonthTotal();
+        const recentErrors = database.prepare(
+          "SELECT * FROM error_patterns WHERE created_at >= datetime('now', '-24 hours') ORDER BY id DESC LIMIT 5"
+        ).all();
+        const pendingTasks = tasks.getPending();
+
+        const brief = {
+          timestamp: new Date().toISOString(),
+          project_status: {
+            active: activeProject ? { name: activeProject.app_name, progress: `${activeProject.phases_complete}/${activeProject.phases_total}`, spent: activeProject.spent_usd } : null,
+            queued_count: queuedProjects.length,
+            completed_last_24h: completedRecent.length,
+            completed_names: completedRecent.map(p => p.app_name)
+          },
+          feature_requests: {
+            pending_count: pendingFeatures.length,
+            items: pendingFeatures.slice(0, 5).map(f => ({ id: f.id, desc: f.description.slice(0, 100), priority: f.priority }))
+          },
+          nathan_inbox: {
+            unread_count: nathanMsgs.length,
+            items: nathanMsgs.slice(0, 5).map(m => ({ id: m.id, subject: m.subject, priority: m.priority }))
+          },
+          budget: {
+            month_total: budgetTotal.toFixed(2),
+            hard_stop: process.env.MONTHLY_BUDGET_HARD_STOP || '100'
+          },
+          errors_24h: recentErrors.map(e => ({ signature: e.error_signature, times: e.times_encountered })),
+          pending_tasks: pendingTasks.length
+        };
+
+        // Store the compiled brief in memory for the 4 AM send
+        const { mem: memStore } = require('./memory');
+        memStore.set('system', 'morning_brief_compiled', JSON.stringify(brief));
+        return { ok: true, brief };
+      }
+
+      case 'generate_pdf': {
+        const { execSync } = require('child_process');
+        const sourcePath = input.source_path;
+        if (!fs.existsSync(sourcePath)) {
+          return { ok: false, error: `Source file not found: ${sourcePath}` };
+        }
+        const outputPath = input.output_path || sourcePath.replace(/\.md$/, '.pdf');
+        try {
+          execSync(`pandoc "${sourcePath}" -o "${outputPath}" --pdf-engine=wkhtmltopdf`, { timeout: 30000 });
+          const stats = fs.statSync(outputPath);
+          return { ok: true, output_path: outputPath, size_bytes: stats.size };
+        } catch (pdfErr) {
+          return { ok: false, error: `PDF generation failed: ${pdfErr.message.slice(0, 200)}` };
+        }
+      }
+
+      case 'markdown_to_pdf': {
+        const { execSync } = require('child_process');
+        const safeName = (input.filename || 'output').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const mdPath = `/tmp/${safeName}.md`;
+        const pdfPath = `/tmp/${safeName}.pdf`;
+        try {
+          fs.writeFileSync(mdPath, input.markdown);
+          execSync(`pandoc "${mdPath}" -o "${pdfPath}" --pdf-engine=wkhtmltopdf`, { timeout: 30000 });
+          // Clean up temp md file
+          fs.unlinkSync(mdPath);
+          const stats = fs.statSync(pdfPath);
+          return { ok: true, output_path: pdfPath, size_bytes: stats.size, filename: `${safeName}.pdf` };
+        } catch (pdfErr) {
+          return { ok: false, error: `PDF generation failed: ${pdfErr.message.slice(0, 200)}` };
         }
       }
 
