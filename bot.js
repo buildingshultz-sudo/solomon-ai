@@ -433,6 +433,11 @@ async function askSolomon(userMessage) {
       name: "web_search",
       max_uses: 5
     },
+    // Anthropic native memory tool (client-side)
+    {
+      type: "memory_20250818",
+      name: "memory"
+    },
     // Custom tools with cache_control on the last one
     ...TOOL_DEFINITIONS.map((tool, index) => {
       if (index === TOOL_DEFINITIONS.length - 1) {
@@ -499,14 +504,23 @@ async function askSolomon(userMessage) {
       const _toolStart = Date.now();
       activityLogger.setStatus('WORKING', `Tool: ${tu.name}`);
       activityLogger.logActivity('tool_call', { toolName: tu.name, status: 'started', summary: `Calling ${tu.name}` });
-      const result = await executeTool(tu.name, tu.input);
+      
+      let result;
+      if (tu.name === 'memory') {
+        // Map native memory tool call to our memory_manage executor
+        result = await executeTool('memory_manage', tu.input);
+      } else {
+        result = await executeTool(tu.name, tu.input);
+      }
+      
       const _toolDur = Date.now() - _toolStart;
       activityLogger.logActivity('tool_call', { toolName: tu.name, status: 'ok', summary: `${tu.name} completed`, durationMs: _toolDur });
-      log('INFO', 'TOOL', `${tu.name} result`, { result: JSON.stringify(result).slice(0,200) });
+      log('INFO', 'TOOL', `${tu.name} result`, { result: typeof result === 'string' ? result.slice(0, 200) : JSON.stringify(result).slice(0,200) });
+      
       toolResults.push({
         type: 'tool_result',
         tool_use_id: tu.id,
-        content: JSON.stringify(result)
+        content: typeof result === 'string' ? result : JSON.stringify(result)
       });
     }
 

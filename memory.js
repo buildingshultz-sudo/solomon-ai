@@ -136,6 +136,11 @@ db.exec(`
     size_bytes INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS native_memories (
+    path TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {
@@ -407,4 +412,49 @@ function resetDB() {
   db.exec('DELETE FROM messages; DELETE FROM tasks; DELETE FROM budget;');
   console.log('[DB] Reset complete. Memory preserved.');
 }
-module.exports = { messages, tasks, mem, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };
+// ── NATIVE MEMORY (filesystem-style for Anthropic Memory Tool) ───────────
+const nativeMem = {
+  create(path, content) {
+    try {
+      db.prepare('INSERT INTO native_memories (path, content) VALUES (?, ?)').run(path, content);
+      return { ok: true };
+    } catch (err) {
+      if (err.message.includes('UNIQUE')) return { ok: false, error: `File ${path} already exists` };
+      throw err;
+    }
+  },
+  get(path) {
+    return db.prepare('SELECT content FROM native_memories WHERE path = ?').get(path);
+  },
+  update(path, content) {
+    const info = db.prepare('UPDATE native_memories SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?').run(content, path);
+    return info.changes > 0;
+  },
+  delete(path) {
+    // Delete file or directory (recursive)
+    const info = db.prepare('DELETE FROM native_memories WHERE path = ? OR path LIKE ?').run(path, path + '/%');
+    return info.changes > 0;
+  },
+  rename(oldPath, newPath) {
+    // Check if newPath exists
+    const existing = db.prepare('SELECT path FROM native_memories WHERE path = ?').get(newPath);
+    if (existing) return { ok: false, error: `The destination ${newPath} already exists` };
+
+    db.transaction(() => {
+      // Rename the file/dir itself
+      db.prepare('UPDATE native_memories SET path = ? WHERE path = ?').run(newPath, oldPath);
+      // Rename all children if it's a directory
+      const children = db.prepare('SELECT path FROM native_memories WHERE path LIKE ?').all(oldPath + '/%');
+      for (const child of children) {
+        const updatedPath = child.path.replace(oldPath, newPath);
+        db.prepare('UPDATE native_memories SET path = ? WHERE path = ?').run(updatedPath, child.path);
+      }
+    })();
+    return { ok: true };
+  },
+  list(basePath) {
+    return db.prepare('SELECT path, length(content) as size FROM native_memories WHERE path LIKE ?').all(basePath + '%');
+  }
+};
+
+module.exports = { messages, tasks, mem, nativeMem, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };

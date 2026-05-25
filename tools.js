@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles } = require('./memory');
+const { mem, nativeMem, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -1079,6 +1079,115 @@ async function executeTool(name, input) {
         const data = input.category === 'all' ? mem.getAll() : mem.getCategory(input.category);
         if (!data.length) return { ok: true, data: [], message: 'No memories in this category yet.' };
         return { ok: true, data };
+      }
+
+      case 'memory_manage': {
+        // Implementation for Anthropic's native memory tool interface backed by SQLite
+        const { command, path, view_range, file_text, old_str, new_str, insert_line, insert_text, old_path, new_path } = input;
+        
+        // Ensure path starts with /memories
+        const ensurePath = (p) => {
+          if (!p) return p;
+          if (p === '/memories') return p;
+          if (p.startsWith('/memories/')) return p;
+          return `/memories/${p.replace(/^\/+/, '')}`;
+        };
+
+        switch (command) {
+          case 'view': {
+            const p = ensurePath(path || '/memories');
+            if (p === '/memories') {
+              // List directory
+              const items = nativeMem.list('/memories');
+              let output = `Here're the files and directories up to 2 levels deep in ${p}, excluding hidden items and node_modules:\n`;
+              output += `4.0K\t${p}\n`;
+              items.forEach(item => {
+                if (item.path === '/memories') return;
+                const sizeStr = item.size > 1024 ? `${(item.size/1024).toFixed(1)}K` : `${item.size}B`;
+                output += `${sizeStr}\t${item.path}\n`;
+              });
+              return output;
+            } else {
+              // View file
+              const file = nativeMem.get(p);
+              if (!file) return `The path ${p} does not exist. Please provide a valid path.`;
+              const lines = file.content.split('\n');
+              let start = 0, end = lines.length;
+              if (view_range) {
+                start = Math.max(0, view_range[0] - 1);
+                end = Math.min(lines.length, view_range[1]);
+              }
+              let output = `Here's the content of ${p} with line numbers:\n`;
+              for (let i = start; i < end; i++) {
+                output += `${String(i + 1).padStart(6, ' ')}\t${lines[i]}\n`;
+              }
+              return output;
+            }
+          }
+
+          case 'create': {
+            const p = ensurePath(path);
+            const res = nativeMem.create(p, file_text);
+            if (!res.ok) return res.error;
+            return `File created successfully at: ${p}`;
+          }
+
+          case 'str_replace': {
+            const p = ensurePath(path);
+            const file = nativeMem.get(p);
+            if (!file) return `Error: The path ${p} does not exist. Please provide a valid path.`;
+            const content = file.content;
+            const lines = content.split('\n');
+            const matches = [];
+            lines.forEach((l, i) => { if (l.includes(old_str)) matches.push(i + 1); });
+            
+            if (matches.length === 0) return `No replacement was performed, old_str \`${old_str}\` did not appear verbatim in ${p}.`;
+            if (matches.length > 1) return `No replacement was performed. Multiple occurrences of old_str \`${old_str}\` in lines: ${matches.join(', ')}. Please ensure it is unique`;
+            
+            const newContent = content.replace(old_str, new_str);
+            nativeMem.update(p, newContent);
+            
+            const newLines = newContent.split('\n');
+            const idx = matches[0] - 1;
+            const s = Math.max(0, idx - 2);
+            const e = Math.min(newLines.length, idx + 3);
+            let snippet = '';
+            for (let i = s; i < e; i++) snippet += `${String(i + 1).padStart(6, ' ')}\t${newLines[i]}\n`;
+            return `The memory file has been edited. Here is the snippet showing the change (with line numbers):\n${snippet}`;
+          }
+
+          case 'insert': {
+            const p = ensurePath(path);
+            const file = nativeMem.get(p);
+            if (!file) return `Error: The path ${p} does not exist`;
+            const lines = file.content.split('\n');
+            if (insert_line < 0 || insert_line > lines.length) {
+              return `Error: Invalid \`insert_line\` parameter: ${insert_line}. It should be within the range of lines of the file: [0, ${lines.length}]`;
+            }
+            lines.splice(insert_line, 0, insert_text.replace(/\n$/, ''));
+            nativeMem.update(p, lines.join('\n'));
+            return `The file ${p} has been edited.`;
+          }
+
+          case 'delete': {
+            const p = ensurePath(path);
+            if (p === '/memories') return 'Cannot delete the /memories directory itself';
+            const deleted = nativeMem.delete(p);
+            if (!deleted) return `Error: The path ${p} does not exist`;
+            return `Successfully deleted ${p}`;
+          }
+
+          case 'rename': {
+            const oldP = ensurePath(old_path);
+            const newP = ensurePath(new_path);
+            const res = nativeMem.rename(oldP, newP);
+            if (!res.ok) return res.error;
+            return `Successfully renamed ${oldP} to ${newP}`;
+          }
+
+          default:
+            return `Unknown memory command: ${command}`;
+        }
       }
 
       case 'queue_task': {
