@@ -887,10 +887,11 @@ async function executeWorkshopTool(name, input) {
       if (isLocalVPSPath(input.path)) {
         let content = fs.readFileSync(input.path, 'utf8');
         const count = (content.split(input.find).length - 1);
-        if (count === 0) return { ok: false, replacements: 0, path: input.path, error: 'Text not found' };
-        content = content.replace(input.find, input.replace);
+        if (count === 0) return { ok: false, replacements: 0, path: input.path, error: 'Text not found: "' + input.find.slice(0, 50) + '"' };
+        // Fix: replace ALL occurrences, not just first
+        content = content.split(input.find).join(input.replace);
         fs.writeFileSync(input.path, content, 'utf8');
-        return { ok: true, replacements: 1, path: input.path };
+        return { ok: true, replacements: count, path: input.path };
       }
       const res = await axios.post(`${process.env.PC_RELAY_URL}/file-edit`,
         { path: input.path, find: input.find, replace: input.replace },
