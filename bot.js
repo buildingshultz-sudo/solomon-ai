@@ -419,6 +419,32 @@ async function checkBudget() {
   return total;
 }
 
+// ── HALLUCINATION GUARD ──────────────────────────────────────────────────
+const FILE_TASK_KEYWORDS = [
+  'add', 'edit', 'modify', 'change', 'update', 'fix', 'write',
+  'create', 'build', 'implement', 'insert', 'append', 'remove'
+];
+const FILE_TARGET_KEYWORDS = [
+  'dashboard', 'dashboard.html', 'dashboard.js', 'file', '.html',
+  '.js', '.json', '.md', 'code', 'feature', 'chat', 'input', 'ui'
+];
+
+function isFileModificationTask(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  const hasAction = FILE_TASK_KEYWORDS.some(k => lower.includes(k));
+  const hasTarget = FILE_TARGET_KEYWORDS.some(k => lower.includes(k));
+  return hasAction && hasTarget;
+}
+
+function responseHasToolCall(responseContent) {
+  if (!Array.isArray(responseContent)) return false;
+  return responseContent.some(block => block.type === 'tool_use');
+}
+
+const ENFORCEMENT_PROMPT = `ENFORCEMENT: Your last response contained no tool calls. For file modification tasks, you MUST invoke file_write, file_edit, or vps_execute. Do not generate text describing the changes — make the actual tool call right now. Call the tool. Show me the { ok: true } result.`;
+// ─────────────────────────────────────────────────────────────────────────
+
 // ── CORE LLM CALL ────────────────────────────────────────────────────────
 async function askSolomon(userMessage) {
   activityLogger.setStatus('THINKING', userMessage.slice(0, 80));
@@ -556,6 +582,80 @@ async function askSolomon(userMessage) {
       model: MODEL
     });
   }
+
+  // ── HALLUCINATION ENFORCEMENT GATE ─────────────────────────────────────
+  // If this was a file task and Solomon returned only text (no tool call), force a retry
+  if (
+    isFileModificationTask(userMessage) &&
+    !responseHasToolCall(response.content) &&
+    response.stop_reason === 'end_turn'
+  ) {
+    log('WARN', 'HALLUCINATION', 'Text-only response to file modification task. Enforcing tool call.');
+    // Give Solomon one more chance with explicit enforcement prompt
+    const enforcedHistory = [
+      ...history,
+      { role: 'assistant', content: response.content },
+      { role: 'user', content: [{ type: 'text', text: ENFORCEMENT_PROMPT }] }
+    ];
+    const enforced = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: MAX_TOKENS,
+      system: cachedSystem,
+      tools: cachedTools,
+      messages: enforcedHistory
+    });
+    budget.log({
+      inputTokens: enforced.usage.input_tokens,
+      outputTokens: enforced.usage.output_tokens,
+      model: MODEL
+    });
+    // If enforced response has a tool call, process it through the tool loop
+    if (enforced.stop_reason === 'tool_use') {
+      log('INFO', 'HALLUCINATION', 'Enforcement succeeded — tool call triggered');
+      response = enforced;
+      // Run one more tool loop iteration
+      const toolUses = response.content.filter(b => b.type === 'tool_use');
+      const toolResults = [];
+      for (const tu of toolUses) {
+        const _toolStart = Date.now();
+        activityLogger.setStatus('WORKING', `Tool: ${tu.name}`);
+        activityLogger.logActivity('tool_call', { toolName: tu.name, status: 'started', summary: `Calling ${tu.name}` });
+        let result;
+        if (tu.name === 'memory') {
+          result = await executeTool('memory_manage', tu.input);
+        } else {
+          result = await executeTool(tu.name, tu.input);
+        }
+        const _toolDur = Date.now() - _toolStart;
+        activityLogger.logActivity('tool_call', { toolName: tu.name, status: 'ok', summary: `${tu.name} completed`, durationMs: _toolDur });
+        log('INFO', 'TOOL', `${tu.name} result`, { result: typeof result === 'string' ? result.slice(0, 200) : JSON.stringify(result).slice(0,200) });
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: tu.id,
+          content: typeof result === 'string' ? result : JSON.stringify(result)
+        });
+      }
+      // Get final response after tool execution
+      const assistantMsg = { role: 'assistant', content: response.content };
+      const toolResultMsg = { role: 'user', content: toolResults };
+      response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        system: cachedSystem,
+        tools: cachedTools,
+        messages: [...enforcedHistory, assistantMsg, toolResultMsg]
+      });
+      budget.log({
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        model: MODEL
+      });
+    } else {
+      log('WARN', 'HALLUCINATION', 'Enforcement failed — Solomon still did not call a tool');
+      response = enforced;
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // 7. Extract final text response
   const textBlock = response.content.find(b => b.type === 'text');
