@@ -301,6 +301,7 @@ COMMUNICATION RULES:
 - Keep responses SHORT. Jed is on his phone most of the time.
 - If you need to do something that takes time, queue the task and tell Jed it's queued.
 - NEVER fabricate research. Always use web_search first. Every result needs a real URL.
+- You have NATIVE WEB SEARCH via Anthropic's server-side tool. It's faster and more reliable than Serper/Playwright. Use it for quick factual lookups. For deep page reading, still use web_fetch with Playwright.
 - ALWAYS remember important new info Jed tells you using the remember tool.
 - MAX 3 retries on any failing task. After 3 fails: log it, tell Jed, move on.
 
@@ -425,12 +426,21 @@ async function askSolomon(userMessage) {
       cache_control: { type: "ephemeral" }
     }
   ];
-  const cachedTools = TOOL_DEFINITIONS.map((tool, index) => {
-    if (index === TOOL_DEFINITIONS.length - 1) {
-      return { ...tool, cache_control: { type: "ephemeral" } };
-    }
-    return tool;
-  });
+  const cachedTools = [
+    // Anthropic server tool: native web search (faster, no Playwright needed)
+    {
+      type: "web_search_20250305",
+      name: "web_search",
+      max_uses: 5
+    },
+    // Custom tools with cache_control on the last one
+    ...TOOL_DEFINITIONS.map((tool, index) => {
+      if (index === TOOL_DEFINITIONS.length - 1) {
+        return { ...tool, cache_control: { type: "ephemeral" } };
+      }
+      return tool;
+    })
+  ];
 
   let response = await anthropic.messages.create({
     model: MODEL,
@@ -456,9 +466,32 @@ async function askSolomon(userMessage) {
   }
 
   // 6. Tool loop — max 8 iterations to prevent infinite loops
+  // Handles both custom tool_use (client-side) and server tools (pause_turn)
   let iterations = 0;
-  while (response.stop_reason === 'tool_use' && iterations < 8) {
+  while ((response.stop_reason === 'tool_use' || response.stop_reason === 'pause_turn') && iterations < 8) {
     iterations++;
+
+    // Handle pause_turn (server tools like web_search executed by Anthropic)
+    if (response.stop_reason === 'pause_turn') {
+      log('INFO', 'TOOL', 'Server tool pause_turn — continuing conversation');
+      // Pass the response content back as assistant message to continue the turn
+      const assistantMsg = { role: 'assistant', content: response.content };
+      response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        system: cachedSystem,
+        tools: cachedTools,
+        messages: [...history, assistantMsg]
+      });
+      budget.log({
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        model: MODEL
+      });
+      continue;
+    }
+
+    // Handle custom tool_use (client-side execution)
     const toolUses = response.content.filter(b => b.type === 'tool_use');
     const toolResults = [];
 
