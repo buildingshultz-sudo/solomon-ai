@@ -17,6 +17,8 @@ const { TOOL_DEFINITIONS, executeTool } = require('./tools');
 const LOG_DIR = path.join(__dirname, 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 const TELEGRAM_IMG_DIR = '/tmp/telegram_images';
+// Deduplication set — prevents processing the same Telegram message twice (retry protection)
+const _processedMsgIds = new Set();
 if (!fs.existsSync(TELEGRAM_IMG_DIR)) fs.mkdirSync(TELEGRAM_IMG_DIR, { recursive: true });
 
 function getLogFile() {
@@ -76,68 +78,69 @@ log('INFO', 'SYSTEM', 'Solomon V4 starting', { model: MODEL, owner: OWNER_ID });
 
 
 // ── SMART MESSAGE SPLITTING (Phase 8B) ───────────────────────────────────
-// Splits long messages at paragraph boundaries with 500ms delay between chunks
+// Sends a message, splitting only if genuinely over 4000 chars.
+// Splits at paragraph boundaries (double newline). Never duplicates content.
 async function sendLongMessage(chatId, text, opts = {}) {
   const MAX_LEN = 4000;
-  if (text.length <= MAX_LEN) {
+
+  // Helper: send one chunk with Markdown fallback
+  async function sendChunk(chunk) {
     try {
-      await bot.sendMessage(chatId, text, opts);
-    } catch (mdErr) {
-      // Markdown parse error fallback — send without formatting
-      if (mdErr.message && mdErr.message.includes("can't parse")) {
-        await bot.sendMessage(chatId, text, { ...opts, parse_mode: undefined });
+      await bot.sendMessage(chatId, chunk, opts);
+    } catch (err) {
+      if (err.message && err.message.includes("can't parse")) {
+        await bot.sendMessage(chatId, chunk, { ...opts, parse_mode: undefined });
       } else {
-        throw mdErr;
+        throw err;
       }
     }
+  }
+
+  // Short message — send as-is, no splitting
+  if (text.length <= MAX_LEN) {
+    await sendChunk(text);
     return;
   }
 
-  // Split at paragraph boundaries (double newline)
-  const paragraphs = text.split(/\n\n/);
+  // Long message — split into non-overlapping chunks at paragraph boundaries
   const chunks = [];
+  const paragraphs = text.split(/\n\n/);
   let current = '';
 
   for (const para of paragraphs) {
-    if (current.length + para.length + 2 > MAX_LEN) {
-      if (current) chunks.push(current.trim());
-      // If a single paragraph is too long, split it at single newlines
+    const separator = current ? '\n\n' : '';
+    if (current.length + separator.length + para.length > MAX_LEN) {
+      // Flush current chunk
+      if (current) chunks.push(current);
+      // If a single paragraph exceeds MAX_LEN, hard-split it by character count
       if (para.length > MAX_LEN) {
-        const lines = para.split(/\n/);
-        let subChunk = '';
-        for (const line of lines) {
-          if (subChunk.length + line.length + 1 > MAX_LEN) {
-            if (subChunk) chunks.push(subChunk.trim());
-            subChunk = line;
-          } else {
-            subChunk += (subChunk ? '\n' : '') + line;
-          }
+        let remaining = para;
+        while (remaining.length > MAX_LEN) {
+          // Try to split at last newline within MAX_LEN
+          const slice = remaining.slice(0, MAX_LEN);
+          const lastNL = slice.lastIndexOf('\n');
+          const cutAt = lastNL > MAX_LEN * 0.5 ? lastNL : MAX_LEN;
+          chunks.push(remaining.slice(0, cutAt).trim());
+          remaining = remaining.slice(cutAt).trim();
         }
-        if (subChunk) current = subChunk;
+        current = remaining;
       } else {
         current = para;
       }
     } else {
-      current += (current ? '\n\n' : '') + para;
+      current = current + separator + para;
     }
   }
   if (current.trim()) chunks.push(current.trim());
 
+  // Send each unique chunk in sequence with a 500ms gap
   for (let i = 0; i < chunks.length; i++) {
-    try {
-      await bot.sendMessage(chatId, chunks[i], opts);
-    } catch (mdErr) {
-      if (mdErr.message && mdErr.message.includes("can't parse")) {
-        await bot.sendMessage(chatId, chunks[i], { ...opts, parse_mode: undefined });
-      } else {
-        throw mdErr;
-      }
-    }
-    if (i < chunks.length - 1) {
-      await new Promise(r => setTimeout(r, 500));
-    }
+    if (chunks[i]) await sendChunk(chunks[i]);
+    if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
   }
+
 }
+
 
 // ── SYSTEM PROMPT ────────────────────────────────────────────────────────
 function buildSystemPrompt() {
@@ -325,7 +328,13 @@ bot.on('message', async (msg) => {
     bot.sendMessage(msg.chat.id, 'This is a private assistant. Unauthorized access logged.');
     return;
   }
-
+  // Deduplication: ignore retried/duplicate Telegram message deliveries
+  if (_processedMsgIds.has(msg.message_id)) return;
+  _processedMsgIds.add(msg.message_id);
+  if (_processedMsgIds.size > 500) {
+    const oldest = [..._processedMsgIds].slice(0, 250);
+    oldest.forEach(id => _processedMsgIds.delete(id));
+  }
   const text = msg.text || msg.caption || '';
   if (!text && !msg.photo) return;
 
