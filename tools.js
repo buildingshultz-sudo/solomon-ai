@@ -24,6 +24,8 @@ function workshopSafe(targetPath) {
   ];
   const normForward = targetPath.replace(/\\/g, '/').toLowerCase();
   const isWhitelisted = DASHBOARD_WHITELIST.some(f => normForward === f.toLowerCase());
+  // Whitelisted VPS paths bypass all other checks
+  if (isWhitelisted) return true;
   // Block Solomon's own code — NEVER allow self-patching (except whitelisted dashboard files)
   if (!isWhitelisted && (norm.includes('solomon-v4') || norm.includes('solomon\\bot') || norm.includes('solomon/bot'))) {
     throw new Error('PATH_VIOLATION: Cannot touch Solomon core files. Solomon NEVER self-patches.');
@@ -826,11 +828,27 @@ const TOOL_DEFINITIONS = [
 
 ];
 
+// ── LOCAL VPS FILE HELPER ────────────────────────────────────────────────
+const DASHBOARD_WHITELIST_PATHS = [
+  "/root/solomon-v4/dashboard.html",
+  "/root/solomon-v4/dashboard.js",
+  "/root/solomon-v4/dashboard-improvements-todo.md"
+];
+function isLocalVPSPath(targetPath) {
+  if (!targetPath) return false;
+  const normForward = targetPath.replace(/\\/g, "/").toLowerCase();
+  return DASHBOARD_WHITELIST_PATHS.some(f => normForward === f.toLowerCase());
+}
+
 // ── WORKSHOP TOOL EXECUTOR (Phase 7) ────────────────────────────────────
 async function executeWorkshopTool(name, input) {
   switch (name) {
     case 'file_read': {
       workshopSafe(input.path);
+      if (isLocalVPSPath(input.path)) {
+        const content = fs.readFileSync(input.path, 'utf8');
+        return { ok: true, path: input.path, content, size: content.length };
+      }
       const res = await axios.post(`${process.env.PC_RELAY_URL}/file-read`,
         { path: input.path },
         { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
@@ -842,6 +860,10 @@ async function executeWorkshopTool(name, input) {
       if (input.content.length > 51200) {
         return { ok: false, error: 'File exceeds 50KB limit. Break into smaller files.' };
       }
+      if (isLocalVPSPath(input.path)) {
+        fs.writeFileSync(input.path, input.content, 'utf8');
+        return { ok: true, path: input.path, bytes_written: input.content.length };
+      }
       const res = await axios.post(`${process.env.PC_RELAY_URL}/file-write`,
         { path: input.path, content: input.content },
         { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
@@ -850,6 +872,14 @@ async function executeWorkshopTool(name, input) {
     }
     case 'file_edit': {
       workshopSafe(input.path);
+      if (isLocalVPSPath(input.path)) {
+        let content = fs.readFileSync(input.path, 'utf8');
+        const count = (content.split(input.find).length - 1);
+        if (count === 0) return { ok: false, replacements: 0, path: input.path, error: 'Text not found' };
+        content = content.replace(input.find, input.replace);
+        fs.writeFileSync(input.path, content, 'utf8');
+        return { ok: true, replacements: 1, path: input.path };
+      }
       const res = await axios.post(`${process.env.PC_RELAY_URL}/file-edit`,
         { path: input.path, find: input.find, replace: input.replace },
         { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 30000 }
