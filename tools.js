@@ -16,8 +16,16 @@ function workshopSafe(targetPath) {
     throw new Error('PATH_VIOLATION: No path provided');
   }
   const norm = targetPath.replace(/\//g, '\\').toLowerCase();
-  // Block Solomon's own code — NEVER allow self-patching
-  if (norm.includes('solomon-v4') || norm.includes('solomon\\bot') || norm.includes('solomon/bot')) {
+  // Whitelist: dashboard files Solomon IS allowed to edit (UI only, not core logic)
+  const DASHBOARD_WHITELIST = [
+    '/root/solomon-v4/dashboard.html',
+    '/root/solomon-v4/dashboard.js',
+    '/root/solomon-v4/dashboard-improvements-todo.md'
+  ];
+  const normForward = targetPath.replace(/\\/g, '/').toLowerCase();
+  const isWhitelisted = DASHBOARD_WHITELIST.some(f => normForward === f.toLowerCase());
+  // Block Solomon's own code — NEVER allow self-patching (except whitelisted dashboard files)
+  if (!isWhitelisted && (norm.includes('solomon-v4') || norm.includes('solomon\\bot') || norm.includes('solomon/bot'))) {
     throw new Error('PATH_VIOLATION: Cannot touch Solomon core files. Solomon NEVER self-patches.');
   }
   // Block .env files
