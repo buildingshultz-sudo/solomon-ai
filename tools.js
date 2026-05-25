@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox } = require('./memory');
+const { mem, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -761,6 +761,31 @@ const TOOL_DEFINITIONS = [
         task_id: { type: 'number', description: 'The ID of the task to cancel' }
       },
       required: ['task_id']
+    }
+  },
+  // ══════════════════════════════════════════════════════════════════════════
+  // ANTHROPIC FILES API TOOLS
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    name: 'upload_file_to_claude',
+    description: 'Upload a file to Anthropic\'s Files API for persistent storage. Returns a file_id that can be referenced in future conversations without re-uploading. Supports PDFs, images (JPEG/PNG/GIF/WEBP), and plain text files. 500GB storage included.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        file_path: { type: 'string', description: 'Full path to the file on Jed\'s PC (Windows path) or a local VPS path' },
+        purpose: { type: 'string', enum: ['document', 'image', 'general'], default: 'general', description: 'Purpose of the upload: document for PDFs/text, image for photos, general for other' }
+      },
+      required: ['file_path']
+    }
+  },
+  {
+    name: 'list_claude_files',
+    description: 'List all files previously uploaded to Anthropic\'s Files API. Shows file_id, filename, size, and upload date for reference.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', default: 20, description: 'Max number of files to return' }
+      }
     }
   }
 
@@ -1961,6 +1986,125 @@ public class Wallpaper {
         return cancelTask(input.task_id);
       }
 
+      // ══════════════════════════════════════════════════════════════════════
+      // ANTHROPIC FILES API EXECUTORS
+      // ══════════════════════════════════════════════════════════════════════
+      case 'upload_file_to_claude': {
+        const Anthropic = require('@anthropic-ai/sdk');
+        const { toFile } = require('@anthropic-ai/sdk');
+        const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+        const filePath = input.file_path;
+        const purpose = input.purpose || 'general';
+
+        // Determine if file is on PC (Windows path) or local VPS
+        const isWindowsPath = /^[A-Z]:\\/i.test(filePath);
+        let localFilePath;
+
+        if (isWindowsPath) {
+          // Download from PC via relay first
+          if (!process.env.PC_RELAY_URL || process.env.PC_RELAY_URL === 'PLACEHOLDER') {
+            return { ok: false, error: 'PC relay not configured. Cannot access PC files.' };
+          }
+          // Read file from PC as base64
+          const readCmd = `[Convert]::ToBase64String([System.IO.File]::ReadAllBytes('${filePath}'))`;
+          const pcRes = await axios.post(`${process.env.PC_RELAY_URL}/execute`, {
+            command: readCmd,
+            timeout: 60000
+          }, {
+            headers: { 'X-Secret': process.env.PC_RELAY_SECRET },
+            timeout: 65000
+          });
+          if (!pcRes.data.stdout || pcRes.data.exitCode !== 0) {
+            return { ok: false, error: `Failed to read file from PC: ${pcRes.data.stderr || 'Unknown error'}` };
+          }
+          // Save to temp file
+          const tempDir = '/tmp/claude_uploads';
+          if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+          const filename = path.basename(filePath);
+          localFilePath = path.join(tempDir, filename);
+          fs.writeFileSync(localFilePath, Buffer.from(pcRes.data.stdout.trim(), 'base64'));
+        } else {
+          // Local VPS path
+          if (!fs.existsSync(filePath)) {
+            return { ok: false, error: `File not found: ${filePath}` };
+          }
+          localFilePath = filePath;
+        }
+
+        // Determine MIME type
+        const ext = path.extname(localFilePath).toLowerCase();
+        const mimeMap = {
+          '.pdf': 'application/pdf',
+          '.txt': 'text/plain',
+          '.md': 'text/plain',
+          '.jpg': 'image/jpeg',
+          '.jpeg': 'image/jpeg',
+          '.png': 'image/png',
+          '.gif': 'image/gif',
+          '.webp': 'image/webp',
+          '.csv': 'text/csv',
+          '.json': 'application/json'
+        };
+        const mimeType = mimeMap[ext] || 'application/octet-stream';
+        const filename = path.basename(localFilePath);
+        const stats = fs.statSync(localFilePath);
+
+        try {
+          // Upload to Anthropic Files API (beta)
+          const uploaded = await anthropicClient.beta.files.upload({
+            file: await toFile(
+              fs.createReadStream(localFilePath),
+              filename,
+              { type: mimeType }
+            )
+          });
+
+          // Store in local DB for reference
+          claudeFiles.add({
+            file_id: uploaded.id,
+            original_path: filePath,
+            filename: filename,
+            purpose: purpose,
+            mime_type: mimeType,
+            size_bytes: stats.size
+          });
+
+          // Cleanup temp file if we created one
+          if (isWindowsPath && localFilePath.startsWith('/tmp/claude_uploads/')) {
+            try { fs.unlinkSync(localFilePath); } catch (_) {}
+          }
+
+          return {
+            ok: true,
+            file_id: uploaded.id,
+            filename: filename,
+            mime_type: mimeType,
+            size_bytes: stats.size,
+            message: `File uploaded successfully. Use file_id "${uploaded.id}" to reference this file in future conversations.`
+          };
+        } catch (uploadErr) {
+          return { ok: false, error: `Files API upload failed: ${uploadErr.message}` };
+        }
+      }
+      case 'list_claude_files': {
+        const limit = input.limit || 20;
+        const files = claudeFiles.getRecent(limit);
+        if (!files.length) {
+          return { ok: true, count: 0, files: [], message: 'No files uploaded yet.' };
+        }
+        return {
+          ok: true,
+          count: files.length,
+          files: files.map(f => ({
+            file_id: f.file_id,
+            filename: f.filename,
+            purpose: f.purpose,
+            mime_type: f.mime_type,
+            size_bytes: f.size_bytes,
+            uploaded_at: f.created_at
+          }))
+        };
+      }
       default:
         return { ok: false, error: `Unknown tool: ${name}` };
     }

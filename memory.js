@@ -126,6 +126,16 @@ db.exec(`
     started_at DATETIME,
     completed_at DATETIME
   );
+  CREATE TABLE IF NOT EXISTS claude_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id TEXT NOT NULL,
+    original_path TEXT,
+    filename TEXT,
+    purpose TEXT,
+    mime_type TEXT,
+    size_bytes INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
 `);
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {
@@ -361,6 +371,27 @@ const nathanInbox = {
     db.prepare("UPDATE nathan_inbox SET status = 'actioned' WHERE id = ?").run(id);
   }
 };
+// ── CLAUDE FILES (Anthropic Files API) ───────────────────────────────────
+const claudeFiles = {
+  add({ file_id, original_path, filename, purpose, mime_type, size_bytes }) {
+    const info = db.prepare(
+      'INSERT INTO claude_files (file_id, original_path, filename, purpose, mime_type, size_bytes) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(file_id, original_path || null, filename || null, purpose || null, mime_type || null, size_bytes || 0);
+    return { id: info.lastInsertRowid, file_id };
+  },
+  getAll() {
+    return db.prepare('SELECT * FROM claude_files ORDER BY id DESC').all();
+  },
+  getByFileId(file_id) {
+    return db.prepare('SELECT * FROM claude_files WHERE file_id = ?').get(file_id);
+  },
+  getRecent(limit) {
+    return db.prepare('SELECT * FROM claude_files ORDER BY id DESC LIMIT ?').all(limit || 20);
+  },
+  delete(file_id) {
+    db.prepare('DELETE FROM claude_files WHERE file_id = ?').run(file_id);
+  }
+};
 // ── TEST / RESET ─────────────────────────────────────────────────────────
 function testDB() {
   mem.set('identity', 'name', 'Solomon');
@@ -376,4 +407,4 @@ function resetDB() {
   db.exec('DELETE FROM messages; DELETE FROM tasks; DELETE FROM budget;');
   console.log('[DB] Reset complete. Memory preserved.');
 }
-module.exports = { messages, tasks, mem, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, testDB, resetDB, db };
+module.exports = { messages, tasks, mem, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };
