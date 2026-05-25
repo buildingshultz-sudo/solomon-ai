@@ -12,7 +12,6 @@ const fs = require('fs');
 const path = require('path');
 const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool } = require('./tools');
-const activityLogger = require("./activity-logger");
 
 // ══ STRUCTURED LOGGING (Item 36) ═════════════════════════════════════════
 const LOG_DIR = path.join(__dirname, 'logs');
@@ -76,7 +75,6 @@ const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 const MAX_TOKENS = parseInt(process.env.MAX_TOKENS || '2048');
 
 log('INFO', 'SYSTEM', 'Solomon V4 starting', { model: MODEL, owner: OWNER_ID });
-try { require('fs').writeFileSync(require('path').join(__dirname, '.bot-start-time'), new Date().toISOString()); } catch(_) {}
 
 
 // ── SMART MESSAGE SPLITTING (Phase 8B) ───────────────────────────────────
@@ -279,7 +277,6 @@ async function checkBudget() {
 
 // ── CORE LLM CALL ────────────────────────────────────────────────────────
 async function askSolomon(userMessage) {
-  activityLogger.setStatus('THINKING', userMessage.slice(0, 80));
   // 1. Budget check first
   await checkBudget();
 
@@ -313,12 +310,7 @@ async function askSolomon(userMessage) {
     const toolResults = [];
 
     for (const tu of toolUses) {
-      const _toolStart = Date.now();
-      activityLogger.setStatus('WORKING', `Tool: ${tu.name}`);
-      activityLogger.logActivity('tool_call', { toolName: tu.name, status: 'started', summary: `Calling ${tu.name}` });
       const result = await executeTool(tu.name, tu.input);
-      const _toolDur = Date.now() - _toolStart;
-      activityLogger.logActivity('tool_call', { toolName: tu.name, status: 'ok', summary: `${tu.name} completed`, durationMs: _toolDur });
       log('INFO', 'TOOL', `${tu.name} result`, { result: JSON.stringify(result).slice(0,200) });
       toolResults.push({
         type: 'tool_result',
@@ -353,7 +345,6 @@ async function askSolomon(userMessage) {
   // 8. Save assistant response to history
   messages.add('assistant', finalText);
 
-  activityLogger.setStatus('IDLE', '');
   return finalText;
 }
 
@@ -439,8 +430,6 @@ Please respond helpfully about this image. You can use it for any task (generati
 
       const reply = await askSolomon(contextMessage);
       await sendLongMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
-    activityLogger.logActivity('message_sent', { summary: reply.slice(0, 100) });
-    activityLogger.setStatus('IDLE', '');
 
       // Cleanup temp file
       try { fs.unlinkSync(localPath); } catch (_) {}
@@ -452,7 +441,6 @@ Please respond helpfully about this image. You can use it for any task (generati
   }
   // ── END PHOTO HANDLER ────────────────────────────────────────────────
   log('INFO', 'MSG', `Jed: ${text.slice(0, 100)}`);
-  activityLogger.logActivity('message_received', { summary: text.slice(0, 100) });
 
   // Show typing indicator
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
@@ -461,12 +449,8 @@ Please respond helpfully about this image. You can use it for any task (generati
     const reply = await askSolomon(text);
 
     await sendLongMessage(msg.chat.id, reply, { parse_mode: 'Markdown' });
-    activityLogger.logActivity('message_sent', { summary: reply.slice(0, 100) });
-    activityLogger.setStatus('IDLE', '');
   } catch (err) {
     log('ERROR', 'MSG', 'Message handler error', { error: err.message });
-    activityLogger.logActivity('error', { status: 'error', summary: err.message.slice(0, 200) });
-    activityLogger.setStatus('IDLE', '');
     const errorMsg = err.message.includes('budget')
       ? `🛑 Monthly budget limit reached. Use /budget to check.`
       : `❌ Error: ${err.message.slice(0, 200)}`;
