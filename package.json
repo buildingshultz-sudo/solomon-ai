@@ -10,7 +10,7 @@
     "db:reset": "node -e \"require('./memory').resetDB()\""
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.25.0",
+    "@anthropic-ai/sdk": "^0.98.0",
     "axios": "^1.16.1",
     "better-sqlite3": "^9.4.0",
     "dotenv": "^16.0.0",

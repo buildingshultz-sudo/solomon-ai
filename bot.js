@@ -417,11 +417,26 @@ async function askSolomon(userMessage) {
   const history = messages.getLast(20);
 
   // 4. Call Claude with tools
+  // Build cached system prompt and tools for prompt caching
+  const cachedSystem = [
+    {
+      type: "text",
+      text: buildSystemPrompt(),
+      cache_control: { type: "ephemeral" }
+    }
+  ];
+  const cachedTools = TOOL_DEFINITIONS.map((tool, index) => {
+    if (index === TOOL_DEFINITIONS.length - 1) {
+      return { ...tool, cache_control: { type: "ephemeral" } };
+    }
+    return tool;
+  });
+
   let response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: buildSystemPrompt(),
-    tools: TOOL_DEFINITIONS,
+    system: cachedSystem,
+    tools: cachedTools,
     messages: history
   });
 
@@ -431,6 +446,14 @@ async function askSolomon(userMessage) {
     outputTokens: response.usage.output_tokens,
     model: MODEL
   });
+  // Log cache performance
+  if (response.usage.cache_creation_input_tokens || response.usage.cache_read_input_tokens) {
+    log('INFO', 'CACHE', 'Prompt caching stats', {
+      cache_creation: response.usage.cache_creation_input_tokens || 0,
+      cache_read: response.usage.cache_read_input_tokens || 0,
+      input_tokens: response.usage.input_tokens
+    });
+  }
 
   // 6. Tool loop — max 8 iterations to prevent infinite loops
   let iterations = 0;
@@ -461,8 +484,8 @@ async function askSolomon(userMessage) {
     response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
-      system: buildSystemPrompt(),
-      tools: TOOL_DEFINITIONS,
+      system: cachedSystem,
+      tools: cachedTools,
       messages: [...history, assistantMsg, toolResultMsg]
     });
 
