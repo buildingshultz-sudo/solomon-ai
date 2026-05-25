@@ -86,7 +86,7 @@ const TOOL_DEFINITIONS = [
     input_schema: { type: 'object', properties: {} }
   },
   {
-    name: 'web_search',
+    name: 'web_search_serper',
     description: 'Search the web for real, current information. ALWAYS use this before answering any factual question. Every result MUST include a real URL. Never fabricate.',
     input_schema: {
       type: 'object',
@@ -1281,7 +1281,7 @@ async function executeTool(name, input) {
         return { ok: true, pending: pending.length, recent: all.slice(0, 5) };
       }
 
-      case 'web_search': {
+      case 'web_search_serper': {
         if (!process.env.SERPER_API_KEY || process.env.SERPER_API_KEY === 'PLACEHOLDER') {
           return { ok: false, error: 'SERPER_API_KEY not configured. Cannot search. Set it in .env.' };
         }
