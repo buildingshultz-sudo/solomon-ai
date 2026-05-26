@@ -667,10 +667,11 @@ async function askSolomon(userMessage) {
     'installing', 'building', 'now ', 'next:', 'step ', 'working on',
     'adding', 'creating', 'implementing', 'configuring', 'setting up',
     'checkpoint', 'phase ', 'continuing', 'then i', 'after that',
-    'first,', 'second,', 'moving on', 'next step', 'now i'
+    'first,', 'second,', 'moving on', 'next step', 'now i',
+    'starting now', 'working on it', 'i\'ll confirm', 'will report', 'let me'
   ];
   const lowerText = finalText.toLowerCase();
-  const isProgressUpdate = iterations > 0 && PROGRESS_INDICATORS.some(p => lowerText.includes(p));
+  const isProgressUpdate = PROGRESS_INDICATORS.some(p => lowerText.includes(p));
 
   // Use a module-level counter to prevent infinite self-continuation
   if (!global._solContinuationCount) global._solContinuationCount = 0;
