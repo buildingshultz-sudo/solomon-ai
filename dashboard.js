@@ -132,6 +132,55 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+// ── CHAT ENDPOINT (forwards to Solomon bot via inject) ───────────────────
+app.post('/api/chat', authCheck, async (req, res) => {
+  const { message } = req.body;
+  if (!message || !message.trim()) {
+    return res.status(400).json({ ok: false, error: 'No message provided' });
+  }
+  try {
+    // Forward to Solomon's inject endpoint on port 3000
+    const http = require('http');
+    const postData = JSON.stringify({ text: '[DASHBOARD] ' + message.trim() });
+    const options = {
+      hostname: '127.0.0.1',
+      port: 3000,
+      path: '/inject',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      },
+      timeout: 60000
+    };
+    const result = await new Promise((resolve, reject) => {
+      const req = http.request(options, (resp) => {
+        let data = '';
+        resp.on('data', chunk => data += chunk);
+        resp.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (_) { resolve({ ok: true, reply: data }); }
+        });
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      req.write(postData);
+      req.end();
+    });
+    // Log to activity feed
+    const activityLogger = require('./activityLogger');
+    activityLogger.logActivity('dashboard_chat', {
+      direction: 'in',
+      message: message.trim().slice(0, 200),
+      reply: result.reply ? result.reply.slice(0, 200) : ''
+    });
+    res.json({ ok: true, reply: result.reply || '(processing)' });
+  } catch (err) {
+    console.error('[Dashboard] Chat forward error:', err.message);
+    res.status(500).json({ ok: false, error: 'Failed to reach Solomon: ' + err.message });
+  }
+});
+
 // ── START SERVER ─────────────────────────────────────────────────────────
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[Dashboard] Solomon monitoring dashboard running on port ${PORT}`);
