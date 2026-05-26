@@ -222,6 +222,29 @@ const TOOL_DEFINITIONS = [
       required: ['file_path', 'title', 'description']
     }
   },
+  {
+    name: 'run_ironedit_pipeline',
+    description: 'Run the IronEdit video pipeline on a footage folder. Transcribes, analyzes, cuts, and uploads to YouTube automatically.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        folder_path: {
+          type: 'string',
+          description: 'Full path to footage folder e.g. D:\\Unedited Videos\\Long Form Videos\\My Video Title'
+        },
+        project_name: {
+          type: 'string',
+          description: 'Optional project name override. Defaults to folder name.'
+        },
+        auto_post: {
+          type: 'boolean',
+          description: 'Whether to auto-upload to YouTube. Default true.',
+          default: true
+        }
+      },
+      required: ['folder_path']
+    }
+  },
   // ══════════════════════════════════════════════════════════════════════════
   // PHASE 5 — INTEGRATION TOOLS (Items 28-34)
   // ══════════════════════════════════════════════════════════════════════════
@@ -2383,6 +2406,36 @@ public class Wallpaper {
           }))
         };
       }
+      case 'run_ironedit_pipeline': {
+        if (!process.env.PC_RELAY_URL || process.env.PC_RELAY_URL === 'PLACEHOLDER') {
+          return { ok: false, error: 'PC_RELAY_URL not configured. PC relay not set up yet.' };
+        }
+        const { folder_path, project_name, auto_post = true } = input;
+        const scriptPath = 'D:\\IronEdit\\scripts\\pipeline.py';
+        let cmd = `python "${scriptPath}" "${folder_path}"`;
+        if (project_name) cmd += ` "${project_name}"`;
+        if (!auto_post) cmd += ' --no-post';
+        const res = await axios.post(`${process.env.PC_RELAY_URL}/execute`,
+          { command: cmd, timeout: 3600000 },
+          { headers: { 'X-Secret': process.env.PC_RELAY_SECRET }, timeout: 3605000 }
+        );
+        if (res.data.exitCode !== 0) {
+          return {
+            ok: false,
+            error: res.data.stderr,
+            stdout: res.data.stdout
+          };
+        }
+        const outputLines = (res.data.stdout || '').split('\n');
+        const urlLine = outputLines.find(l => l.includes('youtube.com/watch'));
+        return {
+          ok: true,
+          message: 'Pipeline complete',
+          youtube_url: urlLine ? urlLine.trim() : 'Check output folder',
+          stdout: res.data.stdout
+        };
+      }
+
       default:
         return { ok: false, error: `Unknown tool: ${name}` };
     }

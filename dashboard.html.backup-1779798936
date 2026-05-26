@@ -301,103 +301,13 @@ body {
 .task-done { background: #1e4d3a; color: var(--green); }
 .task-failed { background: #4d1e1e; color: var(--red); }
 
-/* Chat Thread */
-.chat-thread {
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  max-height: 400px;
-  overflow-y: auto;
-  padding: 12px;
-  margin-bottom: 16px;
-}
-.chat-message {
-  margin-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.chat-message.user {
-  align-items: flex-end;
-}
-.chat-message.assistant {
-  align-items: flex-start;
-}
-.chat-bubble {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  line-height: 1.4;
-  word-wrap: break-word;
-}
-.chat-message.user .chat-bubble {
-  background: var(--accent);
-  color: var(--bg);
-}
-.chat-message.assistant .chat-bubble {
-  background: var(--bg3);
-  color: var(--text);
-}
-.chat-timestamp {
-  font-size: 0.7rem;
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 20px;
   color: var(--text-dim);
-  padding: 0 4px;
+  font-size: 0.85rem;
 }
-
-/* Parallel Tasks with Progress */
-.parallel-task-item {
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
-}
-.parallel-task-item:last-child { border-bottom: none; }
-.parallel-task-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.parallel-task-title {
-  font-weight: 600;
-  color: var(--text);
-}
-.parallel-task-status {
-  font-size: 0.65rem;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.parallel-queued { background: #3a3a1e; color: var(--yellow); }
-.parallel-running { background: #1e3a5f; color: #5dade2; }
-.parallel-complete { background: #1e4d3a; color: var(--green); }
-.parallel-failed { background: #4d1e1e; color: var(--red); }
-.progress-bar-container {
-  width: 100%;
-  height: 4px;
-  background: var(--bg);
-  border-radius: 2px;
-  overflow: hidden;
-  margin-top: 6px;
-}
-.progress-bar {
-  height: 100%;
-  background: var(--accent);
-  transition: width 0.3s ease;
-  border-radius: 2px;
-}
-.progress-bar.indeterminate {
-  width: 30%;
-  animation: indeterminate 1.5s infinite;
-}
-@keyframes indeterminate {
-  0% { margin-left: 0%; }
-  50% { margin-left: 70%; }
-  100% { margin-left: 0%; }
-}
-
-,
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
@@ -474,14 +384,6 @@ body {
     <div class="empty-state">No tasks in queue</div>
   </div>
 
-,
-
-  <!-- Chat Thread -->
-  <div class="section-header">Chat with Solomon</div>
-  <div class="chat-thread" id="chatThread">
-    <div class="empty-state">No messages yet</div>
-  </div>
-
   <!-- Parallel Tasks -->
   <div class="section-header">Parallel Tasks (Sub-Agents)</div>
   <div class="task-list" id="parallelTaskList">
@@ -542,6 +444,57 @@ async function apiFetch(endpoint) {
   const resp = await fetch(endpoint, {
     headers: { 'X-Auth-Token': authToken }
   });
+  if (resp.status === 401) {
+    localStorage.removeItem('solomon_dash_token');
+    authToken = null;
+    location.reload();
+    return null;
+  }
+  return resp.json();
+}
+
+async function loadInitialData() {
+  try {
+    const [status, activity, tools, tasks, errors] = await Promise.all([
+      apiFetch('/api/status'),
+      apiFetch('/api/activity'),
+      apiFetch('/api/tools'),
+      apiFetch('/api/tasks'),
+      apiFetch('/api/errors')
+    ]);
+    if (status) updateStatus(status.status);
+    if (status) updateStats(status.stats, status.uptime);
+    if (activity) renderActivity(activity.reverse());
+    if (tools) renderToolStats(tools);
+    if (tasks) renderTasks(tasks);
+    if (errors) renderErrors(errors);
+  } catch (err) {
+    console.error('Load error:', err);
+  }
+}
+
+async function refreshStats() {
+  try {
+    const status = await apiFetch('/api/status');
+    if (status) {
+      updateStatus(status.status);
+      updateStats(status.stats, status.uptime);
+    }
+    const tools = await apiFetch('/api/tools');
+    if (tools) renderToolStats(tools);
+  } catch (_) {}
+}
+
+// ── WEBSOCKET ────────────────────────────────────────────────────────────
+function connectWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${location.host}`);
+
+  ws.onopen = () => {
+    document.getElementById('connDot').classList.add('connected');
+    ws.send(JSON.stringify({ type: 'auth', token: authToken }));
+  };
+
   ws.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
@@ -766,4 +719,42 @@ document.getElementById('chatForm').addEventListener('submit', async (e) => {
 
 </body>
 </html>
+    <div style="position: fixed; bottom: 0; left: 0; right: 0; background: #1a1a1a; border-top: 1px solid #333; padding: 15px; z-index: 1000;">
+      <form id="chatForm" style="display: flex; gap: 10px; max-width: 1200px; margin: 0 auto;">
+        <input 
+          type="text" 
+          id="chatInput" 
+          placeholder="Type a message to Solomon..." 
+          style="flex: 1; padding: 12px; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: #e0e0e0; font-size: 14px;"
+        />
+        <button type="submit" style="padding: 12px 24px; background: #1e90ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+          Send
+        </button>
+      </form>
+    </div>
 
+    <script>
+      // Chat form handler
+      document.getElementById('chatForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const input = document.getElementById('chatInput');
+        const message = input.value.trim();
+        if (!message) return;
+
+        try {
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+          });
+          
+          if (response.ok) {
+            input.value = '';
+            // Refresh activity feed
+            location.reload();
+          }
+        } catch (err) {
+          console.error('Failed to send message:', err);
+        }
+      });
+    </script>
