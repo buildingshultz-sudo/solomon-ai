@@ -513,7 +513,7 @@ async function askSolomon(userMessage) {
   // 6. Tool loop — max 8 iterations to prevent infinite loops
   // Handles both custom tool_use (client-side) and server tools (pause_turn)
   let iterations = 0;
-  while ((response.stop_reason === 'tool_use' || response.stop_reason === 'pause_turn') && iterations < 8) {
+  while ((response.stop_reason === 'tool_use' || response.stop_reason === 'pause_turn') && iterations < 25) {
     iterations++;
 
     // Handle pause_turn (server tools like web_search executed by Anthropic)
@@ -657,13 +657,51 @@ async function askSolomon(userMessage) {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  // 7. Extract final text response
+  // 7. Extract final text response + AUTO-CONTINUATION
   const textBlock = response.content.find(b => b.type === 'text');
-  const finalText = textBlock ? textBlock.text : '(Task queued — will report back when done)';
+  const finalText = textBlock ? textBlock.text : '(Task queued \u2014 will report back when done)';
+
+  // AUTO-CONTINUE: If Solomon used tools AND his text indicates work in progress,
+  // send the progress update to Telegram and keep working automatically.
+  const PROGRESS_INDICATORS = [
+    'installing', 'building', 'now ', 'next:', 'step ', 'working on',
+    'adding', 'creating', 'implementing', 'configuring', 'setting up',
+    'checkpoint', 'phase ', 'continuing', 'then i', 'after that',
+    'first,', 'second,', 'moving on', 'next step', 'now i'
+  ];
+  const lowerText = finalText.toLowerCase();
+  const isProgressUpdate = iterations > 0 && PROGRESS_INDICATORS.some(p => lowerText.includes(p));
+
+  // Use a module-level counter to prevent infinite self-continuation
+  if (!global._solContinuationCount) global._solContinuationCount = 0;
+  const MAX_CONTINUATIONS = 3;
+
+  if (isProgressUpdate && global._solContinuationCount < MAX_CONTINUATIONS) {
+    global._solContinuationCount++;
+    log('INFO', 'AUTO-CONTINUE', `Progress detected, continuing work (${global._solContinuationCount}/${MAX_CONTINUATIONS})`);
+
+    // Send progress to Telegram so Jed sees updates in real time
+    try {
+      await bot.sendMessage(OWNER_ID, finalText, { parse_mode: 'Markdown' }).catch(() =>
+        bot.sendMessage(OWNER_ID, finalText)
+      );
+    } catch (_) {}
+
+    // Save progress to history and auto-inject continuation
+    messages.add('assistant', finalText);
+    messages.add('user', 'Continue working. Do not repeat what you just said — proceed to the next step.');
+
+    // Recursive call to keep working
+    const continueResult = await askSolomon('Continue working. Do not repeat what you just said \u2014 proceed to the next step.');
+    global._solContinuationCount = 0;
+    return continueResult;
+  }
+
+  // Normal completion — reset counter
+  global._solContinuationCount = 0;
 
   // 8. Save assistant response to history
   messages.add('assistant', finalText);
-
   activityLogger.setStatus('IDLE', '');
   return finalText;
 }
