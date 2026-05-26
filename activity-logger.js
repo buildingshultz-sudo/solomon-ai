@@ -149,6 +149,29 @@ function getUptime() {
   }
 }
 
+
+function getParallelTasks(limit = 20) {
+  if (!db) return Promise.resolve([]);
+  try {
+    const rows = db.prepare(`
+      SELECT 
+        id,
+        name,
+        status,
+        created_at,
+        completed_at,
+        result
+      FROM parallel_tasks
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(limit);
+    return Promise.resolve(rows || []);
+  } catch (err) {
+    console.error('[ActivityLogger] getParallelTasks error:', err);
+    return Promise.resolve([]);
+  }
+}
+
 module.exports = {
   logActivity,
   setStatus,
@@ -160,5 +183,6 @@ module.exports = {
   getTaskQueue,
   getUptime,
   addListener,
-  removeListener
+  removeListener,
+  getParallelTasks
 };

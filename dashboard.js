@@ -168,7 +168,6 @@ app.post('/api/chat', authCheck, async (req, res) => {
       req.end();
     });
     // Log to activity feed
-    const activityLogger = require('./activityLogger');
     activityLogger.logActivity('dashboard_chat', {
       direction: 'in',
       message: message.trim().slice(0, 200),
@@ -179,6 +178,12 @@ app.post('/api/chat', authCheck, async (req, res) => {
     console.error('[Dashboard] Chat forward error:', err.message);
     res.status(500).json({ ok: false, error: 'Failed to reach Solomon: ' + err.message });
   }
+});
+
+// ── PARALLEL TASKS ENDPOINT ──────────────────────────────────────────────
+app.get('/api/parallel-tasks', authCheck, (req, res) => {
+  const tasks = activityLogger.getParallelTasks();
+  res.json(tasks);
 });
 
 // ── START SERVER ─────────────────────────────────────────────────────────

@@ -852,10 +852,30 @@ function isLocalVPSPath(targetPath) {
   return DASHBOARD_WHITELIST_PATHS.some(f => normForward === f.toLowerCase());
 }
 
+// ── CORE READ-ONLY PATHS (can read but never write) ─────────────────────
+const CORE_READ_ONLY_PATHS = [
+  "/root/solomon-v4/bot.js",
+  "/root/solomon-v4/tools.js",
+  "/root/solomon-v4/scheduler.js",
+  "/root/solomon-v4/activity-logger.js"
+];
+
+function isCoreReadOnlyPath(targetPath) {
+  if (!targetPath) return false;
+  const normForward = targetPath.replace(/\\/g, "/").toLowerCase();
+  return CORE_READ_ONLY_PATHS.some(f => normForward === f.toLowerCase());
+}
+
+
 // ── WORKSHOP TOOL EXECUTOR (Phase 7) ────────────────────────────────────
 async function executeWorkshopTool(name, input) {
   switch (name) {
     case 'file_read': {
+      // Allow read-only access to core files
+      if (isCoreReadOnlyPath(input.path)) {
+        const content = fs.readFileSync(input.path, 'utf8');
+        return { ok: true, path: input.path, content, size: content.length, note: 'READ-ONLY: Core file. Nathan must make code changes.' };
+      }
       workshopSafe(input.path);
       if (isLocalVPSPath(input.path)) {
         const content = fs.readFileSync(input.path, 'utf8');
@@ -868,6 +888,9 @@ async function executeWorkshopTool(name, input) {
       return { ok: true, path: input.path, content: res.data.content, size: res.data.size };
     }
     case 'file_write': {
+      if (isCoreReadOnlyPath(input.path)) {
+        return { ok: false, error: 'WRITE_PROTECTED: Core files are read-only. Nathan must make code changes.' };
+      }
       workshopSafe(input.path);
       if (input.content.length > 51200) {
         return { ok: false, error: 'File exceeds 50KB limit. Break into smaller files.' };
@@ -883,6 +906,9 @@ async function executeWorkshopTool(name, input) {
       return { ok: true, path: input.path, bytes_written: res.data.bytes };
     }
     case 'file_edit': {
+      if (isCoreReadOnlyPath(input.path)) {
+        return { ok: false, error: 'WRITE_PROTECTED: Core files are read-only. Nathan must make code changes.' };
+      }
       workshopSafe(input.path);
       if (isLocalVPSPath(input.path)) {
         let content = fs.readFileSync(input.path, 'utf8');

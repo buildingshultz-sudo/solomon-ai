@@ -384,12 +384,6 @@ body {
     <div class="empty-state">No tasks in queue</div>
   </div>
 
-  <!-- Parallel Tasks -->
-  <div class="section-header">Parallel Tasks (Sub-Agents)</div>
-  <div class="task-list" id="parallelTaskList">
-    <div class="empty-state">No parallel tasks running</div>
-  </div>
-
   <!-- Recent Errors -->
   <div class="section-header">Recent Errors</div>
   <div class="error-list" id="errorList">
@@ -674,87 +668,5 @@ function escapeHtml(str) {
   }
 })();
 </script>
-
-<!-- Chat Input UI -->
-<div style="position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg2); border-top: 1px solid var(--border); padding: 15px; z-index: 1000;">
-  <form id="chatForm" style="display: flex; gap: 10px; max-width: 1200px; margin: 0 auto;">
-    <input 
-      type="text" 
-      id="chatInput" 
-      placeholder="Type a message to Solomon..." 
-      style="flex: 1; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px;"
-    />
-    <button type="submit" style="padding: 12px 24px; background: var(--accent); color: var(--bg); border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
-      Send
-    </button>
-  </form>
-</div>
-
-<script>
-// Chat form handler
-document.getElementById('chatForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const input = document.getElementById('chatInput');
-  const message = input.value.trim();
-  if (!message) return;
-
-  try {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'X-Auth-Token': authToken
-      },
-      body: JSON.stringify({ message })
-    });
-    
-    if (response.ok) {
-      input.value = '';
-    }
-  } catch (err) {
-    console.error('Failed to send message:', err);
-  }
-});
-</script>
-
 </body>
 </html>
-    <div style="position: fixed; bottom: 0; left: 0; right: 0; background: #1a1a1a; border-top: 1px solid #333; padding: 15px; z-index: 1000;">
-      <form id="chatForm" style="display: flex; gap: 10px; max-width: 1200px; margin: 0 auto;">
-        <input 
-          type="text" 
-          id="chatInput" 
-          placeholder="Type a message to Solomon..." 
-          style="flex: 1; padding: 12px; background: #2a2a2a; border: 1px solid #444; border-radius: 4px; color: #e0e0e0; font-size: 14px;"
-        />
-        <button type="submit" style="padding: 12px 24px; background: #1e90ff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
-          Send
-        </button>
-      </form>
-    </div>
-
-    <script>
-      // Chat form handler
-      document.getElementById('chatForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const input = document.getElementById('chatInput');
-        const message = input.value.trim();
-        if (!message) return;
-
-        try {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
-          });
-          
-          if (response.ok) {
-            input.value = '';
-            // Refresh activity feed
-            location.reload();
-          }
-        } catch (err) {
-          console.error('Failed to send message:', err);
-        }
-      });
-    </script>

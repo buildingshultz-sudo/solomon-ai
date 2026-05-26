@@ -16,6 +16,17 @@ const activityLogger = require("./activity-logger");
 const parallelTaskManager = require('./parallel_task_manager');
 const sharp = require('sharp');
 
+// ── FILE READ CACHE (prevents read loops) ────────────────────
+const fileReadCache = new Map();
+const fileReadCount = new Map();
+const FILE_READ_MAX_PER_TURN = 2;
+
+function resetFileReadCache() {
+  fileReadCache.clear();
+  fileReadCount.clear();
+}
+
+
 // ══ IMAGE PROCESSING QUEUE (Rate Limit Fix) ═════════════════════════════════
 // Processes photos one at a time with a delay to avoid 429 rate limit errors
 const _imageQueue = [];
@@ -456,6 +467,7 @@ const ENFORCEMENT_PROMPT = `ENFORCEMENT: Your last response contained no tool ca
 
 // ── CORE LLM CALL ────────────────────────────────────────────────────────
 async function askSolomon(userMessage) {
+  resetFileReadCache();
   activityLogger.setStatus('THINKING', userMessage.slice(0, 80));
   // 1. Budget check first
   await checkBudget();
@@ -558,6 +570,26 @@ async function askSolomon(userMessage) {
       if (tu.name === 'memory') {
         // Map native memory tool call to our memory_manage executor
         result = await executeTool('memory_manage', tu.input);
+      } else if (tu.name === 'file_read') {
+        // ── FILE READ CACHE: prevent read loops ──
+        const filePath = tu.input.path || tu.input.file_path || '';
+        const readKey = filePath;
+        const currentCount = fileReadCount.get(readKey) || 0;
+        if (currentCount >= FILE_READ_MAX_PER_TURN && fileReadCache.has(readKey)) {
+          // 3rd+ read: return cached with WARNING
+          result = '[FILE_READ_CACHE] WARNING: You have already read this file ' + currentCount + ' times this turn. Use the content below and proceed with file_edit. Do NOT read again.\n\n' + fileReadCache.get(readKey);
+          log('WARN', 'CACHE', 'file_read blocked (loop prevention)', { path: filePath, count: currentCount + 1 });
+        } else if (currentCount === 1 && fileReadCache.has(readKey)) {
+          // 2nd read: return cached with note
+          fileReadCount.set(readKey, currentCount + 1);
+          result = '[FILE_READ_CACHE] Note: Returning cached content (read #2). Next read will be blocked.\n\n' + fileReadCache.get(readKey);
+        } else {
+          // 1st read: execute normally and cache
+          result = await executeTool(tu.name, tu.input);
+          const resultStr = typeof result === 'string' ? result : JSON.stringify(result);
+          fileReadCache.set(readKey, resultStr);
+          fileReadCount.set(readKey, currentCount + 1);
+        }
       } else {
         result = await executeTool(tu.name, tu.input);
       }
@@ -672,19 +704,27 @@ async function askSolomon(userMessage) {
 
   // AUTO-CONTINUE: If Solomon used tools AND his text indicates work in progress,
   // send the progress update to Telegram and keep working automatically.
-  const PROGRESS_INDICATORS = [
-    'installing', 'building', 'now ', 'next:', 'step ', 'working on',
-    'adding', 'creating', 'implementing', 'configuring', 'setting up',
-    'checkpoint', 'phase ', 'continuing', 'then i', 'after that',
-    'first,', 'second,', 'moving on', 'next step', 'now i',
-    'starting now', 'working on it', 'i\'ll confirm', 'will report', 'let me'
-  ];
-  const lowerText = finalText.toLowerCase();
-  const isProgressUpdate = PROGRESS_INDICATORS.some(p => lowerText.includes(p));
+  function shouldAutoContinue(responseText, toolCallsMade) {
+    if (toolCallsMade === 0) return false;
+    
+    const incompleteSignals = [
+      /next[,\s]+i('ll| will)/i,
+      /step \d+ (of \d+|complete)/i,
+      /continuing/i,
+      /now (let me|i'll|i will)/i,
+      /moving (on|to) (the )?next/i,
+      /\d+ (more|remaining)/i,
+      /let me (now|proceed|continue)/i,
+      /i('ll| will) (now|next|proceed)/i
+    ];
+    
+    return incompleteSignals.some(pattern => pattern.test(responseText));
+  }
+  const isProgressUpdate = shouldAutoContinue(finalText, iterations);
 
   // Use a module-level counter to prevent infinite self-continuation
   if (!global._solContinuationCount) global._solContinuationCount = 0;
-  const MAX_CONTINUATIONS = 3;
+  const MAX_CONTINUATIONS = 8;
 
   if (isProgressUpdate && global._solContinuationCount < MAX_CONTINUATIONS) {
     global._solContinuationCount++;
