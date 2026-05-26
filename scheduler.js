@@ -5,7 +5,7 @@ require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
 const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox } = require('./memory');
-const { executeTool } = require('./tools');
+const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
@@ -207,9 +207,7 @@ cron.schedule('0 6 * * 1', async () => {
 cron.schedule('*/5 * * * *', async () => {
   const pending = tasks.getPending();
   if (!pending.length) return;
-
   const task = pending[0];
-
   if (task.retries > 0 && task.started_at) {
     const lastAttempt = new Date(task.started_at).getTime();
     const backoffMinutes = Math.pow(5, task.retries);
@@ -219,27 +217,71 @@ cron.schedule('*/5 * * * *', async () => {
       return;
     }
   }
-
   console.log(`[WORKER] Starting task #${task.id}: ${task.title} (retry ${task.retries}/3)`);
   tasks.start(task.id);
-
   try {
-    const resp = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: `Execute this task and report results:\n${task.description}` }]
-    });
+    // Worker system prompt — gives Solomon context for background task execution
+    const workerSystem = `You are Solomon, an autonomous AI agent executing a background task for Jedidiah Shultz (Shultz Enterprises).
+You have full tool access. Use your tools to ACTUALLY complete the task — do not just describe what you would do.
+Rules:
+1. You MUST call tools to complete work. Text-only responses = failure.
+2. After completing, provide a brief summary of what you actually did.
+3. If a task requires PC access, use the pc_* tools. If it requires VPS work, use vps_execute or file_write/file_edit.
+4. Budget awareness: keep costs minimal. Do not make unnecessary API calls.
+5. If you cannot complete the task, explain exactly why and what's blocking you.`;
 
-    budget.log({
-      inputTokens: resp.usage.input_tokens,
-      outputTokens: resp.usage.output_tokens,
-      model: MODEL
-    });
+    // Agentic tool-use loop (same pattern as bot.js)
+    let messages = [{ role: 'user', content: `Execute this task:\n\nTitle: ${task.title}\nDescription: ${task.description}\nType: ${task.type || 'general'}\nPriority: ${task.priority || 5}` }];
+    let totalInput = 0;
+    let totalOutput = 0;
+    let iterations = 0;
+    const MAX_ITERATIONS = 10;
 
-    const result = resp.content[0].text;
-    tasks.complete(task.id, result);
-    bot.sendMessage(OWNER_ID, `✅ Task #${task.id} done: ${task.title}\n${result.slice(0, 200)}`).catch(() => {});
-    console.log(`[WORKER] Task #${task.id} completed`);
+    while (iterations < MAX_ITERATIONS) {
+      iterations++;
+      const resp = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 4096,
+        system: workerSystem,
+        tools: TOOL_DEFINITIONS,
+        messages: messages
+      });
+      totalInput += resp.usage.input_tokens;
+      totalOutput += resp.usage.output_tokens;
+
+      // If no tool use, we're done
+      if (resp.stop_reason !== 'tool_use') {
+        const textBlock = resp.content.find(b => b.type === 'text');
+        const result = textBlock ? textBlock.text : 'Task completed (no text response)';
+        budget.log({ inputTokens: totalInput, outputTokens: totalOutput, model: MODEL });
+        tasks.complete(task.id, result);
+        bot.sendMessage(OWNER_ID, `✅ Task #${task.id} done: ${task.title}\n${result.slice(0, 300)}`).catch(() => {});
+        console.log(`[WORKER] Task #${task.id} completed in ${iterations} iteration(s)`);
+        return;
+      }
+
+      // Process tool calls
+      messages.push({ role: 'assistant', content: resp.content });
+      const toolResults = [];
+      for (const block of resp.content) {
+        if (block.type === 'tool_use') {
+          console.log(`[WORKER] Tool call: ${block.name} ${JSON.stringify(block.input).slice(0, 100)}`);
+          try {
+            const toolResult = await executeTool(block.name, block.input);
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(toolResult).slice(0, 4000) });
+          } catch (toolErr) {
+            toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ ok: false, error: toolErr.message }), is_error: true });
+          }
+        }
+      }
+      messages.push({ role: 'user', content: toolResults });
+    }
+
+    // If we hit max iterations, mark as done with warning
+    budget.log({ inputTokens: totalInput, outputTokens: totalOutput, model: MODEL });
+    tasks.complete(task.id, `Completed after ${MAX_ITERATIONS} iterations (may be partial)`);
+    bot.sendMessage(OWNER_ID, `⚠️ Task #${task.id} hit iteration limit: ${task.title}`).catch(() => {});
+    console.log(`[WORKER] Task #${task.id} hit max iterations`);
   } catch (err) {
     console.error(`[WORKER] Task #${task.id} failed:`, err.message);
     const retries = tasks.incrementRetry(task.id);
@@ -251,7 +293,7 @@ cron.schedule('*/5 * * * *', async () => {
       bot.sendMessage(OWNER_ID, `⚠️ Task #${task.id} retry ${retries}/3 (next attempt in ${nextBackoff}m): ${task.title}`).catch(() => {});
     }
   }
-});
+})
 
 // ══════════════════════════════════════════════════════════════════════════
 // ITEM 19 — STALE TASK CLEANUP: Every hour
