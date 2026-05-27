@@ -751,65 +751,6 @@ const TOOL_DEFINITIONS = [
       required: ['url']
     }
   },
-  // ── PHASE 8 PC CONTROL TOOLS ──────────────────────────────────────────────
-  {
-    name: 'pc_launch_app',
-    description: 'Launch an application on Jed\'s PC by name or full path. Verifies the app actually opened.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        app_name: {
-          type: 'string',
-          description: 'Name of the app to find and launch (e.g. "OBS", "DaVinci", "Chrome")'
-        },
-        app_path: {
-          type: 'string',
-          description: 'Full path to executable if known (e.g. "C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe")'
-        },
-        args: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional command line arguments'
-        }
-      }
-    }
-  },
-  {
-    name: 'pc_gui_control',
-    description: 'Control the PC GUI \u2014 click, type, press keys, take screenshots, focus windows.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        action: {
-          type: 'string',
-          enum: ['click', 'right_click', 'double_click', 'type', 'key',
-                 'screenshot', 'focus_window', 'get_windows'],
-          description: 'The GUI action to perform'
-        },
-        params: {
-          type: 'object',
-          description: 'Parameters for the action: x/y for clicks, text for typing, keys array for shortcuts, title/name for window focus'
-        }
-      },
-      required: ['action']
-    }
-  },
-  {
-    name: 'pc_screenshot',
-    description: 'Take a screenshot of Jed\'s PC screen and return it so Solomon can see what\'s on screen.',
-    input_schema: {
-      type: 'object',
-      properties: {}
-    }
-  },
-  {
-    name: 'pc_get_windows',
-    description: 'List all open windows on Jed\'s PC with their titles and process names.',
-    input_schema: {
-      type: 'object',
-      properties: {}
-    }
-  },
   // ── PHASE 9.0 PARALLEL TASK MANAGEMENT TOOLS ────────────────────────────
   {
     name: 'enqueue_parallel_task',
@@ -2281,66 +2222,6 @@ public class Wallpaper {
         }
       }
 
-      // ── PHASE 8 PC CONTROL HANDLERS ──────────────────────────────────────
-      case 'pc_launch_app': {
-        const res = await axios.post(`${process.env.PC_RELAY_URL}/launch-app`,
-          {
-            app_name: input.app_name,
-            app_path: input.app_path,
-            args: input.args || []
-          },
-          {
-            headers: { 'X-Secret': process.env.PC_RELAY_SECRET },
-            timeout: 30000
-          }
-        );
-        return res.data;
-      }
-
-      case 'pc_gui_control': {
-        const res = await axios.post(`${process.env.PC_RELAY_URL}/gui-control`,
-          { action: input.action, params: input.params || {} },
-          {
-            headers: { 'X-Secret': process.env.PC_RELAY_SECRET },
-            timeout: 60000
-          }
-        );
-        return res.data;
-      }
-
-      case 'pc_screenshot': {
-        const res = await axios.post(`${process.env.PC_RELAY_URL}/screenshot-and-read`,
-          {},
-          {
-            headers: { 'X-Secret': process.env.PC_RELAY_SECRET },
-            timeout: 30000
-          }
-        );
-        if (!res.data.ok) return res.data;
-
-        // Send screenshot to Jed via Telegram so he can see it
-        const imageBuffer = Buffer.from(res.data.base64, 'base64');
-        await bot.sendPhoto(process.env.TELEGRAM_CHAT_ID, imageBuffer, {
-          caption: `🖥️ PC Screenshot — ${new Date().toLocaleTimeString()}`
-        });
-
-        return {
-          ok: true,
-          message: 'Screenshot taken and sent to Telegram',
-          path: res.data.path
-        };
-      }
-
-      case 'pc_get_windows': {
-        const res = await axios.post(`${process.env.PC_RELAY_URL}/gui-control`,
-          { action: 'get_windows', params: {} },
-          {
-            headers: { 'X-Secret': process.env.PC_RELAY_SECRET },
-            timeout: 15000
-          }
-        );
-        return res.data;
-      }
       case 'pc_browse_url': {
         const url = input.url;
         const action = input.action || 'open';

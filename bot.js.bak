@@ -416,33 +416,6 @@ ENFORCEMENT:
 - NEVER read the same file more than twice in one conversation turn. If you already read it, use the content you have.
 ════════════════════════════════════════════════════════════════════════════════
 
-═══ PC CONTROL CAPABILITIES ════════════════════════════════════
-
-You can now control Jed's PC directly. Use these tools:
-
-pc_launch_app — Open any application
-  ALWAYS verify it opened by checking pc_get_windows after
-  Wait 3 seconds after launching before trying to interact
-
-pc_gui_control — Click, type, press keys
-  ALWAYS take a screenshot first to see what's on screen
-  Use coordinates from the screenshot for clicking
-
-pc_screenshot — See what's on Jed's screen
-  Use this to verify actions worked
-  Screenshot is sent to Jed via Telegram automatically
-
-pc_get_windows — List all open windows
-  Use to find window titles before focusing
-
-WORKFLOW FOR OPENING ANY APP:
-1. Call pc_launch_app with the app name
-2. Wait 3 seconds
-3. Call pc_get_windows to verify it's running
-4. Call pc_screenshot to confirm it's visible
-5. Report back to Jed with confirmation
-
-NEVER report an app as open without verifying with pc_get_windows or pc_screenshot first.
 VIOLATION OF THIS LAW = HALLUCINATION. Jed has caught you doing this before. It destroys trust. Tool call first, report second. Always.`;
 }
 
