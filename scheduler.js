@@ -215,6 +215,56 @@ cron.schedule("*/5 * * * *", async () => {
 
 
 // ══════════════════════════════════════════════════════════════════════════
+// ITEM 16D — EMAIL TRIAGE: Every 5 minutes
+// Poll buildingshultz@gmail.com over IMAP, classify each NEW email with Claude
+// (urgent | normal | newsletter), and Telegram-alert the owner for urgent/normal
+// with sender, subject, a one-sentence summary, and the classification.
+// Newsletters / marketing are logged to the console only (no alert).
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule("*/5 * * * *", async () => {
+  try {
+    const result = await executeTool("check_inbox", {});
+    if (!result.ok) { console.error("[SCHEDULER] Email triage:", result.error); return; }
+    if (!result.new_emails || result.new_emails.length === 0) return;
+    console.log(`[SCHEDULER] Email triage: ${result.new_emails.length} new email(s)`);
+    for (const em of result.new_emails) {
+      let classification = "normal";
+      let summary = "";
+      try {
+        const cls = await anthropic.messages.create({
+          model: MODEL,
+          max_tokens: 300,
+          system: "You triage incoming email for Jed Shultz, a construction business owner. Classify the email as exactly one of: urgent, normal, newsletter. urgent = needs prompt human action (client emergency, time-sensitive job/payment/legal/scheduling, upset customer). normal = real correspondence worth knowing about but not an emergency. newsletter = marketing, promotions, automated digests, receipts, or no-reply blasts. Respond with ONLY compact JSON: {\"classification\":\"urgent|normal|newsletter\",\"summary\":\"one sentence describing the email\"}.",
+          messages: [{ role: "user", content: `From: ${em.from_name} <${em.from_email}>\nSubject: ${em.subject}\n\nBody:\n${em.body_snippet || "(no body)"}` }]
+        });
+        const txt = (cls.content.find(b => b.type === "text") || {}).text || "";
+        const m = txt.match(/\{[\s\S]*\}/);
+        if (m) {
+          const j = JSON.parse(m[0]);
+          if (j.classification) classification = String(j.classification).toLowerCase().trim();
+          summary = j.summary || "";
+        }
+      } catch (e) {
+        console.error("[SCHEDULER] Email classify error:", e.message);
+      }
+      // Log every email; newsletters are silently logged here (no Telegram alert).
+      console.log(`[EMAIL] ${classification.toUpperCase()} | from=${em.from_name} | subj=${em.subject}`);
+      if (classification === "newsletter") continue;
+      const icon = classification === "urgent" ? "🚨" : "📧";
+      const alert =
+        `${icon} *${classification.toUpperCase()} email*\n\n` +
+        `*From:* ${em.from_name}\n` +
+        `*Subject:* ${em.subject}\n` +
+        `*Summary:* ${summary || "(no summary)"}`;
+      await bot.sendMessage(OWNER_ID, alert, { parse_mode: "Markdown" }).catch(() =>
+        bot.sendMessage(OWNER_ID, alert.replace(/[*_`]/g, "")).catch(() => {}));
+    }
+  } catch (err) {
+    console.error("[SCHEDULER] Email triage error:", err.message);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // ITEM 16C — SCHEDULED POSTS PUBLISHER: Every 5 minutes
 // Publish any social posts whose scheduled_for time has passed.
 // ══════════════════════════════════════════════════════════════════════════
@@ -532,6 +582,7 @@ console.log('  • Morning brief prep: 5:45 AM CT daily');
 console.log('  • Morning brief send: 6:00 AM CT daily');
 console.log('  • Shorts check: every 30 minutes');
 console.log('  • FB comment monitor: every 5 minutes (suggestion alerts, no auto-post)');
+console.log('  • Email triage (IMAP): every 5 minutes');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');

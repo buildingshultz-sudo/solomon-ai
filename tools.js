@@ -6,6 +6,8 @@ const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQue
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const { ImapFlow } = require('imapflow');
+const { simpleParser } = require('mailparser');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 
 // ── PATH SAFETY (Phase 7) ─────────────────────────────────────────────────
@@ -274,6 +276,14 @@ const TOOL_DEFINITIONS = [
         body: { type: 'string', description: 'Email body text (plain text or HTML)' }
       },
       required: ['to', 'subject', 'body']
+    }
+  },
+  {
+    name: 'check_inbox',
+    description: 'Poll the Gmail inbox (buildingshultz@gmail.com) over IMAP and return emails that arrived since the last check. Tracks the last-seen UID so only genuinely new mail is returned. Use to triage incoming email.',
+    input_schema: {
+      type: 'object',
+      properties: {}
     }
   },
   {
@@ -1993,6 +2003,59 @@ Output format (JSON):
           input.image_url || null
         );
         return { ok: true, id: result.lastInsertRowid, page: input.page, platform: input.platform || "facebook", scheduled_for: input.scheduled_for, message_preview: input.message.slice(0, 80) };
+      }
+      // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
+      case 'check_inbox': {
+        const imapUser = process.env.SMTP_USER;
+        const imapPass = process.env.SMTP_PASS;
+        if (!imapUser || !imapPass || imapPass === 'PLACEHOLDER') {
+          return { ok: false, error: 'No SMTP_USER/SMTP_PASS in .env for IMAP login.' };
+        }
+        const client = new ImapFlow({
+          host: 'imap.gmail.com', port: 993, secure: true,
+          auth: { user: imapUser, pass: imapPass }, logger: false
+        });
+        const newEmails = [];
+        try {
+          await client.connect();
+          const lock = await client.getMailboxLock('INBOX');
+          try {
+            const uidNext = client.mailbox.uidNext;
+            const highestUid = uidNext - 1;
+            const lastUidRaw = mem.get('system', 'inbox_last_uid');
+            let lastUid = parseInt(lastUidRaw, 10);
+            // First run: record current position, do not alert on the existing backlog.
+            if (!lastUid || isNaN(lastUid)) {
+              mem.set('system', 'inbox_last_uid', String(highestUid));
+              return { ok: true, new_emails: [], initialized: true, uid_next: uidNext };
+            }
+            if (highestUid > lastUid) {
+              for await (const msg of client.fetch({ uid: (lastUid + 1) + ':*' }, { uid: true, envelope: true, source: true })) {
+                if (msg.uid <= lastUid) continue; // IMAP N:* always returns the highest msg — guard it
+                const env = msg.envelope || {};
+                const fromObj = (env.from && env.from[0]) || {};
+                let bodyText = '';
+                try { const parsed = await simpleParser(msg.source); bodyText = (parsed.text || parsed.subject || '').trim(); } catch (_) {}
+                newEmails.push({
+                  uid: msg.uid,
+                  from_name: fromObj.name || fromObj.address || 'unknown',
+                  from_email: fromObj.address || '',
+                  subject: env.subject || '(no subject)',
+                  date: env.date ? new Date(env.date).toISOString() : '',
+                  body_snippet: bodyText.slice(0, 1500)
+                });
+              }
+              mem.set('system', 'inbox_last_uid', String(highestUid));
+            }
+          } finally {
+            lock.release();
+          }
+          await client.logout();
+          return { ok: true, new_emails: newEmails, count: newEmails.length };
+        } catch (imapErr) {
+          try { await client.logout(); } catch (_) {}
+          return { ok: false, error: 'check_inbox failed: ' + imapErr.message };
+        }
       }
       // ITEM 31 - EMAIL via Gmail API (HTTPS - bypasses DigitalOcean SMTP block)
       case 'send_email': {
