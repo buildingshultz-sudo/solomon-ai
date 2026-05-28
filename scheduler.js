@@ -249,6 +249,12 @@ cron.schedule("*/5 * * * *", async () => {
       }
       // Log every email; newsletters are silently logged here (no Telegram alert).
       console.log(`[EMAIL] ${classification.toUpperCase()} | from=${em.from_name} | subj=${em.subject}`);
+      // Lightweight triage stats for /status
+      try {
+        const bump = (k) => mem.set("email_stats", k, String((parseInt(mem.get("email_stats", k), 10) || 0) + 1));
+        bump("total"); bump(classification);
+        mem.set("email_stats", "last_email_at", new Date().toISOString());
+      } catch (_) {}
       if (classification === "newsletter") continue;
       const icon = classification === "urgent" ? "🚨" : "📧";
       const alert =

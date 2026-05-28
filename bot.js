@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
+const { execSync } = require('child_process');
 const activityLogger = require("./activity-logger");
 const parallelTaskManager = require('./parallel_task_manager');
 const sharp = require('sharp');
@@ -930,7 +931,28 @@ async function handleCrossPost(content, chatId) {
     : 'paste manually';
   await sendSafe(`▶️ *YouTube community post — ${ytNote}*\n\n${variants.youtube_community || ''}`);
 
+  try { mem.set('social_log', new Date().toISOString(), JSON.stringify({ kind: 'cross_post', fb: fbResults, igReady, preview: content.slice(0, 60) })); } catch (_) {}
   log('INFO', 'SOCIAL', 'Cross-post complete', { fb: fbResults.join('; '), igReady, yt: !!(auth.youtube && auth.youtube.tokenValid) });
+}
+
+// Generate + send the morning brief on demand (same content as the 6 AM job).
+async function generateBrief(chatId) {
+  await executeTool('prepare_morning_brief', {}).catch(() => {});
+  const compiledRaw = mem.get('system', 'morning_brief_compiled');
+  let briefData = null;
+  if (compiledRaw) { try { briefData = JSON.parse(compiledRaw); } catch (_) {} }
+  let context;
+  if (briefData) {
+    context = `Generate a concise morning brief for Jedidiah Shultz from this compiled data:\n${JSON.stringify(briefData)}\nFormat: short bullet points, what needs his attention today, highlight urgent items, under 400 words.`;
+  } else {
+    const pending = tasks.getPending();
+    const budgetTotal = budget.getMonthTotal();
+    context = `Generate a concise morning brief for Jedidiah Shultz. Pending tasks: ${pending.length}. Month spend: $${budgetTotal.toFixed(2)}. Short bullet points, under 300 words.`;
+  }
+  const resp = await anthropic.messages.create({ model: MODEL, max_tokens: 600, messages: [{ role: 'user', content: context }] });
+  budget.log({ inputTokens: resp.usage.input_tokens, outputTokens: resp.usage.output_tokens, model: MODEL });
+  const brief = `🌅 *Morning Brief*\n${resp.content[0].text}`;
+  await bot.sendMessage(chatId, brief, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(chatId, brief.replace(/[*_`]/g, '')));
 }
 
 // ── TELEGRAM MESSAGE HANDLER ─────────────────────────────────────────────
@@ -961,6 +983,10 @@ bot.on('message', async (msg) => {
   // ── END PHOTO HANDLER ────────────────────────────────────────────────
   log('INFO', 'MSG', `Jed: ${text.slice(0, 100)}`);
   activityLogger.logActivity('message_received', { summary: text.slice(0, 100) });
+
+  // Slash commands are handled by their dedicated onText handlers below — don't
+  // also run them through the LLM (prevents double-processing of /post, /status, etc.).
+  if (text.startsWith('/')) return;
 
   // ── CROSS-POST INTERCEPT: "post this to all socials" ──────────────────
   if (/post this to all socials/i.test(text)) {
@@ -1039,10 +1065,45 @@ bot.onText(/^\/status/, async (msg) => {
       pcStatus = '❌ Offline';
     }
 
+    // Running PM2 processes
+    let procLines = '  (pm2 unavailable)';
+    try {
+      const procs = JSON.parse(execSync('pm2 jlist', { timeout: 5000 }).toString())
+        .filter(p => p.name && p.name.startsWith('solomon'));
+      procLines = procs.map(p => {
+        const env = p.pm2_env || {};
+        const up = env.pm_uptime ? Math.round((Date.now() - env.pm_uptime) / 60000) : 0;
+        return `  ${env.status === 'online' ? '✅' : '❌'} ${p.name} (${env.status || '?'}, ${up}m, ↺${env.restart_time != null ? env.restart_time : '?'})`;
+      }).join('\n') || '  None';
+    } catch (_) {}
+
+    // Email triage stats
+    const eGet = (k) => mem.get('email_stats', k) || '0';
+    const eLast = mem.get('email_stats', 'last_email_at') || 'never';
+
+    // Recent social posts
+    let socialLines = '  None yet';
+    try {
+      const logs = mem.getCategory('social_log').sort((a, b) => b.key.localeCompare(a.key)).slice(0, 5);
+      if (logs.length) socialLines = logs.map(l => {
+        let body = ''; try { const j = JSON.parse(l.value); body = `${j.kind || 'post'}: ${(j.fb || []).join(', ')}`.slice(0, 70); } catch (_) { body = '(post)'; }
+        return `  • ${l.key.slice(5, 16)} ${body}`;
+      }).join('\n');
+    } catch (_) {}
+
     const statusLines = [
       `*Solomon V4 Status*`,
       `✅ Online | 🧠 ${MODEL}`,
       `⏱ Uptime: ${uptimeStr}`,
+      ``,
+      `*Processes:*`,
+      procLines,
+      ``,
+      `*Email triage:* ${eGet('total')} total — 🚨${eGet('urgent')} / 📧${eGet('normal')} / 📭${eGet('newsletter')}`,
+      `  last email: ${eLast.slice(0, 16)}`,
+      ``,
+      `*Recent social posts:*`,
+      socialLines,
       ``,
       `*App Factory:*`,
       `  🔨 Active: ${activeProject ? activeProject.app_name + ' (' + activeProject.phases_complete + '/' + activeProject.phases_total + ')' : 'None'}`,
@@ -1077,6 +1138,53 @@ bot.onText(/^\/clear/, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
   messages.clear();
   bot.sendMessage(msg.chat.id, '🧹 Conversation history cleared.');
+});
+
+// /post <content> — rewrite + distribute to all connected social platforms.
+bot.onText(/^\/post\b/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const content = (msg.text || '').replace(/^\/post\b/i, '').trim();
+  if (!content) { bot.sendMessage(msg.chat.id, 'Usage: /post <content to distribute to all socials>').catch(() => {}); return; }
+  await handleCrossPost(content, msg.chat.id);
+});
+
+// /launch — start the 30-day book & merch launch campaign sequence.
+bot.onText(/^\/launch\b/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+  try {
+    const r = await executeTool('launch_campaign', {});
+    const out = r.ok ? `🚀 ${r.message || 'Campaign launched.'}` : `⚠️ ${r.error}`;
+    bot.sendMessage(msg.chat.id, out, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, out.replace(/[*_`]/g, '')));
+  } catch (e) {
+    bot.sendMessage(msg.chat.id, `❌ Launch error: ${e.message.slice(0, 150)}`).catch(() => {});
+  }
+});
+
+// /brief — send the morning brief on demand (same as the 6 AM job).
+bot.onText(/^\/brief\b/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+  try { await generateBrief(msg.chat.id); }
+  catch (e) { bot.sendMessage(msg.chat.id, `❌ Brief error: ${e.message.slice(0, 150)}`).catch(() => {}); }
+});
+
+// /help — list available commands.
+bot.onText(/^\/help\b/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const help = [
+    '*Solomon commands*',
+    '/status — processes, uptime, recent posts, email triage stats',
+    '/post <content> — rewrite + distribute to all socials',
+    '/launch — start the 30-day book & merch campaign',
+    '/brief — send the morning brief now',
+    '/help — this list',
+    '',
+    '_Also:_ /tasks  /budget  /memory  /queue  /clear',
+    '',
+    'Or just talk to me, or say "post this to all socials" with your content.'
+  ].join('\n');
+  bot.sendMessage(msg.chat.id, help, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, help.replace(/[*_`]/g, '')));
 });
 
 // ── TELEGRAM DOCUMENT HANDLER (Phase 8) ─────────────────────────────────
