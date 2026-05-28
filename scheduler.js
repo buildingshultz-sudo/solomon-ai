@@ -163,14 +163,16 @@ cron.schedule('*/30 * * * *', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// ITEM 16B — FACEBOOK COMMENTS MONITOR: Every 30 minutes
+// ITEM 16B — FACEBOOK COMMENTS MONITOR: Every 5 minutes
 // Check Building Shultz and Irish Craftsman pages for new comments.
-// Pass new comments to Claude to draft and post replies automatically.
+// For each NEW comment, alert the owner on Telegram with the commenter name,
+// the comment text, and a Claude-generated reply SUGGESTION. Does NOT auto-post —
+// the owner reviews and can ask Solomon to post via the reply_fb_comment tool.
 // ══════════════════════════════════════════════════════════════════════════
-cron.schedule("*/30 * * * *", async () => {
+cron.schedule("*/5 * * * *", async () => {
   const pages = [
-    { key: "building_shultz", token_env: "FB_BUILDING_SHULTZ_TOKEN" },
-    { key: "irish_craftsman", token_env: "FB_IRISH_CRAFTSMAN_TOKEN" }
+    { key: "building_shultz", label: "Building Shultz", token_env: "FB_BUILDING_SHULTZ_TOKEN" },
+    { key: "irish_craftsman", label: "Irish Craftsman", token_env: "FB_IRISH_CRAFTSMAN_TOKEN" }
   ];
   for (const pageInfo of pages) {
     const token = process.env[pageInfo.token_env];
@@ -179,37 +181,32 @@ cron.schedule("*/30 * * * *", async () => {
       const result = await executeTool("get_fb_comments", { page: pageInfo.key, post_limit: 5 });
       if (!result.ok || !result.new_comments || result.new_comments.length === 0) continue;
       console.log(`[SCHEDULER] FB comments: ${result.new_comments.length} new on ${pageInfo.key}`);
-      // Ask Claude to review and reply to each new comment
-      const commentSummary = result.new_comments.map(c =>
-        `Post: "${c.post_snippet}"\nComment ID: ${c.comment_id}\nFrom: ${c.from}\nText: "${c.text}"`
-      ).join("\n---\n");
-      const claudeResp = await anthropic.messages.create({
-        model: MODEL,
-        max_tokens: 2048,
-        system: "You are Solomon, Jed Shultzs AI chief-of-staff. Reply to Facebook comments on behalf of Jeds business pages (Building Shultz and Irish Craftsman) in a warm, professional, engaging tone. Keep replies concise (1-3 sentences). Reply to each comment using reply_fb_comment. Page: " + pageInfo.key,
-        tools: TOOL_DEFINITIONS,
-        tool_choice: { type: "any" },
-        messages: [{ role: "user", content: `New Facebook comments on the ${pageInfo.key} page need replies:\n\n${commentSummary}\n\nPlease reply to each comment now.` }]
-      });
-      // Execute any reply_fb_comment tool calls
-      let iterResp = claudeResp;
-      let iters = 0;
-      while ((iterResp.stop_reason === "tool_use" || iterResp.stop_reason === "pause_turn") && iters < 10) {
-        iters++;
-        if (iterResp.stop_reason === "pause_turn") {
-          iterResp = await anthropic.messages.create({ model: MODEL, max_tokens: 2048, system: "Reply to Facebook comments.", tools: TOOL_DEFINITIONS, messages: [{ role: "user", content: commentSummary }, { role: "assistant", content: iterResp.content }] });
-          continue;
+      for (const c of result.new_comments) {
+        // Generate a reply SUGGESTION only — text, never auto-posted.
+        let suggestion = "(could not generate a suggestion)";
+        try {
+          const sugResp = await anthropic.messages.create({
+            model: MODEL,
+            max_tokens: 400,
+            system: "You are Solomon, Jed Shultz's AI chief-of-staff, drafting a reply suggestion to a Facebook comment on one of his business pages (Building Shultz or Irish Craftsman). Write ONE warm, professional, engaging reply (1-3 sentences) that Jed could post as-is. Output only the reply text — no preamble, no quotation marks, no alternatives.",
+            messages: [{ role: "user", content: `Page: ${pageInfo.label}\nPost: "${c.post_snippet}"\nCommenter: ${c.from}\nComment: "${c.text}"\n\nDraft a suggested reply.` }]
+          });
+          const txt = (sugResp.content.find(b => b.type === "text") || {}).text;
+          if (txt && txt.trim()) suggestion = txt.trim();
+        } catch (sugErr) {
+          console.error(`[SCHEDULER] FB suggestion error (${pageInfo.key}):`, sugErr.message);
         }
-        const toolBlocks = iterResp.content.filter(b => b.type === "tool_use");
-        const toolResults = [];
-        for (const tb of toolBlocks) {
-          const tr = await executeTool(tb.name, tb.input);
-          toolResults.push({ type: "tool_result", tool_use_id: tb.id, content: JSON.stringify(tr) });
-        }
-        iterResp = await anthropic.messages.create({ model: MODEL, max_tokens: 2048, system: "Reply to Facebook comments.", tools: TOOL_DEFINITIONS, messages: [{ role: "user", content: commentSummary }, { role: "assistant", content: iterResp.content }, { role: "user", content: toolResults }] });
+        const alert =
+          `💬 *New Facebook comment* — ${pageInfo.label}\n\n` +
+          `*From:* ${c.from}\n` +
+          `*Comment:* ${c.text}\n` +
+          (c.post_snippet ? `*On post:* ${c.post_snippet}\n` : "") +
+          `\n*Suggested reply:*\n${suggestion}\n\n` +
+          `_Not posted. To post it, tell me: "reply to FB comment ${c.comment_id} on ${pageInfo.key}: <your text>"._`;
+        await bot.sendMessage(OWNER_ID, alert, { parse_mode: "Markdown" }).catch(() =>
+          bot.sendMessage(OWNER_ID, alert.replace(/[*_`]/g, "")).catch(() => {})
+        );
       }
-      const textBlocks = iterResp.content.filter(b => b.type === "text").map(b => b.text).join("\n");
-      await bot.sendMessage(OWNER_ID, `💬 *FB Comments Replied* (${pageInfo.key})\n${result.new_comments.length} comment(s) handled.\n${textBlocks.slice(0, 300)}`, { parse_mode: "Markdown" }).catch(() => {});
     } catch (err) {
       console.error(`[SCHEDULER] FB comment monitor error (${pageInfo.key}):`, err.message);
     }
@@ -534,7 +531,7 @@ console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
 console.log('  • Morning brief send: 6:00 AM CT daily');
 console.log('  • Shorts check: every 30 minutes');
-console.log('  • FB comment monitor: every 30 minutes');
+console.log('  • FB comment monitor: every 5 minutes (suggestion alerts, no auto-post)');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');
