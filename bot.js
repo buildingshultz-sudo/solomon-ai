@@ -157,10 +157,20 @@ const TELEGRAM_IMG_DIR = '/tmp/telegram_images';
 const _processedMsgIds = new Set();
 if (!fs.existsSync(TELEGRAM_IMG_DIR)) fs.mkdirSync(TELEGRAM_IMG_DIR, { recursive: true });
 
+const LOG_MAX_BYTES = 50 * 1024 * 1024; // 50MB hard cap per file
+
 function getLogFile() {
   const d = new Date();
   const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-  return path.join(LOG_DIR, `solomon-${ds}.log`);
+  const base = path.join(LOG_DIR, `solomon-${ds}.log`);
+  try {
+    if (fs.existsSync(base) && fs.statSync(base).size >= LOG_MAX_BYTES) {
+      let n = 1;
+      while (fs.existsSync(`${base}.${n}`)) n++;
+      fs.renameSync(base, `${base}.${n}`);
+    }
+  } catch (_) {}
+  return base;
 }
 
 function log(level, category, message, data) {
@@ -175,13 +185,13 @@ function log(level, category, message, data) {
   }
 }
 
-// Rotate logs older than 7 days (runs every 6h)
+// Rotate logs older than 7 days -- includes numbered rotation files (e.g. solomon-*.log.1)
 function rotateLogs() {
   try {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    fs.readdirSync(LOG_DIR).filter(f => f.startsWith('solomon-') && f.endsWith('.log')).forEach(f => {
+    fs.readdirSync(LOG_DIR).filter(f => f.startsWith('solomon-')).forEach(f => {
       const fp = path.join(LOG_DIR, f);
-      if (fs.statSync(fp).mtimeMs < cutoff) { fs.unlinkSync(fp); log('INFO', 'SYSTEM', `Rotated old log: ${f}`); }
+      if (fs.statSync(fp).mtimeMs < cutoff) { fs.unlinkSync(fp); }
     });
   } catch (_) {}
 }
@@ -490,7 +500,60 @@ function responseHasToolCall(responseContent) {
 }
 
 const ENFORCEMENT_PROMPT = `ENFORCEMENT: Your last response contained no tool calls. For file modification tasks, you MUST invoke file_write, file_edit, or vps_execute. Do not generate text describing the changes — make the actual tool call right now. Call the tool. Show me the { ok: true } result.`;
+
+// PC actions (screenshot, app launch, window listing, GUI) the file-task detector misses.
+const PC_TASK_PATTERNS = [
+  /\bscreenshot\b/i,
+  /\btake\s+(?:a\s+)?(?:pc\s+)?screen/i,
+  /\b(?:see|show|view)\s+(?:me\s+)?(?:my\s+|the\s+)?(?:pc\s+)?(?:screen|desktop)\b/i,
+  /\b(?:open|launch|start|fire\s+up)\s+(?:up\s+)?(?:notepad|chrome|firefox|edge|davinci|resolve|obs|file\s+explorer|explorer|powershell|cmd|command\s+prompt|terminal|word|excel|outlook|spotify|steam|discord|slack)\b/i,
+  /\b(?:list|show|what)\b.{0,30}\b(?:open\s+)?windows?\b/i,
+  /\bbring\s+(?:up|forward)\b/i,
+  /\bfocus\s+(?:on\s+)?(?:the\s+)?\w+\s+(?:window|app|tab)\b/i,
+  /\bclick\s+(?:on\s+)?(?:the\s+)?(?:button|link|icon|menu|tab|field)/i,
+  /\btype\s+(?:into|in)\s+(?:the\s+)?(?:window|app|field|box|search)/i,
+  /\bon\s+(?:my|the)\s+(?:pc|computer|desktop)\b/i
+];
+
+function isPcTask(text) {
+  if (!text) return false;
+  return PC_TASK_PATTERNS.some(p => p.test(text));
+}
+
+const PC_ENFORCEMENT_PROMPT = `ENFORCEMENT: Your last response contained no tool calls. The user requested a PC action (screenshot, app launch, window list, focus, click, type, etc.). You MUST invoke pc_screenshot, pc_launch_app, pc_get_windows, or pc_gui_control right now. Do not describe what you will do — make the actual tool call. Show me the { ok: true } result. PREFER pc_launch_app over pc_execute with Start-Process when opening apps; the launch-app endpoint verifies the window appeared.`;
 // ─────────────────────────────────────────────────────────────────────────
+
+// ── WEB SEARCH HISTORY SANITIZER ─────────────────────────────────────────
+// Anthropic rejects any web_search_tool_result block whose matching server_tool_use
+// is not present earlier in the message list. When the turn is rebuilt across
+// pause_turn / tool iterations, a result can outlive its tool_use and orphan,
+// returning a 400 that crashes the turn. Drop orphaned results (idempotent, safe).
+function sanitizeMessages(msgs) {
+  const serverToolUseIds = new Set();
+  const out = [];
+  for (const msg of msgs) {
+    if (!msg || !Array.isArray(msg.content)) { out.push(msg); continue; }
+    const content = [];
+    for (const block of msg.content) {
+      if (block && block.type === 'server_tool_use') {
+        serverToolUseIds.add(block.id);
+        content.push(block);
+      } else if (block && block.type === 'web_search_tool_result') {
+        if (serverToolUseIds.has(block.tool_use_id)) content.push(block); // paired — keep
+        // else orphaned — drop
+      } else {
+        content.push(block);
+      }
+    }
+    if (content.length > 0) {
+      out.push({ ...msg, content });
+    } else if (msg.role === 'assistant') {
+      // Stripping emptied the message — keep a placeholder to preserve role alternation
+      out.push({ ...msg, content: [{ type: 'text', text: '(web search results omitted)' }] });
+    }
+  }
+  return out;
+}
 
 // ── CORE LLM CALL ────────────────────────────────────────────────────────
 async function askSolomon(userMessage) {
@@ -540,7 +603,8 @@ async function askSolomon(userMessage) {
     max_tokens: MAX_TOKENS,
     system: cachedSystem,
     tools: cachedTools,
-    messages: history
+    messages: sanitizeMessages(history),
+    ...(isPcTask(userMessage) || isFileModificationTask(userMessage) ? { tool_choice: { type: 'any' } } : {})
   });
 
   // 5. Log tokens to budget
@@ -561,6 +625,7 @@ async function askSolomon(userMessage) {
   // 6. Tool loop — max 8 iterations to prevent infinite loops
   // Handles both custom tool_use (client-side) and server tools (pause_turn)
   let iterations = 0;
+  let workingHistory = [...history]; // accumulates all exchanges within this turn
   while ((response.stop_reason === 'tool_use' || response.stop_reason === 'pause_turn') && iterations < 25) {
     iterations++;
 
@@ -569,12 +634,13 @@ async function askSolomon(userMessage) {
       log('INFO', 'TOOL', 'Server tool pause_turn — continuing conversation');
       // Pass the response content back as assistant message to continue the turn
       const assistantMsg = { role: 'assistant', content: response.content };
+      workingHistory = [...workingHistory, assistantMsg];
       response = await anthropic.messages.create({
         model: MODEL,
         max_tokens: MAX_TOKENS,
         system: cachedSystem,
         tools: cachedTools,
-        messages: [...history, assistantMsg]
+        messages: sanitizeMessages(workingHistory)
       });
       budget.log({
         inputTokens: response.usage.input_tokens,
@@ -632,16 +698,16 @@ async function askSolomon(userMessage) {
       });
     }
 
-    // Add assistant response and tool results to history
+    // Accumulate this exchange so each API call in the loop sees the full chain
     const assistantMsg = { role: 'assistant', content: response.content };
     const toolResultMsg = { role: 'user', content: toolResults };
-
+    workingHistory = [...workingHistory, assistantMsg, toolResultMsg];
     response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: cachedSystem,
       tools: cachedTools,
-      messages: [...history, assistantMsg, toolResultMsg]
+      messages: sanitizeMessages(workingHistory)
     });
 
     budget.log({
@@ -652,25 +718,29 @@ async function askSolomon(userMessage) {
   }
 
   // ── HALLUCINATION ENFORCEMENT GATE ─────────────────────────────────────
-  // If this was a file task and Solomon returned only text (no tool call), force a retry
+  // If this was a file or PC task and Solomon returned only text (no tool call), force a retry
+  const _hgFileTask = isFileModificationTask(userMessage);
+  const _hgPcTask = !_hgFileTask && isPcTask(userMessage);
   if (
-    isFileModificationTask(userMessage) &&
+    (_hgFileTask || _hgPcTask) &&
     !responseHasToolCall(response.content) &&
     response.stop_reason === 'end_turn'
   ) {
-    log('WARN', 'HALLUCINATION', 'Text-only response to file modification task. Enforcing tool call.');
+    const _hgLabel = _hgFileTask ? 'file modification' : 'PC action';
+    const _hgPrompt = _hgFileTask ? ENFORCEMENT_PROMPT : PC_ENFORCEMENT_PROMPT;
+    log('WARN', 'HALLUCINATION', `Text-only response to ${_hgLabel} task. Enforcing tool call.`);
     // Give Solomon one more chance with explicit enforcement prompt
     const enforcedHistory = [
       ...history,
       { role: 'assistant', content: response.content },
-      { role: 'user', content: [{ type: 'text', text: ENFORCEMENT_PROMPT }] }
+      { role: 'user', content: [{ type: 'text', text: _hgPrompt }] }
     ];
     const enforced = await anthropic.messages.create({
       model: MODEL,
       max_tokens: MAX_TOKENS,
       system: cachedSystem,
       tools: cachedTools,
-      messages: enforcedHistory
+      messages: sanitizeMessages(enforcedHistory)
     });
     budget.log({
       inputTokens: enforced.usage.input_tokens,
@@ -711,7 +781,7 @@ async function askSolomon(userMessage) {
         max_tokens: MAX_TOKENS,
         system: cachedSystem,
         tools: cachedTools,
-        messages: [...enforcedHistory, assistantMsg, toolResultMsg]
+        messages: sanitizeMessages([...enforcedHistory, assistantMsg, toolResultMsg])
       });
       budget.log({
         inputTokens: response.usage.input_tokens,

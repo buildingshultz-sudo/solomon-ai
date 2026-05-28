@@ -151,6 +151,19 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME
   );
+  CREATE TABLE IF NOT EXISTS scheduled_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    page TEXT NOT NULL,
+    platform TEXT DEFAULT "facebook",
+    message TEXT NOT NULL,
+    link TEXT,
+    image_url TEXT,
+    scheduled_for DATETIME NOT NULL,
+    status TEXT DEFAULT "pending",
+    post_id TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    posted_at DATETIME
+  );
 `);
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {
@@ -490,4 +503,38 @@ const batchJobs = {
   }
 };
 
-module.exports = { messages, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };
+// ── SCHEDULED POSTS ────────────────────────────────────────────────────
+const scheduledPosts = {
+  add(page, platform, message, scheduledFor, link, imageUrl) {
+    return db.prepare(
+      "INSERT INTO scheduled_posts (page, platform, message, scheduled_for, link, image_url) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(page, platform || "facebook", message, scheduledFor, link || null, imageUrl || null);
+  },
+  getDue() {
+    return db.prepare(
+      "SELECT * FROM scheduled_posts WHERE status = pending AND scheduled_for <= datetime(now) ORDER BY scheduled_for ASC"
+    ).all();
+  },
+  markPosted(id, postId) {
+    db.prepare(
+      "UPDATE scheduled_posts SET status = posted, post_id = ?, posted_at = datetime(now) WHERE id = ?"
+    ).run(postId || null, id);
+  },
+  markFailed(id, error) {
+    db.prepare(
+      "UPDATE scheduled_posts SET status = failed WHERE id = ?"
+    ).run(id);
+  },
+  getAll(limit) {
+    return db.prepare(
+      "SELECT * FROM scheduled_posts ORDER BY scheduled_for DESC LIMIT ?"
+    ).all(limit || 20);
+  },
+  cancel(id) {
+    db.prepare(
+      "UPDATE scheduled_posts SET status = cancelled WHERE id = ? AND status = pending"
+    ).run(id);
+  }
+};
+
+module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };

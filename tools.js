@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles } = require('./memory');
+const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -919,6 +919,49 @@ const TOOL_DEFINITIONS = [
       required: ['batch_id']
     }
   }
+  ,{
+    name: "get_fb_comments",
+    description: "Fetch recent unread comments on Building Shultz or Irish Craftsman Facebook page posts. Automatically tracks last-seen timestamp so only new comments are returned. Use to monitor engagement and draft replies.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", enum: ["building_shultz", "irish_craftsman"], description: "Which Facebook page to check" },
+        post_limit: { type: "number", description: "Number of recent posts to scan for comments (default 5)" }
+      },
+      required: ["page"]
+    }
+  },
+  {
+    name: "reply_fb_comment",
+    description: "Post a reply to a Facebook comment on Building Shultz or Irish Craftsman pages.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", enum: ["building_shultz", "irish_craftsman"], description: "Which page the comment belongs to" },
+        comment_id: { type: "string", description: "The Facebook comment ID to reply to" },
+        message: { type: "string", description: "Reply text to post" }
+      },
+      required: ["page", "comment_id", "message"]
+    }
+  }
+  ,{
+    name: "schedule_social_post",
+    description: "Schedule a Facebook or Instagram post to be published at a future date/time. The scheduler will automatically publish it when due. Use ISO 8601 format for scheduled_for (e.g. 2026-06-01T09:00:00).",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", enum: ["building_shultz", "irish_craftsman"], description: "Which page to post to" },
+        platform: { type: "string", enum: ["facebook", "instagram"], description: "Platform (default: facebook)" },
+        message: { type: "string", description: "Post text content" },
+        scheduled_for: { type: "string", description: "ISO 8601 datetime for when to publish (e.g. 2026-06-01T09:00:00)" },
+        link: { type: "string", description: "Optional URL to include (Facebook only)" },
+        image_url: { type: "string", description: "Optional image URL (Instagram)" }
+      },
+      required: ["page", "message", "scheduled_for"]
+    }
+  }
+
+
 
 ];
 
@@ -935,17 +978,19 @@ function isLocalVPSPath(targetPath) {
 }
 
 // ── CORE READ-ONLY PATHS (can read but never write) ─────────────────────
-const CORE_READ_ONLY_PATHS = [
+// -- CORE PROTECTED PATHS (fully off-limits: no read, no write, no edit) --
+const CORE_PROTECTED_PATHS = [
   "/root/solomon-v4/bot.js",
   "/root/solomon-v4/tools.js",
   "/root/solomon-v4/scheduler.js",
+  "/root/solomon-v4/memory.js",
   "/root/solomon-v4/activity-logger.js"
 ];
 
-function isCoreReadOnlyPath(targetPath) {
+function isCoreProtectedPath(targetPath) {
   if (!targetPath) return false;
   const normForward = targetPath.replace(/\\/g, "/").toLowerCase();
-  return CORE_READ_ONLY_PATHS.some(f => normForward === f.toLowerCase());
+  return CORE_PROTECTED_PATHS.some(f => normForward === f.toLowerCase());
 }
 
 
@@ -953,10 +998,8 @@ function isCoreReadOnlyPath(targetPath) {
 async function executeWorkshopTool(name, input) {
   switch (name) {
     case 'file_read': {
-      // Allow read-only access to core files
-      if (isCoreReadOnlyPath(input.path)) {
-        const content = fs.readFileSync(input.path, 'utf8');
-        return { ok: true, path: input.path, content, size: content.length, note: 'READ-ONLY: Core file. Nathan must make code changes.' };
+      if (isCoreProtectedPath(input.path)) {
+        return { ok: false, error: 'OFF_LIMITS: Core bot files are fully protected. Only dashboard.html and dashboard.js may be edited.' };
       }
       workshopSafe(input.path);
       if (isLocalVPSPath(input.path)) {
@@ -970,8 +1013,8 @@ async function executeWorkshopTool(name, input) {
       return { ok: true, path: input.path, content: res.data.content, size: res.data.size };
     }
     case 'file_write': {
-      if (isCoreReadOnlyPath(input.path)) {
-        return { ok: false, error: 'WRITE_PROTECTED: Core files are read-only. Nathan must make code changes.' };
+      if (isCoreProtectedPath(input.path)) {
+        return { ok: false, error: 'OFF_LIMITS: Core bot files are fully protected. Only dashboard.html and dashboard.js may be edited.' };
       }
       workshopSafe(input.path);
       if (input.content.length > 51200) {
@@ -988,8 +1031,8 @@ async function executeWorkshopTool(name, input) {
       return { ok: true, path: input.path, bytes_written: res.data.bytes };
     }
     case 'file_edit': {
-      if (isCoreReadOnlyPath(input.path)) {
-        return { ok: false, error: 'WRITE_PROTECTED: Core files are read-only. Nathan must make code changes.' };
+      if (isCoreProtectedPath(input.path)) {
+        return { ok: false, error: 'OFF_LIMITS: Core bot files are fully protected. Only dashboard.html and dashboard.js may be edited.' };
       }
       workshopSafe(input.path);
       if (isLocalVPSPath(input.path)) {
@@ -1498,9 +1541,14 @@ async function executeTool(name, input) {
         const { execSync } = require('child_process');
         const cmd = input.command;
         // Safety: block commands that could modify core bot files
-        const isCoreFileWrite = /(?:sed|tee|echo|cat|>|nano|vi|vim).*\/root\/solomon-v4\/(bot|tools|memory|scheduler|pc-relay)\.js/.test(cmd);
-        if (isCoreFileWrite) {
+        // Block write-capable shell ops targeting non-dashboard solomon-v4 files
+        const targetsSolomonCore = /\/root\/solomon-v4\/(?!dashboard\.html|dashboard\.js|dashboard-improvements-todo\.md)[^\s'"]*/.test(cmd);
+        const isWriteOp = /(?:>|>>|\|\s*tee|sed\s+-i|cp|mv|patch|dd|chmod|chown|nano|vi|vim|node\s+-e)/.test(cmd);
+        if (targetsSolomonCore && isWriteOp) {
           return { ok: false, error: 'VPS_SAFETY: Cannot modify core Solomon files via shell. Dashboard files only.' };
+        }
+        if (/[>|]\s*\/root\/solomon-v4\/(?!dashboard)/.test(cmd)) {
+          return { ok: false, error: 'VPS_SAFETY: Cannot redirect output to core Solomon files.' };
         }
         try {
           const stdout = execSync(cmd, {
@@ -1874,6 +1922,77 @@ Output format (JSON):
           const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
           return { ok: false, error: 'Social post failed: ' + msg };
         }
+      }
+      case "get_fb_comments": {
+        const fbToken = input.page === "building_shultz"
+          ? process.env.FB_BUILDING_SHULTZ_TOKEN
+          : process.env.FB_IRISH_CRAFTSMAN_TOKEN;
+        const fbPageId = input.page === "building_shultz"
+          ? process.env.FB_BUILDING_SHULTZ_ID
+          : process.env.FB_IRISH_CRAFTSMAN_ID;
+        if (!fbToken || fbToken === "PLACEHOLDER") {
+          return { ok: false, error: "No FB token for page: " + input.page };
+        }
+        const postLimit = input.post_limit || 5;
+        const lastCheckKey = "fb_comments_last_check_" + input.page;
+        const lastCheck = mem.get("system", lastCheckKey) || "2000-01-01T00:00:00+0000";
+        try {
+          const feedResp = await axios.get(
+            "https://graph.facebook.com/v19.0/" + fbPageId + "/feed",
+            { params: { fields: "id,message,comments{id,message,from,created_time}", limit: postLimit, access_token: fbToken }, timeout: 15000 }
+          );
+          const now = new Date().toISOString();
+          const newComments = [];
+          for (const post of (feedResp.data.data || [])) {
+            for (const comment of ((post.comments && post.comments.data) || [])) {
+              if (comment.created_time > lastCheck) {
+                newComments.push({ post_id: post.id, post_snippet: (post.message || "").slice(0, 80), comment_id: comment.id, from: (comment.from && comment.from.name) || "unknown", text: comment.message, created_time: comment.created_time });
+              }
+            }
+          }
+          mem.set("system", lastCheckKey, now);
+          return { ok: true, page: input.page, new_comments: newComments, checked_at: now };
+        } catch (fbErr) {
+          const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
+          return { ok: false, error: "get_fb_comments failed: " + msg };
+        }
+      }
+      case "reply_fb_comment": {
+        const repToken = input.page === "building_shultz"
+          ? process.env.FB_BUILDING_SHULTZ_TOKEN
+          : process.env.FB_IRISH_CRAFTSMAN_TOKEN;
+        if (!repToken || repToken === "PLACEHOLDER") {
+          return { ok: false, error: "No FB token for page: " + input.page };
+        }
+        try {
+          const repResp = await axios.post(
+            "https://graph.facebook.com/v19.0/" + input.comment_id + "/comments",
+            { message: input.message, access_token: repToken },
+            { timeout: 10000 }
+          );
+          return { ok: true, reply_id: repResp.data.id, comment_id: input.comment_id };
+        } catch (fbErr) {
+          const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
+          return { ok: false, error: "reply_fb_comment failed: " + msg };
+        }
+      }
+      case "schedule_social_post": {
+        if (!input.page || !input.message || !input.scheduled_for) {
+          return { ok: false, error: "page, message, and scheduled_for are required" };
+        }
+        const scheduledDate = new Date(input.scheduled_for);
+        if (isNaN(scheduledDate.getTime())) {
+          return { ok: false, error: "Invalid scheduled_for datetime: " + input.scheduled_for };
+        }
+        const result = scheduledPosts.add(
+          input.page,
+          input.platform || "facebook",
+          input.message,
+          input.scheduled_for,
+          input.link || null,
+          input.image_url || null
+        );
+        return { ok: true, id: result.lastInsertRowid, page: input.page, platform: input.platform || "facebook", scheduled_for: input.scheduled_for, message_preview: input.message.slice(0, 80) };
       }
       // ITEM 31 - EMAIL via Gmail API (HTTPS - bypasses DigitalOcean SMTP block)
       case 'send_email': {
@@ -2318,11 +2437,26 @@ public class Wallpaper {
         );
         if (!res.data.ok) return res.data;
 
-        // Send screenshot to Jed via Telegram so he can see it
+        // Send screenshot directly via Telegram HTTP API — bot.js's `bot` instance is not in scope here.
+        const FormData = require('form-data');
         const imageBuffer = Buffer.from(res.data.base64, 'base64');
-        await bot.sendPhoto(process.env.TELEGRAM_CHAT_ID, imageBuffer, {
-          caption: `🖥️ PC Screenshot — ${new Date().toLocaleTimeString()}`
+        const form = new FormData();
+        form.append('chat_id', String(process.env.OWNER_CHAT_ID));
+        form.append('photo', imageBuffer, {
+          filename: `screenshot_${Date.now()}.png`,
+          contentType: 'image/png'
         });
+        form.append('caption', `🖥️ PC Screenshot — ${new Date().toLocaleTimeString()}`);
+        try {
+          await axios.post(
+            `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`,
+            form,
+            { headers: form.getHeaders(), maxContentLength: Infinity, maxBodyLength: Infinity, timeout: 30000 }
+          );
+        } catch (tgErr) {
+          const tgDetail = tgErr.response?.data || tgErr.message;
+          return { ok: false, error: 'Telegram sendPhoto failed', details: tgDetail, path: res.data.path };
+        }
 
         return {
           ok: true,

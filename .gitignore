@@ -8,3 +8,7 @@ logs/
 .pm2/
 .DS_Store
 output/
+*.bak
+*.bak.*
+*.backup
+*.backup-*

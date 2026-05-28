@@ -4,7 +4,7 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
-const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox } = require('./memory');
+const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 
@@ -16,11 +16,11 @@ const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
 console.log('[SCHEDULER] Starting cron jobs...');
 
 // ══════════════════════════════════════════════════════════════════════════
-// ITEM 15A — MORNING BRIEF PREPARATION: 3:45 AM CT daily
+// ITEM 15A — MORNING BRIEF PREPARATION: 5:45 AM CT daily
 // Compile all data into a structured brief and store it.
 // ══════════════════════════════════════════════════════════════════════════
-cron.schedule('45 3 * * *', async () => {
-  console.log('[SCHEDULER] Morning brief preparation running (3:45 AM)...');
+cron.schedule('45 5 * * *', async () => {
+  console.log('[SCHEDULER] Morning brief preparation running (5:45 AM)...');
   try {
     const result = await executeTool('prepare_morning_brief', {});
     if (result.ok) {
@@ -34,11 +34,11 @@ cron.schedule('45 3 * * *', async () => {
 }, { timezone: 'America/Chicago' });
 
 // ══════════════════════════════════════════════════════════════════════════
-// ITEM 15B — MORNING BRIEF SEND: 4:00 AM CT daily
+// ITEM 15B — MORNING BRIEF SEND: 6:00 AM CT daily
 // Read the compiled brief and send a formatted summary to Jed via Claude.
 // ══════════════════════════════════════════════════════════════════════════
-cron.schedule('0 4 * * *', async () => {
-  console.log('[SCHEDULER] Morning brief send running (4:00 AM)...');
+cron.schedule('0 6 * * *', async () => {
+  console.log('[SCHEDULER] Morning brief send running (6:00 AM)...');
   try {
     const compiledRaw = mem.get('system', 'morning_brief_compiled');
     const stale = getStaleTaskCount();
@@ -161,6 +161,101 @@ cron.schedule('*/30 * * * *', async () => {
     console.log('[SCHEDULER] Shorts check error (skipping):', err.message);
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 16B — FACEBOOK COMMENTS MONITOR: Every 30 minutes
+// Check Building Shultz and Irish Craftsman pages for new comments.
+// Pass new comments to Claude to draft and post replies automatically.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule("*/30 * * * *", async () => {
+  const pages = [
+    { key: "building_shultz", token_env: "FB_BUILDING_SHULTZ_TOKEN" },
+    { key: "irish_craftsman", token_env: "FB_IRISH_CRAFTSMAN_TOKEN" }
+  ];
+  for (const pageInfo of pages) {
+    const token = process.env[pageInfo.token_env];
+    if (!token || token === "PLACEHOLDER") continue;
+    try {
+      const result = await executeTool("get_fb_comments", { page: pageInfo.key, post_limit: 5 });
+      if (!result.ok || !result.new_comments || result.new_comments.length === 0) continue;
+      console.log(`[SCHEDULER] FB comments: ${result.new_comments.length} new on ${pageInfo.key}`);
+      // Ask Claude to review and reply to each new comment
+      const commentSummary = result.new_comments.map(c =>
+        `Post: "${c.post_snippet}"\nComment ID: ${c.comment_id}\nFrom: ${c.from}\nText: "${c.text}"`
+      ).join("\n---\n");
+      const claudeResp = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 2048,
+        system: "You are Solomon, Jed Shultzs AI chief-of-staff. Reply to Facebook comments on behalf of Jeds business pages (Building Shultz and Irish Craftsman) in a warm, professional, engaging tone. Keep replies concise (1-3 sentences). Reply to each comment using reply_fb_comment. Page: " + pageInfo.key,
+        tools: TOOL_DEFINITIONS,
+        tool_choice: { type: "any" },
+        messages: [{ role: "user", content: `New Facebook comments on the ${pageInfo.key} page need replies:\n\n${commentSummary}\n\nPlease reply to each comment now.` }]
+      });
+      // Execute any reply_fb_comment tool calls
+      let iterResp = claudeResp;
+      let iters = 0;
+      while ((iterResp.stop_reason === "tool_use" || iterResp.stop_reason === "pause_turn") && iters < 10) {
+        iters++;
+        if (iterResp.stop_reason === "pause_turn") {
+          iterResp = await anthropic.messages.create({ model: MODEL, max_tokens: 2048, system: "Reply to Facebook comments.", tools: TOOL_DEFINITIONS, messages: [{ role: "user", content: commentSummary }, { role: "assistant", content: iterResp.content }] });
+          continue;
+        }
+        const toolBlocks = iterResp.content.filter(b => b.type === "tool_use");
+        const toolResults = [];
+        for (const tb of toolBlocks) {
+          const tr = await executeTool(tb.name, tb.input);
+          toolResults.push({ type: "tool_result", tool_use_id: tb.id, content: JSON.stringify(tr) });
+        }
+        iterResp = await anthropic.messages.create({ model: MODEL, max_tokens: 2048, system: "Reply to Facebook comments.", tools: TOOL_DEFINITIONS, messages: [{ role: "user", content: commentSummary }, { role: "assistant", content: iterResp.content }, { role: "user", content: toolResults }] });
+      }
+      const textBlocks = iterResp.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+      await bot.sendMessage(OWNER_ID, `💬 *FB Comments Replied* (${pageInfo.key})\n${result.new_comments.length} comment(s) handled.\n${textBlocks.slice(0, 300)}`, { parse_mode: "Markdown" }).catch(() => {});
+    } catch (err) {
+      console.error(`[SCHEDULER] FB comment monitor error (${pageInfo.key}):`, err.message);
+    }
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 16C — SCHEDULED POSTS PUBLISHER: Every 5 minutes
+// Publish any social posts whose scheduled_for time has passed.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule("*/5 * * * *", async () => {
+  const due = scheduledPosts.getDue();
+  if (!due.length) return;
+  console.log(`[SCHEDULER] Scheduled posts: ${due.length} due`);
+  for (const post of due) {
+    try {
+      const result = await executeTool("social_post", {
+        page: post.page,
+        platform: post.platform || "facebook",
+        message: post.message,
+        link: post.link || undefined,
+        image_url: post.image_url || undefined
+      });
+      if (result.ok) {
+        scheduledPosts.markPosted(post.id, result.post_id);
+        await bot.sendMessage(OWNER_ID,
+          `✅ *Scheduled post published* (${post.page} / ${post.platform})\n"${post.message.slice(0, 100)}..."`,
+          { parse_mode: "Markdown" }
+        ).catch(() => {});
+        console.log(`[SCHEDULER] Scheduled post ${post.id} published: ${result.post_id}`);
+      } else {
+        scheduledPosts.markFailed(post.id, result.error);
+        await bot.sendMessage(OWNER_ID,
+          `❌ *Scheduled post failed* (${post.page}): ${result.error}`,
+          { parse_mode: "Markdown" }
+        ).catch(() => {});
+        console.error(`[SCHEDULER] Scheduled post ${post.id} failed: ${result.error}`);
+      }
+    } catch (err) {
+      scheduledPosts.markFailed(post.id, err.message);
+      console.error(`[SCHEDULER] Scheduled post ${post.id} error: ${err.message}`);
+    }
+  }
+});
+
 
 // ══════════════════════════════════════════════════════════════════════════
 // ITEM 17 — WEEKLY REPORT: Monday 6 AM CT
@@ -436,9 +531,11 @@ setTimeout(async () => {
 }, 3000);
 
 console.log('[SCHEDULER] Running. Cron jobs active:');
-console.log('  • Morning brief prep: 3:45 AM CT daily');
-console.log('  • Morning brief send: 4:00 AM CT daily');
+console.log('  • Morning brief prep: 5:45 AM CT daily');
+console.log('  • Morning brief send: 6:00 AM CT daily');
 console.log('  • Shorts check: every 30 minutes');
+console.log('  • FB comment monitor: every 30 minutes');
+console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');
 console.log('  • Stale task cleanup: every hour');
