@@ -7,6 +7,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
+const fs = require('fs');
+const path = require('path');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID);
@@ -583,12 +585,102 @@ setTimeout(async () => {
   }
 }, 3000);
 
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 17 — 30-DAY BOOK & MERCH CAMPAIGN: Facebook auto-post at 7 AM & 6 PM CT
+// Reads campaign_30day_book_merch.md. Gated behind /launch (mem campaign.active).
+// Facebook posts auto; Instagram + YouTube community versions go to Telegram.
+// ══════════════════════════════════════════════════════════════════════════
+function loadCampaignDays() {
+  try {
+    const fp = path.join(__dirname, 'campaign_30day_book_merch.md');
+    if (!fs.existsSync(fp)) return [];
+    const lines = fs.readFileSync(fp, 'utf8').split(/\r?\n/);
+    const days = []; let cur = null;
+    for (const line of lines) {
+      const m = line.match(/^###\s*DAY\s*(\d+)\s*[—\-:]\s*(.*)$/i);
+      if (m) { if (cur) days.push(cur); cur = { day: parseInt(m[1], 10), title: m[2].trim(), morning: '', evening: '' }; continue; }
+      if (!cur) continue;
+      const mm = line.match(/^MORNING:\s*(.*)$/i); if (mm) { cur.morning = mm[1].trim(); continue; }
+      const me = line.match(/^EVENING:\s*(.*)$/i); if (me) { cur.evening = me[1].trim(); continue; }
+    }
+    if (cur) days.push(cur);
+    return days;
+  } catch (_) { return []; }
+}
+
+async function runCampaignSlot(slot) {
+  try {
+    if (mem.get('campaign', 'active') !== 'true') return;
+    const startStr = mem.get('campaign', 'start_date');
+    if (!startStr) return;
+    const start = new Date(startStr + 'T00:00:00');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dayIndex = Math.round((today - start) / 86400000) + 1;
+    if (dayIndex < 1) return;
+    const days = loadCampaignDays();
+    if (dayIndex > 30 || dayIndex > days.length) {
+      mem.set('campaign', 'active', 'false');
+      await bot.sendMessage(OWNER_ID, '🏁 30-day book & merch campaign complete. Auto-posting stopped.').catch(() => {});
+      return;
+    }
+    const plan = days.find(d => d.day === dayIndex);
+    if (!plan) return;
+    const brief = slot === 'morning' ? plan.morning : plan.evening;
+    if (!brief) return;
+    console.log(`[SCHEDULER] Campaign day ${dayIndex}/30 (${slot}) firing...`);
+
+    let variants;
+    try {
+      const resp = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1500,
+        system: "You are Solomon, social media manager for Jed Shultz's brand Building Shultz, running a launch campaign for his book 'Motivation for Tough Guys' and the Building Shultz Gear merch line. Voice: direct, practical, no fluff, grounded in real jobsite experience; blue-collar and motivational, never corporate. Use a 'link in bio' style CTA (no fake URLs). Return ONLY compact JSON with keys \"facebook\" (1-2 short paragraphs + a clear CTA), \"instagram_caption\" (punchy, scannable, a few tasteful emoji), \"instagram_hashtags\" (8-15 relevant hashtags, space-separated), \"youtube_community\" (short community post ending with a question). No preamble, no code fences.",
+        messages: [{ role: 'user', content: `Day ${dayIndex} of 30 — ${plan.title}\nSlot: ${slot}\nPost brief: ${brief}` }]
+      });
+      budget.log({ inputTokens: resp.usage.input_tokens, outputTokens: resp.usage.output_tokens, model: MODEL });
+      const txt = (resp.content.find(b => b.type === 'text') || {}).text || '';
+      const mt = txt.match(/\{[\s\S]*\}/);
+      variants = mt ? JSON.parse(mt[0]) : null;
+    } catch (e) {
+      console.error('[SCHEDULER] Campaign generate error:', e.message);
+      await bot.sendMessage(OWNER_ID, `⚠️ Campaign day ${dayIndex} (${slot}) generation failed: ${e.message.slice(0, 120)}`).catch(() => {});
+      return;
+    }
+    if (!variants || !variants.facebook) {
+      await bot.sendMessage(OWNER_ID, `⚠️ Campaign day ${dayIndex} (${slot}): could not parse post content.`).catch(() => {});
+      return;
+    }
+
+    // Auto-post Facebook to both pages (social_post falls back to the spare token)
+    const fbResults = [];
+    for (const [pageKey, label] of [['building_shultz', 'Building Shultz'], ['irish_craftsman', 'Irish Craftsman']]) {
+      try {
+        const r = await executeTool('social_post', { page: pageKey, platform: 'facebook', message: variants.facebook });
+        fbResults.push(`${r.ok ? '✅' : '❌'} ${label}${r.ok ? ` (id ${r.post_id})` : `: ${r.error || 'failed'}`}`);
+      } catch (e) { fbResults.push(`❌ ${label}: ${e.message.slice(0, 80)}`); }
+    }
+
+    const send = (m) => bot.sendMessage(OWNER_ID, m, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, m.replace(/[*_`]/g, '')).catch(() => {}));
+    await send(`📅 *Campaign Day ${dayIndex}/30 — ${slot}*\n_${plan.title}_\n\n📘 *Facebook (auto-posted):*\n${fbResults.join('\n')}`);
+    await send(`📸 *Instagram — copy/paste:*\n\n${variants.instagram_caption || ''}\n\n${variants.instagram_hashtags || ''}`);
+    await send(`▶️ *YouTube community — copy/paste:*\n\n${variants.youtube_community || ''}`);
+    try { mem.set('social_log', new Date().toISOString(), JSON.stringify({ kind: `campaign d${dayIndex} ${slot}`, fb: fbResults })); } catch (_) {}
+    console.log(`[SCHEDULER] Campaign day ${dayIndex} (${slot}) done: ${fbResults.join('; ')}`);
+  } catch (err) {
+    console.error('[SCHEDULER] Campaign slot error:', err.message);
+  }
+}
+
+cron.schedule('0 7 * * *', () => runCampaignSlot('morning'), { timezone: 'America/Chicago' });
+cron.schedule('0 18 * * *', () => runCampaignSlot('evening'), { timezone: 'America/Chicago' });
+
 console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
 console.log('  • Morning brief send: 6:00 AM CT daily');
 console.log('  • Shorts check: every 30 minutes');
 console.log('  • FB comment monitor: every 5 minutes (suggestion alerts, no auto-post)');
 console.log('  • Email triage (IMAP): every 5 minutes');
+console.log('  • Book & merch campaign: 7 AM + 6 PM CT (when armed via /launch)');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');

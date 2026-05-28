@@ -287,6 +287,16 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'launch_campaign',
+    description: 'Arm the 30-day Building Shultz book & merch launch campaign. Sets it active with today as Day 1; the scheduler then auto-posts to Facebook at 7 AM & 6 PM CT and sends Instagram/YouTube versions to Telegram for manual posting. Pass action:"stop" to deactivate.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['start', 'stop'], description: 'start (default) arms the campaign; stop deactivates it' }
+      }
+    }
+  },
+  {
     name: 'generate_voice',
     description: 'Generate speech audio from text using ElevenLabs API. Returns audio file path on VPS.',
     input_schema: {
@@ -2012,6 +2022,18 @@ Output format (JSON):
           input.image_url || null
         );
         return { ok: true, id: result.lastInsertRowid, page: input.page, platform: input.platform || "facebook", scheduled_for: input.scheduled_for, message_preview: input.message.slice(0, 80) };
+      }
+      // 30-DAY CAMPAIGN — arm/disarm the book & merch launch (scheduler fires posts)
+      case 'launch_campaign': {
+        if (input && input.action === 'stop') {
+          mem.set('campaign', 'active', 'false');
+          return { ok: true, message: 'Campaign stopped — no further auto-posts.' };
+        }
+        const startDay = new Date().toISOString().slice(0, 10);
+        mem.set('campaign', 'active', 'true');
+        mem.set('campaign', 'start_date', startDay);
+        mem.set('campaign', 'started_at', new Date().toISOString());
+        return { ok: true, message: '30-day book & merch campaign armed (Day 1 = ' + startDay + '). Facebook auto-posts at 7 AM & 6 PM CT; Instagram + YouTube versions go to Telegram for manual posting. First post fires at the next 7 AM or 6 PM CT slot.' };
       }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
