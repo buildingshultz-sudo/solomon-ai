@@ -11,7 +11,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
-const { TOOL_DEFINITIONS, executeTool } = require('./tools');
+const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
 const activityLogger = require("./activity-logger");
 const parallelTaskManager = require('./parallel_task_manager');
 const sharp = require('sharp');
@@ -854,10 +854,14 @@ async function askSolomon(userMessage) {
 }
 
 // ── SOCIAL CROSS-POST ─────────────────────────────────────────────────────
-// Triggered by "post this to all socials". Rewrites the content per platform
-// with Claude, AUTO-POSTS to both Facebook pages (tokens confirmed working),
-// and hands back ready-to-paste Instagram + YouTube versions via Telegram
-// (IG needs business verification; YT community posts aren't API-posted here).
+// Triggered by "post this to all socials" (and /post). Rewrites the content per
+// platform with Claude, then AUTO-POSTS where the platform + token actually allow:
+//  • Facebook — auto-posts to both pages (falls back to FACEBOOK_PAGE_TOKEN if a
+//    page token is expired).
+//  • Instagram — auto-posts only if a Business account is linked AND an image is
+//    supplied (IG feed posts can't be text-only); otherwise hands back the caption.
+//  • YouTube community — always handed back: the YouTube Data API has no
+//    community-post endpoint, so it can't be auto-posted even with a valid token.
 async function handleCrossPost(content, chatId) {
   bot.sendChatAction(chatId, 'typing').catch(() => {});
   log('INFO', 'SOCIAL', 'Cross-post requested', { preview: content.slice(0, 80) });
@@ -882,7 +886,15 @@ async function handleCrossPost(content, chatId) {
     return;
   }
 
-  // Auto-post the Facebook version to both pages
+  // Detect which platforms we can auto-post to right now (live token/account check).
+  let auth;
+  try { auth = await getSocialAuthStatus(); }
+  catch (e) { auth = { youtube: { tokenValid: false }, facebook: {}, instagram: {} }; }
+
+  const sendSafe = (m) => bot.sendMessage(chatId, m, { parse_mode: 'Markdown' }).catch(() =>
+    bot.sendMessage(chatId, m.replace(/[*_`]/g, '')).catch(() => {}));
+
+  // ── Facebook: auto-post to both pages (social_post falls back to the spare token) ──
   const fbResults = [];
   for (const [pageKey, pageLabel] of [['building_shultz', 'Building Shultz'], ['irish_craftsman', 'Irish Craftsman']]) {
     try {
@@ -892,14 +904,33 @@ async function handleCrossPost(content, chatId) {
       fbResults.push(`❌ ${pageLabel}: ${e.message.slice(0, 100)}`);
     }
   }
-
-  const sendSafe = (m) => bot.sendMessage(chatId, m, { parse_mode: 'Markdown' }).catch(() =>
-    bot.sendMessage(chatId, m.replace(/[*_`]/g, '')).catch(() => {}));
-
   await sendSafe(`📘 *Facebook — auto-posted*\n${fbResults.join('\n')}`);
-  await sendSafe(`📸 *Instagram — copy/paste* (API needs business verification)\n\n${variants.instagram_caption || ''}\n\n${variants.instagram_hashtags || ''}`);
-  await sendSafe(`▶️ *YouTube community post — copy/paste*\n\n${variants.youtube_community || ''}`);
-  log('INFO', 'SOCIAL', 'Cross-post complete', { fb: fbResults.join('; ') });
+
+  // ── Instagram: auto-post only if a Business account is linked AND we have an image. ──
+  const igReady = !!(auth.instagram && ((auth.instagram.building_shultz && auth.instagram.building_shultz.ready) || (auth.instagram.irish_craftsman && auth.instagram.irish_craftsman.ready)));
+  const igCaption = `${variants.instagram_caption || ''}\n\n${variants.instagram_hashtags || ''}`.trim();
+  if (igReady && variants.image_url) {
+    const igPage = (auth.instagram.building_shultz && auth.instagram.building_shultz.ready) ? 'building_shultz' : 'irish_craftsman';
+    try {
+      const r = await executeTool('social_post', { page: igPage, platform: 'instagram', message: variants.instagram_caption, image_url: variants.image_url });
+      await sendSafe(r.ok ? `📸 *Instagram — auto-posted* (id ${r.post_id})` : `📸 *Instagram — paste manually* (${r.error})\n\n${igCaption}`);
+    } catch (e) {
+      await sendSafe(`📸 *Instagram — paste manually* (${e.message.slice(0, 80)})\n\n${igCaption}`);
+    }
+  } else {
+    const igReason = igReady
+      ? 'account connected, but a post needs an image — paste this with a photo'
+      : 'no IG Business account linked yet — paste manually';
+    await sendSafe(`📸 *Instagram — ${igReason}*\n\n${igCaption}`);
+  }
+
+  // ── YouTube community: no API endpoint exists, so always hand back for manual posting. ──
+  const ytNote = (auth.youtube && auth.youtube.tokenValid)
+    ? 'token valid, but YouTube has no API for community posts — paste manually'
+    : 'paste manually';
+  await sendSafe(`▶️ *YouTube community post — ${ytNote}*\n\n${variants.youtube_community || ''}`);
+
+  log('INFO', 'SOCIAL', 'Cross-post complete', { fb: fbResults.join('; '), igReady, yt: !!(auth.youtube && auth.youtube.tokenValid) });
 }
 
 // ── TELEGRAM MESSAGE HANDLER ─────────────────────────────────────────────

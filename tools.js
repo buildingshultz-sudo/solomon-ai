@@ -1890,48 +1890,57 @@ Output format (JSON):
 
       // ITEM 30 — SOCIAL POSTING (Facebook + Instagram)
       case 'social_post': {
-        const pageToken = input.page === 'building_shultz'
-          ? process.env.FB_BUILDING_SHULTZ_TOKEN
-          : process.env.FB_IRISH_CRAFTSMAN_TOKEN;
         const pageId = input.page === 'building_shultz'
           ? process.env.FB_BUILDING_SHULTZ_ID
           : process.env.FB_IRISH_CRAFTSMAN_ID;
-        if (!pageToken || pageToken === 'PLACEHOLDER') {
-          return { ok: false, error: 'No token for page: ' + input.page + '. Set FB_BUILDING_SHULTZ_TOKEN or FB_IRISH_CRAFTSMAN_TOKEN in .env.' };
+        // Candidate tokens in priority order. FACEBOOK_PAGE_TOKEN is a valid spare for
+        // Building Shultz, so if the page-specific token is expired we still post.
+        const tokenCandidates = (input.page === 'building_shultz'
+          ? [process.env.FB_BUILDING_SHULTZ_TOKEN, process.env.FACEBOOK_PAGE_TOKEN]
+          : [process.env.FB_IRISH_CRAFTSMAN_TOKEN]
+        ).filter(t => t && t !== 'PLACEHOLDER');
+        if (!tokenCandidates.length) {
+          return { ok: false, error: 'No token for page: ' + input.page + '. Set FB_BUILDING_SHULTZ_TOKEN / FB_IRISH_CRAFTSMAN_TOKEN (or FACEBOOK_PAGE_TOKEN) in .env.' };
         }
         const platform = input.platform || 'facebook';
-        try {
-          if (platform === 'instagram') {
-            const igResp = await axios.get(
-              'https://graph.facebook.com/v19.0/' + pageId + '?fields=instagram_business_account&access_token=' + pageToken,
-              { timeout: 10000 }
-            );
-            const igId = igResp.data.instagram_business_account && igResp.data.instagram_business_account.id;
-            const containerResp = await axios.post(
-              'https://graph.facebook.com/v19.0/' + igId + '/media',
-              { caption: input.message, image_url: input.image_url, access_token: pageToken },
-              { timeout: 15000 }
-            );
-            const publishResp = await axios.post(
-              'https://graph.facebook.com/v19.0/' + igId + '/media_publish',
-              { creation_id: containerResp.data.id, access_token: pageToken },
-              { timeout: 15000 }
-            );
-            return { ok: true, post_id: publishResp.data.id, platform: 'instagram', page: input.page };
-          } else {
-            const fbBody = { message: input.message, access_token: pageToken };
-            if (input.link) fbBody.link = input.link;
-            const fbResp = await axios.post(
-              'https://graph.facebook.com/v19.0/' + pageId + '/feed',
-              fbBody,
-              { timeout: 10000 }
-            );
-            return { ok: true, post_id: fbResp.data.id, platform: 'facebook', page: input.page };
+        let lastErr = 'no candidate token succeeded';
+        for (const pageToken of tokenCandidates) {
+          try {
+            if (platform === 'instagram') {
+              const igResp = await axios.get(
+                'https://graph.facebook.com/v19.0/' + pageId + '?fields=instagram_business_account&access_token=' + pageToken,
+                { timeout: 10000 }
+              );
+              const igId = igResp.data.instagram_business_account && igResp.data.instagram_business_account.id;
+              if (!igId) return { ok: false, error: 'No Instagram Business account linked to the ' + input.page + ' page.' };
+              if (!input.image_url) return { ok: false, error: 'Instagram requires an image_url — IG feed posts cannot be text-only.' };
+              const containerResp = await axios.post(
+                'https://graph.facebook.com/v19.0/' + igId + '/media',
+                { caption: input.message, image_url: input.image_url, access_token: pageToken },
+                { timeout: 15000 }
+              );
+              const publishResp = await axios.post(
+                'https://graph.facebook.com/v19.0/' + igId + '/media_publish',
+                { creation_id: containerResp.data.id, access_token: pageToken },
+                { timeout: 15000 }
+              );
+              return { ok: true, post_id: publishResp.data.id, platform: 'instagram', page: input.page };
+            } else {
+              const fbBody = { message: input.message, access_token: pageToken };
+              if (input.link) fbBody.link = input.link;
+              const fbResp = await axios.post(
+                'https://graph.facebook.com/v19.0/' + pageId + '/feed',
+                fbBody,
+                { timeout: 10000 }
+              );
+              return { ok: true, post_id: fbResp.data.id, platform: 'facebook', page: input.page };
+            }
+          } catch (fbErr) {
+            lastErr = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
+            // expired/invalid token — fall through and try the next candidate
           }
-        } catch (fbErr) {
-          const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
-          return { ok: false, error: 'Social post failed: ' + msg };
         }
+        return { ok: false, error: 'Social post failed: ' + lastErr };
       }
       case "get_fb_comments": {
         const fbToken = input.page === "building_shultz"
@@ -2761,4 +2770,55 @@ public class Wallpaper {
   }
 }
 
-module.exports = { TOOL_DEFINITIONS, executeTool };
+// ── SOCIAL AUTH STATUS ─────────────────────────────────────────────────────
+// Live check of which social platforms Solomon can auto-post to right now.
+// Returns booleans/ids only (never tokens). Used by cross-post, /status, campaign.
+async function getSocialAuthStatus() {
+  const status = {
+    youtube: { tokenValid: false, canAutoPostCommunity: false }, // Data API has no community-post endpoint
+    facebook: {},
+    instagram: {}
+  };
+  // YouTube OAuth token validity
+  try {
+    if (process.env.YOUTUBE_REFRESH_TOKEN && process.env.YOUTUBE_REFRESH_TOKEN !== 'PLACEHOLDER') {
+      await axios.post('https://oauth2.googleapis.com/token', {
+        client_id: process.env.YOUTUBE_CLIENT_ID,
+        client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+        refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+        grant_type: 'refresh_token'
+      }, { timeout: 12000 });
+      status.youtube.tokenValid = true;
+    }
+  } catch (e) {
+    status.youtube.error = (e.response && e.response.data && e.response.data.error_description) || e.message;
+  }
+  // Facebook page tokens + linked Instagram business accounts (try spare token too)
+  const pages = [
+    { key: 'building_shultz', id: process.env.FB_BUILDING_SHULTZ_ID, tokens: [process.env.FB_BUILDING_SHULTZ_TOKEN, process.env.FACEBOOK_PAGE_TOKEN] },
+    { key: 'irish_craftsman', id: process.env.FB_IRISH_CRAFTSMAN_ID, tokens: [process.env.FB_IRISH_CRAFTSMAN_TOKEN] }
+  ];
+  for (const p of pages) {
+    const fb = { canPost: false };
+    const ig = { ready: false };
+    const cands = (p.tokens || []).filter(t => t && t !== 'PLACEHOLDER');
+    for (const tk of cands) {
+      try {
+        const r = await axios.get('https://graph.facebook.com/v19.0/' + p.id, {
+          params: { fields: 'name,instagram_business_account', access_token: tk }, timeout: 12000
+        });
+        fb.canPost = true;
+        fb.pageName = r.data.name;
+        if (r.data.instagram_business_account) { ig.ready = true; ig.igId = r.data.instagram_business_account.id; }
+        break;
+      } catch (e) {
+        fb.error = (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message;
+      }
+    }
+    status.facebook[p.key] = fb;
+    status.instagram[p.key] = ig;
+  }
+  return status;
+}
+
+module.exports = { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus };
