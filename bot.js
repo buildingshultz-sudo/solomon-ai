@@ -853,6 +853,55 @@ async function askSolomon(userMessage) {
   return finalText;
 }
 
+// ── SOCIAL CROSS-POST ─────────────────────────────────────────────────────
+// Triggered by "post this to all socials". Rewrites the content per platform
+// with Claude, AUTO-POSTS to both Facebook pages (tokens confirmed working),
+// and hands back ready-to-paste Instagram + YouTube versions via Telegram
+// (IG needs business verification; YT community posts aren't API-posted here).
+async function handleCrossPost(content, chatId) {
+  bot.sendChatAction(chatId, 'typing').catch(() => {});
+  log('INFO', 'SOCIAL', 'Cross-post requested', { preview: content.slice(0, 80) });
+  let variants;
+  try {
+    const resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      system: "You are Solomon, social media manager for Jed Shultz's construction brands (Building Shultz and Irish Craftsman). Rewrite the owner's raw content into platform-optimized posts. Voice: direct, practical, no fluff, grounded in real jobsite experience. Return ONLY compact JSON with exactly these keys: \"facebook\" (1-2 short paragraphs, conversational, CTA-friendly, minimal hashtags), \"instagram_caption\" (punchy and scannable, a few tasteful emoji, max 2200 chars, no hashtags here), \"instagram_hashtags\" (a single string of 8-15 relevant hashtags separated by spaces), \"youtube_community\" (one short community-post paragraph ending with a question to drive engagement). No preamble, no markdown code fences.",
+      messages: [{ role: 'user', content: `Raw content to adapt for all platforms:\n\n${content}` }]
+    });
+    const txt = (resp.content.find(b => b.type === 'text') || {}).text || '';
+    const m = txt.match(/\{[\s\S]*\}/);
+    variants = m ? JSON.parse(m[0]) : null;
+  } catch (e) {
+    log('ERROR', 'SOCIAL', 'Rewrite failed', { error: e.message });
+    bot.sendMessage(chatId, `❌ Couldn't generate social versions: ${e.message.slice(0, 150)}`).catch(() => {});
+    return;
+  }
+  if (!variants || !variants.facebook) {
+    bot.sendMessage(chatId, '❌ Could not parse platform versions from Claude. Try rephrasing the content.').catch(() => {});
+    return;
+  }
+
+  // Auto-post the Facebook version to both pages
+  const fbResults = [];
+  for (const [pageKey, pageLabel] of [['building_shultz', 'Building Shultz'], ['irish_craftsman', 'Irish Craftsman']]) {
+    try {
+      const r = await executeTool('social_post', { page: pageKey, platform: 'facebook', message: variants.facebook });
+      fbResults.push(`${r.ok ? '✅' : '❌'} ${pageLabel}${r.ok ? ` (id ${r.post_id})` : `: ${r.error || 'failed'}`}`);
+    } catch (e) {
+      fbResults.push(`❌ ${pageLabel}: ${e.message.slice(0, 100)}`);
+    }
+  }
+
+  const sendSafe = (m) => bot.sendMessage(chatId, m, { parse_mode: 'Markdown' }).catch(() =>
+    bot.sendMessage(chatId, m.replace(/[*_`]/g, '')).catch(() => {}));
+
+  await sendSafe(`📘 *Facebook — auto-posted*\n${fbResults.join('\n')}`);
+  await sendSafe(`📸 *Instagram — copy/paste* (API needs business verification)\n\n${variants.instagram_caption || ''}\n\n${variants.instagram_hashtags || ''}`);
+  await sendSafe(`▶️ *YouTube community post — copy/paste*\n\n${variants.youtube_community || ''}`);
+  log('INFO', 'SOCIAL', 'Cross-post complete', { fb: fbResults.join('; ') });
+}
+
 // ── TELEGRAM MESSAGE HANDLER ─────────────────────────────────────────────
 bot.on('message', async (msg) => {
   // Only respond to Jed
@@ -881,6 +930,17 @@ bot.on('message', async (msg) => {
   // ── END PHOTO HANDLER ────────────────────────────────────────────────
   log('INFO', 'MSG', `Jed: ${text.slice(0, 100)}`);
   activityLogger.logActivity('message_received', { summary: text.slice(0, 100) });
+
+  // ── CROSS-POST INTERCEPT: "post this to all socials" ──────────────────
+  if (/post this to all socials/i.test(text)) {
+    const content = text.replace(/post this to all socials/i, '').replace(/^[\s:,\-–—]+|[\s:,\-–—]+$/g, '').trim();
+    if (!content) {
+      bot.sendMessage(msg.chat.id, '📣 Send the content together with "post this to all socials" — paste your update, then add that line.').catch(() => {});
+      return;
+    }
+    await handleCrossPost(content, msg.chat.id);
+    return;
+  }
 
   // Show typing indicator
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
