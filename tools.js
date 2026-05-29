@@ -330,6 +330,11 @@ const TOOL_DEFINITIONS = [
     input_schema: { type: 'object', properties: {} }
   },
   {
+    name: 'stripe_audit',
+    description: 'READ-ONLY Stripe audit. Lists any Stripe-shaped keys in .env (masked); if a secret key is present, queries Stripe for account, balance, active products, and active subscriptions. Reports everything. Makes ZERO changes to Stripe. Use this to find/inspect the Manus-connected Stripe account.',
+    input_schema: { type: 'object', properties: {} }
+  },
+  {
     name: 'post_via_browser',
     description: "Post on YouTube (community post) or Instagram (feed) by driving a real Chromium browser via Playwright — for platforms where the public API can't post. Requires a one-time saved auth state at /root/solomon-v4/.pw_state_<platform>.json (gitignored). If missing, returns a clear error telling Jed how to set it up. Use this after the regular social_post tool can't reach the target platform.",
     input_schema: {
@@ -2138,6 +2143,10 @@ Output format (JSON):
       case 'youtube_milestones': {
         return await checkYouTubeMilestones();
       }
+      // STRIPE AUDIT — read-only listing of keys, account, balance, products, subs
+      case 'stripe_audit': {
+        return await runStripeAudit();
+      }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
         const imapUser = process.env.SMTP_USER;
@@ -3210,6 +3219,93 @@ async function runWeeklyRevenueReport() {
   ].join('\n');
 
   return { ok: true, report, total: Number(total.toFixed(2)), total_sales: totalSales };
+}
+
+// ── STRIPE AUDIT (READ-ONLY) ───────────────────────────────────────────────
+// Inspect Stripe configuration. Makes ZERO mutations — only GETs balance, the
+// account, active products, and active subscriptions. If no secret key is in
+// .env, reports honestly that Stripe is not wired into Solomon.
+async function runStripeAudit() {
+  const out = [];
+  const envEntries = Object.entries(process.env);
+  // Stripe-prefixed env keys
+  const stripePrefixed = envEntries.filter(([k, v]) => /^STRIPE/i.test(k) && v && v !== 'PLACEHOLDER');
+  // Any value that looks like a Stripe key (sk_test_, sk_live_, pk_*, rk_*)
+  const stripeShaped = envEntries.filter(([k, v]) => /^(sk|pk|rk)_(test|live)_/.test(String(v || '')));
+
+  out.push('🔍 *Stripe Audit (read-only)*');
+
+  if (!stripePrefixed.length && !stripeShaped.length) {
+    out.push('');
+    out.push('*Keys in .env:* none found.');
+    out.push('• No Stripe keys exist in `/root/solomon-v4/.env` (no `STRIPE_*` entries and no `sk_*`/`pk_*` values).');
+    out.push('• The Manus-connected Stripe account (mentioned in the Context Brief) is not wired into Solomon.');
+    out.push('');
+    out.push('*To wire it:* find the secret key (sk_live_… or sk_test_…) — likely in the Manus chat that set Stripe up, or stripe.com → Developers → API keys. Add to `.env` as `STRIPE_SECRET_KEY=sk_…` and re-run this audit.');
+    return { ok: true, report: out.join('\n'), keys_found: 0, wired: false };
+  }
+
+  out.push('');
+  out.push('*Keys in .env (masked):*');
+  const seen = new Set();
+  for (const [k, v] of stripePrefixed) {
+    seen.add(k);
+    const m = v.length > 12 ? v.slice(0, 8) + '…' + v.slice(-4) : '(short)';
+    out.push(`• \`${k}\` = \`${m}\``);
+  }
+  for (const [k, v] of stripeShaped) {
+    if (seen.has(k)) continue;
+    const m = v.slice(0, 8) + '…' + v.slice(-4);
+    out.push(`• \`${k}\` = \`${m}\` _(looks like a Stripe key)_`);
+  }
+
+  // Pick a secret key to query with (prefer sk_*)
+  let sk = null;
+  for (const [k, v] of envEntries) {
+    if (/^sk_(test|live)_/.test(String(v || ''))) { sk = v; break; }
+  }
+  if (!sk) {
+    out.push('');
+    out.push('*Result:* no SECRET key (sk_…) found — can\'t query Stripe API. Only publishable/restricted keys can\'t fetch balance/products.');
+    return { ok: true, report: out.join('\n'), keys_found: stripePrefixed.length + stripeShaped.length, wired: false };
+  }
+
+  // Query Stripe — READ ONLY
+  const auth = { headers: { Authorization: 'Bearer ' + sk }, timeout: 15000 };
+  const get = async (url) => {
+    try { const r = await axios.get(url, auth); return r.data; }
+    catch (e) { return { _err: (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message }; }
+  };
+  const [acct, balance, products, subs] = await Promise.all([
+    get('https://api.stripe.com/v1/account'),
+    get('https://api.stripe.com/v1/balance'),
+    get('https://api.stripe.com/v1/products?active=true&limit=100'),
+    get('https://api.stripe.com/v1/subscriptions?status=active&limit=100')
+  ]);
+
+  out.push('');
+  out.push('*Account:*');
+  if (acct._err) out.push(`  ❌ ${acct._err}`);
+  else out.push(`  ${acct.business_profile?.name || acct.email || acct.id} (mode: ${acct.livemode ? 'LIVE' : 'TEST'}, charges_enabled: ${!!acct.charges_enabled}, country: ${acct.country})`);
+
+  out.push('');
+  out.push('*Balance:*');
+  if (balance._err) out.push(`  ❌ ${balance._err}`);
+  else {
+    const fmt = (arr) => (arr || []).map(b => `${(b.amount / 100).toFixed(2)} ${String(b.currency || '').toUpperCase()}`).join(', ');
+    out.push(`  Available: ${fmt(balance.available) || '$0.00'}`);
+    out.push(`  Pending:   ${fmt(balance.pending) || '$0.00'}`);
+  }
+
+  out.push('');
+  out.push(`*Active products:* ${products._err ? '❌ ' + products._err : (products.data || []).length}`);
+  if (products.data) for (const p of products.data.slice(0, 10)) out.push(`  • ${p.name} (${p.id})`);
+
+  out.push('');
+  out.push(`*Active subscriptions:* ${subs._err ? '❌ ' + subs._err : (subs.data || []).length}`);
+  if (subs.data) for (const s of subs.data.slice(0, 10)) out.push(`  • ${s.id} status=${s.status}`);
+
+  return { ok: true, report: out.join('\n'), keys_found: stripePrefixed.length + stripeShaped.length, wired: true };
 }
 
 // ── YOUTUBE MILESTONE MONITOR ──────────────────────────────────────────────
