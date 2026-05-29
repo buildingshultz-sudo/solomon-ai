@@ -320,6 +320,11 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'weekly_revenue_report',
+    description: 'Pull last-7-days revenue from each configured stream (Gumroad, Spreadshirt, Amazon Associates) and produce a plain P&L. Streams without configured credentials are reported as "not connected" rather than failing. Stores totals in mem for week-over-week comparison.',
+    input_schema: { type: 'object', properties: {} }
+  },
+  {
     name: 'post_via_browser',
     description: "Post on YouTube (community post) or Instagram (feed) by driving a real Chromium browser via Playwright — for platforms where the public API can't post. Requires a one-time saved auth state at /root/solomon-v4/.pw_state_<platform>.json (gitignored). If missing, returns a clear error telling Jed how to set it up. Use this after the regular social_post tool can't reach the target platform.",
     input_schema: {
@@ -2120,6 +2125,10 @@ Output format (JSON):
       case 'post_via_browser': {
         return await postViaBrowser(input && input.platform, input && input.content, input && input.image_url);
       }
+      // WEEKLY REVENUE REPORT — Gumroad + Spreadshirt + Amazon Associates P&L
+      case 'weekly_revenue_report': {
+        return await runWeeklyRevenueReport();
+      }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
         const imapUser = process.env.SMTP_USER;
@@ -3118,6 +3127,80 @@ async function getSocialAuthStatus() {
     status.instagram[p.key] = ig;
   }
   return status;
+}
+
+// ── WEEKLY REVENUE REPORT ──────────────────────────────────────────────────
+// Pull last-7-days revenue from each configured source. Sources without
+// credentials are reported as "not connected" (honest) rather than blowing up.
+// Gumroad: official API, needs GUMROAD_ACCESS_TOKEN. Spreadshirt + Amazon
+// Associates: no public sales API — flagged for future browser/scrape work.
+async function runWeeklyRevenueReport() {
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 86400000);
+  const sections = [];
+  let total = 0, totalSales = 0;
+
+  // ---- Gumroad ----
+  const gToken = process.env.GUMROAD_ACCESS_TOKEN;
+  if (gToken && gToken !== 'PLACEHOLDER') {
+    try {
+      const resp = await axios.get('https://api.gumroad.com/v2/sales', {
+        params: { access_token: gToken, after: weekAgo.toISOString().slice(0, 10) },
+        timeout: 15000
+      });
+      const sales = (resp.data && resp.data.sales) || [];
+      const byProd = new Map();
+      let gTotal = 0;
+      for (const s of sales) {
+        const prod = s.product_name || 'Unknown';
+        const cents = parseInt(s.price || s.amount || 0, 10);
+        const dollars = cents / 100;
+        gTotal += dollars;
+        const prev = byProd.get(prod) || { count: 0, revenue: 0 };
+        byProd.set(prod, { count: prev.count + 1, revenue: prev.revenue + dollars });
+      }
+      total += gTotal; totalSales += sales.length;
+      const lines = [`• Gumroad: $${gTotal.toFixed(2)} (${sales.length} sales)`];
+      for (const [prod, v] of byProd) lines.push(`   – ${prod}: $${v.revenue.toFixed(2)} (${v.count})`);
+      sections.push(lines.join('\n'));
+    } catch (e) {
+      const msg = (e.response && e.response.data && (e.response.data.message || e.response.data.error)) || e.message;
+      sections.push(`• Gumroad: error — ${String(msg).slice(0, 100)}`);
+    }
+  } else {
+    sections.push('• Gumroad: not connected (set GUMROAD_ACCESS_TOKEN in .env — gumroad.com/settings/advanced → Applications → Access Token)');
+  }
+  // ---- Spreadshirt (Spreadshop) ----
+  sections.push('• Spreadshirt: not connected (Spreadshop has no public sales API; needs browser scrape to be wired)');
+  // ---- Amazon Associates ----
+  sections.push('• Amazon Associates: not connected (no public sales API; needs browser scrape to be wired)');
+
+  // ---- Week-over-week ----
+  const priorTotal = parseFloat(mem.get('revenue_history', 'last_week_total') || '0');
+  const diff = total - priorTotal;
+  const pct = priorTotal > 0 ? (diff / priorTotal) * 100 : null;
+  let trend;
+  if (total === 0 && priorTotal === 0) trend = '_(no revenue yet)_';
+  else if (priorTotal === 0) trend = `_first week with revenue — $${total.toFixed(2)}_`;
+  else trend = `vs prior week: ${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}${pct != null ? ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)` : ''}`;
+
+  // Persist for next week's comparison + a historical row.
+  const weekKey = `wk_${now.toISOString().slice(0, 10)}`;
+  try {
+    mem.set('revenue_history', 'last_week_total', String(total.toFixed(2)));
+    mem.set('revenue_history', weekKey, JSON.stringify({ total: Number(total.toFixed(2)), sales: totalSales, generated_at: now.toISOString() }));
+  } catch (_) {}
+
+  const report = [
+    `📊 *Weekly Revenue — Week ending ${now.toISOString().slice(0, 10)}*`,
+    '',
+    ...sections,
+    '',
+    `*Total: $${total.toFixed(2)}* (${totalSales} sales)`,
+    trend
+  ].join('\n');
+
+  return { ok: true, report, total: Number(total.toFixed(2)), total_sales: totalSales };
 }
 
 // ── BROWSER AUTOMATION (Playwright) ────────────────────────────────────────

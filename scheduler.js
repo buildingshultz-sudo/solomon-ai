@@ -325,6 +325,27 @@ cron.schedule("*/5 * * * *", async () => {
 
 
 // ══════════════════════════════════════════════════════════════════════════
+// ITEM 21 — WEEKLY REVENUE REPORT: Monday 6 AM CT
+// Gumroad + Spreadshirt + Amazon Associates P&L to Telegram. Streams without
+// configured credentials are reported as "not connected".
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('0 6 * * 1', async () => {
+  console.log('[SCHEDULER] Monday 6 AM — weekly revenue report running...');
+  try {
+    const r = await executeTool('weekly_revenue_report', {});
+    if (r && r.report) {
+      await bot.sendMessage(OWNER_ID, r.report, { parse_mode: 'Markdown' })
+        .catch(() => bot.sendMessage(OWNER_ID, r.report.replace(/[*_`]/g, '')).catch(() => {}));
+      console.log('[SCHEDULER] Weekly revenue report sent (total $' + (r.total || 0) + ')');
+    } else {
+      console.error('[SCHEDULER] Weekly revenue report: no report returned', r && r.error);
+    }
+  } catch (err) {
+    console.error('[SCHEDULER] Weekly revenue report error:', err.message);
+  }
+}, { timezone: 'America/Chicago' });
+
+// ══════════════════════════════════════════════════════════════════════════
 // ITEM 17 — WEEKLY REPORT: Monday 6 AM CT
 // Tasks completed, failed, budget, growth metrics.
 // ══════════════════════════════════════════════════════════════════════════
@@ -774,7 +795,8 @@ console.log('  • Master context (shultz_master_context.md): append-only; 5 AM 
 console.log('  • Commit watcher: every 15 min (logs new commits to master context)');
 console.log('  • PC queue drain: every 1 min (when Cowork is idle)');
 console.log('  • Scheduled posts publisher: every 5 minutes');
-console.log('  • Weekly report: Monday 6:00 AM CT');
+console.log('  • Weekly report (tasks/budget): Monday 6:00 AM CT');
+console.log('  • Weekly revenue report (Gumroad/Spreadshirt/Amazon): Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');
 console.log('  • Stale task cleanup: every hour');
 console.log('  • App Factory queue check: every 30 minutes (at :15 and :45)');
