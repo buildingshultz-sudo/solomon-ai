@@ -512,17 +512,17 @@ const scheduledPosts = {
   },
   getDue() {
     return db.prepare(
-      "SELECT * FROM scheduled_posts WHERE status = pending AND scheduled_for <= datetime(now) ORDER BY scheduled_for ASC"
+      "SELECT * FROM scheduled_posts WHERE status = 'pending' AND scheduled_for <= datetime('now') ORDER BY scheduled_for ASC"
     ).all();
   },
   markPosted(id, postId) {
     db.prepare(
-      "UPDATE scheduled_posts SET status = posted, post_id = ?, posted_at = datetime(now) WHERE id = ?"
+      "UPDATE scheduled_posts SET status = 'posted', post_id = ?, posted_at = datetime('now') WHERE id = ?"
     ).run(postId || null, id);
   },
   markFailed(id, error) {
     db.prepare(
-      "UPDATE scheduled_posts SET status = failed WHERE id = ?"
+      "UPDATE scheduled_posts SET status = 'failed' WHERE id = ?"
     ).run(id);
   },
   getAll(limit) {
@@ -532,7 +532,7 @@ const scheduledPosts = {
   },
   cancel(id) {
     db.prepare(
-      "UPDATE scheduled_posts SET status = cancelled WHERE id = ? AND status = pending"
+      "UPDATE scheduled_posts SET status = 'cancelled' WHERE id = ? AND status = 'pending'"
     ).run(id);
   }
 };
