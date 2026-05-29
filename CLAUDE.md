@@ -1,3 +1,11 @@
+# FULL CONTEXT
+> **Before starting any task, read `/root/solomon-v4/shultz_master_context.md`** for full
+> Shultz Enterprises context — including who Jedidiah is, the mission, all active projects,
+> revenue streams, task queues, and team names. It is the single source of truth for the
+> entire operation and must never be deleted or compressed.
+
+---
+
 # Solomon V4 — Agent Operating Guide
 
 Personal AI chief-of-staff bot for Jed Shultz (Shultz Enterprises: Building Shultz +
