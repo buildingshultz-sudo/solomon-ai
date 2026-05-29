@@ -783,6 +783,29 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 22 — YOUTUBE MILESTONE MONITOR: every 6 hours. Alerts at 500/750/1000
+// subs and 2000/4000 watch hours, each fires once. First run after deploy
+// silently baselines so already-crossed thresholds don't fire retroactively.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('0 */6 * * *', async () => {
+  try {
+    const r = await executeTool('youtube_milestones', {});
+    if (r && r.baseline_set) console.log('[SCHEDULER] YT milestones baseline set (no retroactive alerts).');
+    for (const f of ((r && r.fired) || [])) {
+      const label = f.metric === 'subs' ? `${f.threshold.toLocaleString()} subscribers` : `${f.threshold.toLocaleString()} watch hours`;
+      const cur = Math.round(f.current);
+      const msg = `🎉 *YouTube milestone — ${label}!*\nBuilding Shultz crossed ${label} (current: ${cur.toLocaleString()} ${f.metric === 'subs' ? 'subs' : 'hours'}).`;
+      await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+        .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')).catch(() => {}));
+      try { await executeTool('append_master_context', { section: 'GENERAL', entry: `YT milestone crossed: ${label}` }); } catch (_) {}
+    }
+    if (r && r.hours_error) console.log('[SCHEDULER] YT watch hours unavailable:', String(r.hours_error).slice(0, 120));
+  } catch (err) {
+    console.error('[SCHEDULER] YT milestone check error:', err.message);
+  }
+});
+
 console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
 console.log('  • Morning brief send: 6:00 AM CT daily');
@@ -794,6 +817,7 @@ console.log('  • Context brief (context.md): 5 AM CT daily + on major events')
 console.log('  • Master context (shultz_master_context.md): append-only; 5 AM + sales/commits/events');
 console.log('  • Commit watcher: every 15 min (logs new commits to master context)');
 console.log('  • PC queue drain: every 1 min (when Cowork is idle)');
+console.log('  • YouTube milestone monitor: every 6 hours (alerts at 500/750/1000 subs, 2000/4000 watch hrs)');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report (tasks/budget): Monday 6:00 AM CT');
 console.log('  • Weekly revenue report (Gumroad/Spreadshirt/Amazon): Monday 6:00 AM CT');

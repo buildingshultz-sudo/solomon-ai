@@ -325,6 +325,11 @@ const TOOL_DEFINITIONS = [
     input_schema: { type: 'object', properties: {} }
   },
   {
+    name: 'youtube_milestones',
+    description: 'Check the Building Shultz YouTube channel for one-time milestones (500/750/1000 subs, 2000/4000 watch hours). Fires Telegram alerts only for NEWLY-crossed thresholds. The first run after deploy silently sets the baseline so already-crossed thresholds (channel is ~1.4k subs) do not fire retroactively. Watch hours need the yt-analytics.readonly scope; if missing, only subs are tracked and the analytics error is reported.',
+    input_schema: { type: 'object', properties: {} }
+  },
+  {
     name: 'post_via_browser',
     description: "Post on YouTube (community post) or Instagram (feed) by driving a real Chromium browser via Playwright — for platforms where the public API can't post. Requires a one-time saved auth state at /root/solomon-v4/.pw_state_<platform>.json (gitignored). If missing, returns a clear error telling Jed how to set it up. Use this after the regular social_post tool can't reach the target platform.",
     input_schema: {
@@ -2129,6 +2134,10 @@ Output format (JSON):
       case 'weekly_revenue_report': {
         return await runWeeklyRevenueReport();
       }
+      // YOUTUBE MILESTONE MONITOR — alerts at 500/750/1000 subs + 2000/4000 watch hrs
+      case 'youtube_milestones': {
+        return await checkYouTubeMilestones();
+      }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
         const imapUser = process.env.SMTP_USER;
@@ -3201,6 +3210,94 @@ async function runWeeklyRevenueReport() {
   ].join('\n');
 
   return { ok: true, report, total: Number(total.toFixed(2)), total_sales: totalSales };
+}
+
+// ── YOUTUBE MILESTONE MONITOR ──────────────────────────────────────────────
+// One-time alerts at 500/750/1000 subs + 2000/4000 watch hours. Persists hit
+// flags in mem('yt_milestones') so each threshold fires exactly once. First run
+// after deploy sets a baseline silently — already-crossed thresholds (channel
+// is ~1.4k subs) do NOT alert retroactively.
+async function checkYouTubeMilestones() {
+  const thresholds = [
+    { key: 'subs_500', metric: 'subs', value: 500 },
+    { key: 'subs_750', metric: 'subs', value: 750 },
+    { key: 'subs_1000', metric: 'subs', value: 1000 },
+    { key: 'hours_2000', metric: 'hours', value: 2000 },
+    { key: 'hours_4000', metric: 'hours', value: 4000 }
+  ];
+  const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+  if (!refreshToken || refreshToken === 'PLACEHOLDER') {
+    return { ok: false, error: 'YouTube OAuth not configured (YOUTUBE_REFRESH_TOKEN missing)' };
+  }
+  // Exchange refresh token for an access token
+  let accessToken;
+  try {
+    const tok = await axios.post('https://oauth2.googleapis.com/token', {
+      client_id: process.env.YOUTUBE_CLIENT_ID,
+      client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    }, { timeout: 15000 });
+    accessToken = tok.data.access_token;
+  } catch (e) {
+    return { ok: false, error: 'YT token refresh failed: ' + ((e.response && e.response.data && e.response.data.error_description) || e.message) };
+  }
+  // Subscribers via YouTube Data API
+  let subs = null;
+  try {
+    const r = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+      params: { part: 'statistics', mine: true },
+      headers: { Authorization: 'Bearer ' + accessToken },
+      timeout: 15000
+    });
+    const item = (r.data && r.data.items && r.data.items[0]) || null;
+    if (item && item.statistics) {
+      subs = parseInt(item.statistics.subscriberCount, 10);
+      if (Number.isFinite(subs)) mem.set('business', 'youtube_subscribers', String(subs));
+    }
+  } catch (e) {
+    return { ok: false, error: 'YT subs fetch failed: ' + ((e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message) };
+  }
+  // Watch hours via YouTube Analytics API (needs yt-analytics.readonly scope)
+  let hours = null, hours_error = null;
+  try {
+    const startDate = '2020-01-01';
+    const endDate = new Date().toISOString().slice(0, 10);
+    const r = await axios.get('https://youtubeanalytics.googleapis.com/v2/reports', {
+      params: { ids: 'channel==MINE', startDate, endDate, metrics: 'estimatedMinutesWatched' },
+      headers: { Authorization: 'Bearer ' + accessToken },
+      timeout: 15000
+    });
+    const row = (r.data && r.data.rows && r.data.rows[0]) || null;
+    if (row && Number.isFinite(parseFloat(row[0]))) hours = parseFloat(row[0]) / 60;
+  } catch (e) {
+    hours_error = (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message;
+  }
+  // Baseline (first run): mark currently-crossed thresholds as hit silently — no retroactive alerts
+  const baselineDone = mem.get('yt_milestones', '_baseline') === 'done';
+  if (!baselineDone) {
+    for (const t of thresholds) {
+      let crossed = false;
+      if (t.metric === 'subs' && subs != null && subs >= t.value) crossed = true;
+      if (t.metric === 'hours' && hours != null && hours >= t.value) crossed = true;
+      if (crossed) mem.set('yt_milestones', t.key, 'hit');
+    }
+    mem.set('yt_milestones', '_baseline', 'done');
+    return { ok: true, subs, hours, hours_error, fired: [], baseline_set: true };
+  }
+  // Subsequent runs: fire alerts for newly-crossed thresholds (each once)
+  const fired = [];
+  for (const t of thresholds) {
+    if (mem.get('yt_milestones', t.key) === 'hit') continue;
+    let crossed = false, current = null;
+    if (t.metric === 'subs' && subs != null && subs >= t.value) { crossed = true; current = subs; }
+    if (t.metric === 'hours' && hours != null && hours >= t.value) { crossed = true; current = hours; }
+    if (crossed) {
+      mem.set('yt_milestones', t.key, 'hit');
+      fired.push({ key: t.key, threshold: t.value, metric: t.metric, current });
+    }
+  }
+  return { ok: true, subs, hours, hours_error, fired };
 }
 
 // ── BROWSER AUTOMATION (Playwright) ────────────────────────────────────────
