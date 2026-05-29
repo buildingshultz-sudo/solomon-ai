@@ -1272,6 +1272,36 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, version: '4.0.0', model: MODEL, uptime: process.uptime() });
 });
 
+// ── COWORK CONFLICT DETECTION ────────────────────────────────────────────
+// Cowork (desktop agent) POSTs busy=true when it starts a PC task and
+// busy=false when it finishes. Solomon queues all pc_* tool calls while
+// Cowork is busy and drains the queue every minute (scheduler ITEM 20).
+// Auth: X-Secret header must equal PC_RELAY_SECRET (same shared secret).
+app.post('/cowork/busy', async (req, res) => {
+  if (req.get('X-Secret') !== process.env.PC_RELAY_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  const { busy, eta_seconds, note } = req.body || {};
+  if (busy) {
+    const eta = Math.max(10, Math.min(parseInt(eta_seconds, 10) || 300, 7200)); // 10s..2h cap
+    const until = new Date(Date.now() + eta * 1000).toISOString();
+    mem.set('pc_lock', 'cowork_busy_until', until);
+    mem.set('pc_lock', 'cowork_busy_note', String(note || ''));
+    log('INFO', 'COWORK', 'Cowork busy', { until, note });
+    return res.json({ ok: true, busy_until: until });
+  } else {
+    try { mem.delete('pc_lock', 'cowork_busy_until'); } catch (_) {}
+    try { mem.delete('pc_lock', 'cowork_busy_note'); } catch (_) {}
+    log('INFO', 'COWORK', 'Cowork idle');
+    return res.json({ ok: true, busy: false });
+  }
+});
+app.get('/cowork/status', (req, res) => {
+  const until = mem.get('pc_lock', 'cowork_busy_until');
+  const note = mem.get('pc_lock', 'cowork_busy_note') || '';
+  const busy = !!(until && new Date(until).getTime() > Date.now());
+  const queueSize = mem.getCategory('pc_queue').length;
+  res.json({ busy, busy_until: until, note, pc_queue: queueSize });
+});
+
 // ── API ENDPOINTS (Phase 8B) ─────────────────────────────────────────────
 app.get('/api/nathan-inbox', (req, res) => {
   try {

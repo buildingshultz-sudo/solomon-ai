@@ -729,6 +729,39 @@ setTimeout(() => {
     .catch(e => console.error('[SCHEDULER] context.md startup gen error:', e.message));
 }, 6000);
 
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 20 — PC QUEUE DRAIN: every 1 min. When Cowork is idle, drain queued
+// pc_* tool calls (queued in tools.js while Cowork was busy) and notify Jed
+// of each result on Telegram. The queue lives in mem(category='pc_queue').
+// ══════════════════════════════════════════════════════════════════════════
+function _coworkBusyNow() {
+  try {
+    const u = mem.get('pc_lock', 'cowork_busy_until');
+    return !!(u && new Date(u).getTime() > Date.now());
+  } catch (_) { return false; }
+}
+cron.schedule('* * * * *', async () => {
+  try {
+    if (_coworkBusyNow()) return; // still busy — try again next minute
+    const entries = mem.getCategory('pc_queue').sort((a, b) => a.key.localeCompare(b.key));
+    if (!entries.length) return;
+    for (const e of entries.slice(0, 5)) { // cap at 5 per minute to be gentle
+      let req; try { req = JSON.parse(e.value); } catch (_) { mem.delete('pc_queue', e.key); continue; }
+      console.log(`[SCHEDULER] Draining queued PC action: ${req.tool}`);
+      const r = await executeTool(req.tool, req.input || {}).catch(err => ({ ok: false, error: err.message }));
+      mem.delete('pc_queue', e.key);
+      const head = r.ok ? '✅' : '❌';
+      const body = r.ok
+        ? `(queued at ${String(req.queued_at).slice(0,16).replace('T',' ')})`
+        : `${(r.error || 'failed').slice(0, 160)}`;
+      bot.sendMessage(OWNER_ID, `${head} *Queued PC action ran:* ${req.tool}\n${body}`, { parse_mode: 'Markdown' })
+        .catch(() => bot.sendMessage(OWNER_ID, `${head} Queued PC action ran: ${req.tool}\n${body}`).catch(() => {}));
+    }
+  } catch (err) {
+    console.error('[SCHEDULER] PC queue drain error:', err.message);
+  }
+});
+
 console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
 console.log('  • Morning brief send: 6:00 AM CT daily');
@@ -739,6 +772,7 @@ console.log('  • Book & merch campaign: 7 AM + 6 PM CT (when armed via /launch
 console.log('  • Context brief (context.md): 5 AM CT daily + on major events');
 console.log('  • Master context (shultz_master_context.md): append-only; 5 AM + sales/commits/events');
 console.log('  • Commit watcher: every 15 min (logs new commits to master context)');
+console.log('  • PC queue drain: every 1 min (when Cowork is idle)');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');

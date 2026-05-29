@@ -1346,8 +1346,39 @@ async function executeWorkshopTool(name, input) {
 const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID);
 
 // ── TOOL EXECUTORS ───────────────────────────────────────────────────────
+// ── COWORK CONFLICT DETECTION ──────────────────────────────────────────────
+// Cowork (the desktop agent on Jed's PC) POSTs busy/idle to Solomon's
+// /cowork/busy endpoint. We persist a `busy_until` ISO timestamp in mem so
+// the flag auto-expires if Cowork forgets to release it.
+function isCoworkBusy() {
+  try {
+    const untilStr = mem.get('pc_lock', 'cowork_busy_until');
+    if (!untilStr) return false;
+    const until = new Date(untilStr).getTime();
+    return Number.isFinite(until) && Date.now() < until;
+  } catch (_) { return false; }
+}
+function queuePcAction(name, input) {
+  try {
+    const id = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    mem.set('pc_queue', id, JSON.stringify({ tool: name, input: input || {}, queued_at: new Date().toISOString() }));
+    const until = mem.get('pc_lock', 'cowork_busy_until') || 'unknown';
+    return { ok: true, queued: true, queue_id: id, message: 'Cowork is currently running a PC task — your ' + name + ' is queued and will run once Cowork is idle (busy until ' + until + ').' };
+  } catch (e) {
+    return { ok: false, error: 'queue failed: ' + e.message };
+  }
+}
+
 async function executeTool(name, input) {
   console.log(`[TOOL] ${name}`, JSON.stringify(input).slice(0, 120));
+
+  // ── COWORK CONFLICT GATE — queue any pc_* tool if Cowork is currently running a
+  //    PC task on Jed's PC. Cowork signals busy/idle via the POST /cowork/busy
+  //    endpoint on Solomon (port 3000); the busy_until ISO timestamp lives in mem.
+  //    The scheduler drains the queue every minute once Cowork is idle.
+  if (typeof name === 'string' && name.startsWith('pc_') && isCoworkBusy()) {
+    return queuePcAction(name, input);
+  }
 
   try {
     // Workshop Module — try workshop tools first
