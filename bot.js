@@ -991,8 +991,10 @@ bot.on('message', async (msg) => {
     return;
   }
   // ── END PHOTO HANDLER ────────────────────────────────────────────────
-  log('INFO', 'MSG', `Jed: ${text.slice(0, 100)}`);
-  activityLogger.logActivity('message_received', { summary: text.slice(0, 100) });
+  // Redact secrets from logs (token-bearing commands must not leak into log files / dashboard).
+  const safeText = text.replace(/^\/setfbtoken\b.*$/i, '/setfbtoken [REDACTED]');
+  log('INFO', 'MSG', `Jed: ${safeText.slice(0, 100)}`);
+  activityLogger.logActivity('message_received', { summary: safeText.slice(0, 100) });
 
   // Slash commands are handled by their dedicated onText handlers below — don't
   // also run them through the LLM (prevents double-processing of /post, /status, etc.).
@@ -1201,6 +1203,62 @@ bot.onText(/^\/brief\b/i, async (msg) => {
   }
 });
 
+// /setfbtoken <page> <token> — Jed pastes a freshly-regenerated long-lived Facebook
+// page token from developers.facebook.com/tools/explorer. Solomon validates it
+// (Graph API /me + page-ID match), updates .env, and triggers a PM2 restart of
+// solomon-v4 to pick up the new value. The token is REDACTED from logs.
+bot.onText(/^\/setfbtoken\b/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const parts = (msg.text || '').trim().split(/\s+/);
+  if (parts.length < 3) {
+    bot.sendMessage(msg.chat.id, 'Usage: /setfbtoken <building_shultz|irish_craftsman> <long-lived-token>').catch(() => {});
+    return;
+  }
+  const pageKey = String(parts[1]).toLowerCase();
+  const token = parts.slice(2).join(' ').trim();
+  const pageIds = { building_shultz: process.env.FB_BUILDING_SHULTZ_ID, irish_craftsman: process.env.FB_IRISH_CRAFTSMAN_ID };
+  if (!pageIds[pageKey]) {
+    bot.sendMessage(msg.chat.id, '❌ Unknown page. Use `building_shultz` or `irish_craftsman`.', { parse_mode: 'Markdown' }).catch(() => {});
+    return;
+  }
+  if (token.length < 30) {
+    bot.sendMessage(msg.chat.id, '❌ Token looks too short — paste the full long-lived token.').catch(() => {});
+    return;
+  }
+  bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+  try {
+    // Validate the token against Graph API and check it belongs to the EXPECTED page id.
+    const r = await axios.get('https://graph.facebook.com/v19.0/me', {
+      params: { access_token: token, fields: 'id,name' }, timeout: 12000
+    });
+    const tokId = String(r.data && r.data.id || '');
+    const tokName = (r.data && r.data.name) || '';
+    if (tokId !== String(pageIds[pageKey])) {
+      await bot.sendMessage(msg.chat.id, `❌ Token belongs to page "${tokName}" (id ${tokId}), not the *${pageKey}* page (expected id ${pageIds[pageKey]}). Not saved.`, { parse_mode: 'Markdown' }).catch(() => {});
+      return;
+    }
+    // Write into .env (replace existing line or append). Preserve everything else.
+    const envPath = path.join(__dirname, '.env');
+    const envKey = pageKey === 'building_shultz' ? 'FB_BUILDING_SHULTZ_TOKEN' : 'FB_IRISH_CRAFTSMAN_TOKEN';
+    let envContent = fs.readFileSync(envPath, 'utf8');
+    const re = new RegExp('^' + envKey + '=.*$', 'm');
+    envContent = re.test(envContent) ? envContent.replace(re, envKey + '=' + token) : (envContent.replace(/\s*$/, '') + '\n' + envKey + '=' + token + '\n');
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    process.env[envKey] = token; // keep current process in sync until restart
+    const masked = token.slice(0, 8) + '…' + token.slice(-4);
+    await bot.sendMessage(msg.chat.id, `✅ *${pageKey}* token saved (validated as "${tokName}", id ${tokId}; masked: \`${masked}\`).\nRestarting solomon-v4 to activate…`, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(msg.chat.id, `✅ ${pageKey} token saved (validated). Restarting solomon-v4...`));
+    try { await executeTool('append_master_context', { section: 'STACK', entry: `FB token refreshed for ${pageKey} (${tokName})` }); } catch (_) {}
+    // Restart after a short delay so the confirmation reply lands first.
+    setTimeout(() => {
+      try { require('child_process').spawn('pm2', ['restart', 'solomon-v4'], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+    }, 1500);
+  } catch (e) {
+    const m = (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message;
+    bot.sendMessage(msg.chat.id, `❌ Token validation failed: ${String(m).slice(0, 200)}`).catch(() => {});
+  }
+});
+
 // /help — list available commands.
 bot.onText(/^\/help\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
@@ -1210,6 +1268,7 @@ bot.onText(/^\/help\b/i, async (msg) => {
     '/post <content> — rewrite + distribute to all socials',
     '/launch — start the 30-day book & merch campaign',
     '/brief — send the morning brief now',
+    '/setfbtoken <page> <token> — paste a freshly-regenerated FB page token; Solomon validates + restarts',
     '/help — this list',
     '',
     '_Also:_ /tasks  /budget  /memory  /queue  /clear',
