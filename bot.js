@@ -925,14 +925,24 @@ async function handleCrossPost(content, chatId) {
     await sendSafe(`📸 *Instagram — ${igReason}*\n\n${igCaption}`);
   }
 
-  // ── YouTube community: no API endpoint exists, so always hand back for manual posting. ──
-  const ytNote = (auth.youtube && auth.youtube.tokenValid)
-    ? 'token valid, but YouTube has no API for community posts — paste manually'
-    : 'paste manually';
-  await sendSafe(`▶️ *YouTube community post — ${ytNote}*\n\n${variants.youtube_community || ''}`);
+  // ── YouTube community: try the Playwright browser-post path first (real browser via
+  //    a saved auth state). If the state file is missing or selectors fail, fall back to
+  //    the Telegram hand-back. The YT Data API has no community-post endpoint, so this
+  //    browser route is the only way to auto-post community posts. ──
+  let ytAutoPosted = false, ytNote = 'paste manually';
+  try {
+    const ytRes = await executeTool('post_via_browser', { platform: 'youtube', content: variants.youtube_community || '' });
+    if (ytRes && ytRes.ok) { ytAutoPosted = true; }
+    else if (ytRes && ytRes.error) { ytNote = ytRes.error.slice(0, 160); }
+  } catch (e) { ytNote = 'browser-post error: ' + e.message.slice(0, 120); }
+  if (ytAutoPosted) {
+    await sendSafe(`▶️ *YouTube community post — auto-posted via browser*`);
+  } else {
+    await sendSafe(`▶️ *YouTube community post — paste manually*\n(_${ytNote}_)\n\n${variants.youtube_community || ''}`);
+  }
 
-  try { mem.set('social_log', new Date().toISOString(), JSON.stringify({ kind: 'cross_post', fb: fbResults, igReady, preview: content.slice(0, 60) })); } catch (_) {}
-  log('INFO', 'SOCIAL', 'Cross-post complete', { fb: fbResults.join('; '), igReady, yt: !!(auth.youtube && auth.youtube.tokenValid) });
+  try { mem.set('social_log', new Date().toISOString(), JSON.stringify({ kind: 'cross_post', fb: fbResults, igReady, ytAutoPosted, preview: content.slice(0, 60) })); } catch (_) {}
+  log('INFO', 'SOCIAL', 'Cross-post complete', { fb: fbResults.join('; '), igReady, ytAutoPosted });
 }
 
 // Generate + send the morning brief on demand (same content as the 6 AM job).

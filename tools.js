@@ -320,6 +320,19 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'post_via_browser',
+    description: "Post on YouTube (community post) or Instagram (feed) by driving a real Chromium browser via Playwright — for platforms where the public API can't post. Requires a one-time saved auth state at /root/solomon-v4/.pw_state_<platform>.json (gitignored). If missing, returns a clear error telling Jed how to set it up. Use this after the regular social_post tool can't reach the target platform.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        platform: { type: 'string', enum: ['youtube', 'instagram'], description: 'Which platform to post to' },
+        content: { type: 'string', description: 'Post text (for Instagram, this is the caption).' },
+        image_url: { type: 'string', description: 'Optional image URL. Required for Instagram.' }
+      },
+      required: ['platform', 'content']
+    }
+  },
+  {
     name: 'generate_voice',
     description: 'Generate speech audio from text using ElevenLabs API. Returns audio file path on VPS.',
     input_schema: {
@@ -2072,6 +2085,10 @@ Output format (JSON):
       case 'append_master_context': {
         return appendMasterContext(input && input.section, input && input.entry);
       }
+      // BROWSER POST (Playwright) — YouTube community / Instagram via real Chromium
+      case 'post_via_browser': {
+        return await postViaBrowser(input && input.platform, input && input.content, input && input.image_url);
+      }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
         const imapUser = process.env.SMTP_USER;
@@ -3070,6 +3087,94 @@ async function getSocialAuthStatus() {
     status.instagram[p.key] = ig;
   }
   return status;
+}
+
+// ── BROWSER AUTOMATION (Playwright) ────────────────────────────────────────
+// Post on platforms whose public APIs don't allow it (YouTube community posts,
+// Instagram feed) by driving a real Chromium browser. Persistent auth lives in
+// a Playwright storageState JSON. Setup once (see PLAYWRIGHT_AUTH_SETUP.md) then
+// upload to /root/solomon-v4/.pw_state_<platform>.json (gitignored — contains
+// login cookies; NEVER commit). If the file is missing, this returns a clear
+// error rather than trying to log in (we never automate credentials here).
+async function postViaBrowser(platform, content, imageUrl) {
+  if (!platform || !content) return { ok: false, error: 'platform and content required' };
+  let chromium;
+  try { chromium = require('playwright').chromium; }
+  catch (e) { return { ok: false, error: 'playwright not installed: ' + e.message }; }
+  const statePath = path.join(__dirname, `.pw_state_${platform}.json`);
+  if (!fs.existsSync(statePath)) {
+    return { ok: false, error: `auth state missing at ${statePath} — Jed must log into ${platform} once on his PC and upload the storageState JSON. See /root/solomon-v4/PLAYWRIGHT_AUTH_SETUP.md` };
+  }
+  let browser = null, ctx = null;
+  try {
+    browser = await chromium.launch({ headless: true });
+    ctx = await browser.newContext({
+      storageState: statePath,
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+      viewport: { width: 1366, height: 900 }
+    });
+    const page = await ctx.newPage();
+    if (platform === 'youtube') return await _ytCommunityPost(page, content);
+    if (platform === 'instagram') return await _igFeedPost(page, content, imageUrl);
+    return { ok: false, error: 'unsupported platform: ' + platform };
+  } catch (e) {
+    return { ok: false, error: 'browser_post failed: ' + String(e.message || e).slice(0, 240) };
+  } finally {
+    try { if (ctx) await ctx.close(); } catch (_) {}
+    try { if (browser) await browser.close(); } catch (_) {}
+  }
+}
+
+async function _ytCommunityPost(page, content) {
+  // YouTube Studio community-post flow. Selectors here are defensive — multiple
+  // fallbacks because Studio's DOM changes. If this breaks, Jed pastes manually.
+  try {
+    await page.goto('https://studio.youtube.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    if (/accounts\.google\.com/.test(page.url())) {
+      return { ok: false, error: 'YouTube Studio auth state expired — re-log in and re-save .pw_state_youtube.json' };
+    }
+    // Open Create menu
+    const createLocators = [
+      'ytcp-button#create-icon',
+      '#create-icon',
+      'button[aria-label="Create" i]',
+      'button:has(svg[aria-label*="Create" i])'
+    ];
+    let opened = false;
+    for (const sel of createLocators) {
+      try { await page.locator(sel).first().click({ timeout: 4000 }); opened = true; break; } catch (_) {}
+    }
+    if (!opened) throw new Error('Create button not found');
+    // Click "Post" / "New post" / "Create post" item
+    await page.locator('text=/^(Post|New post|Create post)$/i').first().click({ timeout: 6000 });
+    // Type content into the post composer
+    const composer = page.locator('div[contenteditable="true"][aria-label*="post" i], div[contenteditable="true"][role="textbox"]').first();
+    await composer.click({ timeout: 8000 });
+    await composer.fill(content);
+    // Click the final "Post" submit button
+    await page.locator('button:has-text("Post"), ytcp-button:has-text("Post")').last().click({ timeout: 8000 });
+    await page.waitForTimeout(3500); // give it time to submit
+    return { ok: true, platform: 'youtube', message: 'YouTube community post submitted via browser.' };
+  } catch (e) {
+    return { ok: false, error: 'YT community post failed: ' + String(e.message || e).slice(0, 220) + ' (selector may have changed; verify at studio.youtube.com)' };
+  }
+}
+
+async function _igFeedPost(page, content, imageUrl) {
+  // Instagram feed posts REQUIRE an image and IG actively detects automation.
+  // Framework skeleton: we land on instagram.com, check auth, then return a
+  // clear "not yet wired" error rather than try a brittle UI flow that will
+  // likely flag the account. To enable, harden the upload flow + handle 2FA.
+  if (!imageUrl) return { ok: false, error: 'Instagram requires image_url (cannot post text-only)' };
+  try {
+    await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    if (/accounts\/login/.test(page.url())) {
+      return { ok: false, error: 'Instagram auth state expired — re-log in and re-save .pw_state_instagram.json' };
+    }
+    return { ok: false, error: 'Instagram browser-posting not yet wired (IG aggressively blocks headless automation; needs tested image upload + 2FA handling). Framework ready; Jed must paste IG manually for now.' };
+  } catch (e) {
+    return { ok: false, error: 'IG browser_post failed: ' + String(e.message || e).slice(0, 220) };
+  }
 }
 
 module.exports = { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus };

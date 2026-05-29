@@ -13,3 +13,5 @@ output/
 *.backup
 *.backup-*
 context.md
+.pw_state_*
+.pw_state_*.json
