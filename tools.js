@@ -2,10 +2,11 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts } = require('./memory');
+const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-5-20250929';
@@ -293,6 +294,16 @@ const TOOL_DEFINITIONS = [
       type: 'object',
       properties: {
         action: { type: 'string', enum: ['start', 'stop'], description: 'start (default) arms the campaign; stop deactivates it' }
+      }
+    }
+  },
+  {
+    name: 'update_context',
+    description: "Regenerate /root/solomon-v4/context.md — the live status brief that can be pasted straight into a Claude chat to brief Nathan. Call this whenever a MAJOR EVENT happens (a new sale, an LLC filing, a campaign launch, a system change), passing a short `event` description so it gets logged. Runs automatically at 5 AM CT daily too.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        event: { type: 'string', description: 'Optional one-line description of the event that triggered this update, e.g. "New sale: 3 hoodies", "LLC filed: Shultz Holdings LLC", "RoughCut Pro launched".' }
       }
     }
   },
@@ -2033,7 +2044,17 @@ Output format (JSON):
         mem.set('campaign', 'active', 'true');
         mem.set('campaign', 'start_date', startDay);
         mem.set('campaign', 'started_at', new Date().toISOString());
+        await buildAndWriteContext('Campaign launched: 30-Day Book & Merch (Day 1 = ' + startDay + ')').catch(() => {});
         return { ok: true, message: '30-day book & merch campaign armed (Day 1 = ' + startDay + '). Facebook auto-posts at 7 AM & 6 PM CT; Instagram + YouTube versions go to Telegram for manual posting. First post fires at the next 7 AM or 6 PM CT slot.' };
+      }
+      // CONTEXT BRIEF — regenerate /root/solomon-v4/context.md (5 AM cron + major events)
+      case 'update_context': {
+        try {
+          const r = await buildAndWriteContext(input && input.event);
+          return { ok: true, message: 'context.md updated' + (input && input.event ? ' (event logged)' : ''), path: r.path, bytes: r.bytes };
+        } catch (e) {
+          return { ok: false, error: 'update_context failed: ' + e.message };
+        }
       }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
@@ -2790,6 +2811,152 @@ public class Wallpaper {
     console.error(`[TOOL ERROR] ${name}:`, err.message);
     return { ok: false, error: err.message };
   }
+}
+
+// ── CONTEXT BRIEF (context.md) ─────────────────────────────────────────────
+// Builds /root/solomon-v4/context.md — a paste-ready status brief for Nathan.
+// Live sections come from the system; the "Active Revenue Streams" block and the
+// events log are maintained in mem('context', ...). Regenerated at 5 AM CT daily
+// (scheduler) and on major events (campaign launch, or any update_context call).
+function ctxNowCT() {
+  try { return new Date().toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'full', timeStyle: 'short' }) + ' CT'; }
+  catch (_) { return new Date().toISOString(); }
+}
+
+async function buildAndWriteContext(eventStr) {
+  const now = new Date();
+
+  // Log a major event into the rolling events list (keep last 15).
+  if (eventStr && String(eventStr).trim()) {
+    let log = [];
+    try { log = JSON.parse(mem.get('context', 'recent_events') || '[]'); } catch (_) { log = []; }
+    log.unshift({ ts: now.toISOString(), event: String(eventStr).trim() });
+    mem.set('context', 'recent_events', JSON.stringify(log.slice(0, 15)));
+  }
+
+  // Operational status (PM2)
+  let procLine = '- PM2 status unavailable';
+  try {
+    const procs = JSON.parse(execSync('pm2 jlist', { timeout: 6000 }).toString())
+      .filter(p => p.name && p.name.startsWith('solomon'));
+    if (procs.length) {
+      procLine = procs.map(p => {
+        const env = p.pm2_env || {};
+        const up = env.pm_uptime ? Math.round((Date.now() - env.pm_uptime) / 60000) : 0;
+        return `- ${(env.status || '?').toUpperCase()} — ${p.name} (up ${up}m, ${env.restart_time != null ? env.restart_time : '?'} restarts)`;
+      }).join('\n');
+    }
+  } catch (_) {}
+
+  // Connected social accounts (live) + derive flags
+  const flags = [];
+  let socialLines = '- (social status check failed)';
+  try {
+    const s = await getSocialAuthStatus();
+    const fb = s.facebook || {}, ig = s.instagram || {};
+    const fbBS = fb.building_shultz && fb.building_shultz.canPost;
+    const fbIC = fb.irish_craftsman && fb.irish_craftsman.canPost;
+    const igBS = ig.building_shultz && ig.building_shultz.ready;
+    const igIC = ig.irish_craftsman && ig.irish_craftsman.ready;
+    socialLines = [
+      `- YouTube (Building Shultz): ${s.youtube && s.youtube.tokenValid ? 'CONNECTED (uploads OK; no community-post API)' : 'NOT CONNECTED'}`,
+      `- Facebook — Building Shultz: ${fbBS ? 'CONNECTED' : 'NOT CONNECTED'}`,
+      `- Facebook — Irish Craftsman: ${fbIC ? 'CONNECTED' : 'NOT CONNECTED'}`,
+      `- Instagram — Building Shultz: ${igBS ? 'CONNECTED' : 'NOT CONNECTED'}`,
+      `- Instagram — Irish Craftsman: ${igIC ? 'CONNECTED' : 'NOT CONNECTED'}`
+    ].join('\n');
+    if (!fbIC) flags.push('Facebook (Irish Craftsman) page token expired — posting DOWN; refresh in Meta Business Suite.');
+    if (!igBS && !igIC) flags.push('Instagram not connected (no Business account linked) — IG auto-post unavailable.');
+  } catch (_) {}
+
+  // Tasks: pending + completions in last 7 days
+  let pendingLines = '- None', completionLines = '- None in the last 7 days';
+  try {
+    const pending = tasks.getPending();
+    pendingLines = pending.length ? pending.slice(0, 15).map(t => `- [#${t.id}] ${t.title} (priority ${t.priority})`).join('\n') : '- None';
+    const cutoff = Date.now() - 7 * 86400000;
+    const done = tasks.getAll().filter(t => t.status === 'done' && t.completed_at &&
+      new Date(String(t.completed_at).replace(' ', 'T') + 'Z').getTime() >= cutoff);
+    completionLines = done.length ? done.slice(0, 15).map(t => `- [#${t.id}] ${t.title}`).join('\n') : '- None in the last 7 days';
+  } catch (_) {}
+
+  // Active campaign
+  let campaignLine;
+  if (mem.get('campaign', 'active') === 'true' && mem.get('campaign', 'start_date')) {
+    const start = new Date(mem.get('campaign', 'start_date') + 'T00:00:00');
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const day = Math.round((today - start) / 86400000) + 1;
+    campaignLine = `- 30-Day Book & Merch Launch — ACTIVE (Day ${day} of 30; started ${mem.get('campaign', 'start_date')}). FB auto-posts 7 AM & 6 PM CT; IG/YT to Telegram.`;
+  } else {
+    campaignLine = '- 30-Day Book & Merch Launch — not armed (send /launch to start).';
+  }
+
+  // Budget
+  let budgetLine = '- (unavailable)';
+  try {
+    const spend = budget.getMonthTotal();
+    const hard = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '0');
+    budgetLine = `- Month-to-date AI spend: $${spend.toFixed(2)}${hard ? ` / $${hard.toFixed(2)} hard stop` : ''}`;
+    if (hard && spend >= hard * 0.8) flags.push(`AI budget at ~${Math.round((spend / hard) * 100)}% of the monthly hard stop.`);
+  } catch (_) {}
+
+  // Maintained: revenue streams / business facts
+  const businessMd = mem.get('context', 'business_md') ||
+    '_(Not set yet — Solomon maintains this section as it learns of sales, filings, and launches.)_';
+
+  // Maintained: recent events log
+  let eventsLog = [];
+  try { eventsLog = JSON.parse(mem.get('context', 'recent_events') || '[]'); } catch (_) {}
+  const eventsLines = eventsLog.length
+    ? eventsLog.slice(0, 10).map(e => `- ${String(e.ts || '').slice(0, 16).replace('T', ' ')} — ${e.event}`).join('\n')
+    : '- None logged yet';
+
+  // Stored flags (manual) + derived flags
+  let storedFlags = [];
+  try { storedFlags = JSON.parse(mem.get('context', 'flags') || '[]'); } catch (_) {}
+  const allFlags = storedFlags.concat(flags);
+  const flagsLines = allFlags.length ? allFlags.map(f => `- ${f}`).join('\n') : '- None';
+
+  const md = `# Solomon V4 — Live Context Brief
+_Auto-generated status snapshot. Paste this whole file into a Claude chat to brief Nathan instantly — no extra explanation needed._
+
+**Generated:** ${ctxNowCT()}  (auto-updates 5 AM CT daily + on major events)
+**Owner:** Jedidiah Shultz — Shultz Enterprises (Building Shultz + Irish Craftsman)
+
+## Solomon Operational Status
+${procLine}
+
+## Active Revenue Streams
+${businessMd}
+
+## Active Campaigns
+${campaignLine}
+
+## Connected Social Accounts
+${socialLines}
+
+## Pending Tasks
+${pendingLines}
+
+## Recent Completions (last 7 days)
+${completionLines}
+
+## Recent Major Events
+${eventsLines}
+
+## Budget
+${budgetLine}
+
+## Flags / Needs Attention
+${flagsLines}
+
+---
+_End of brief. Source file: /root/solomon-v4/context.md_
+`;
+
+  const fp = path.join(__dirname, 'context.md');
+  fs.writeFileSync(fp, md, 'utf8');
+  return { path: fp, bytes: md.length };
 }
 
 // ── SOCIAL AUTH STATUS ─────────────────────────────────────────────────────

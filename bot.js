@@ -1161,12 +1161,24 @@ bot.onText(/^\/launch\b/i, async (msg) => {
   }
 });
 
-// /brief — send the morning brief on demand (same as the 6 AM job).
+// /brief — refresh and send the full context.md brief (the paste-ready status snapshot).
 bot.onText(/^\/brief\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
-  try { await generateBrief(msg.chat.id); }
-  catch (e) { bot.sendMessage(msg.chat.id, `❌ Brief error: ${e.message.slice(0, 150)}`).catch(() => {}); }
+  try {
+    // Refresh context.md first (best-effort), then send its full contents.
+    await executeTool('update_context', {}).catch(() => {});
+    let content = '';
+    try { content = fs.readFileSync(path.join(__dirname, 'context.md'), 'utf8'); } catch (_) {}
+    if (!content.trim()) {
+      await bot.sendMessage(msg.chat.id, '⚠️ context.md is empty or missing — the scheduler regenerates it at 5 AM CT and on major events.').catch(() => {});
+      return;
+    }
+    // Plain text (no parse_mode) so the markdown is shown cleanly without Telegram parse errors; chunked if long.
+    await sendLongMessage(msg.chat.id, content, {});
+  } catch (e) {
+    bot.sendMessage(msg.chat.id, `❌ Brief error: ${e.message.slice(0, 150)}`).catch(() => {});
+  }
 });
 
 // /help — list available commands.

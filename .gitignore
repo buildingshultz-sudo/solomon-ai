@@ -12,3 +12,4 @@ output/
 *.bak.*
 *.backup
 *.backup-*
+context.md

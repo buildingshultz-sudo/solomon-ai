@@ -674,6 +674,27 @@ async function runCampaignSlot(slot) {
 cron.schedule('0 7 * * *', () => runCampaignSlot('morning'), { timezone: 'America/Chicago' });
 cron.schedule('0 18 * * *', () => runCampaignSlot('evening'), { timezone: 'America/Chicago' });
 
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 18 — CONTEXT BRIEF: regenerate context.md at 5:00 AM CT daily.
+// (Major events also regenerate it on the fly via the update_context tool.)
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('0 5 * * *', async () => {
+  console.log('[SCHEDULER] 5 AM — regenerating context.md...');
+  try {
+    const r = await executeTool('update_context', {});
+    console.log('[SCHEDULER] context.md:', r.ok ? (r.bytes + ' bytes') : r.error);
+  } catch (err) {
+    console.error('[SCHEDULER] context.md update error:', err.message);
+  }
+}, { timezone: 'America/Chicago' });
+
+// Generate context.md shortly after startup so the file always exists and is fresh.
+setTimeout(() => {
+  executeTool('update_context', {})
+    .then(r => console.log('[SCHEDULER] context.md ready:', r.ok ? (r.bytes + ' bytes') : r.error))
+    .catch(e => console.error('[SCHEDULER] context.md startup gen error:', e.message));
+}, 6000);
+
 console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
 console.log('  • Morning brief send: 6:00 AM CT daily');
@@ -681,6 +702,7 @@ console.log('  • Shorts check: every 30 minutes');
 console.log('  • FB comment monitor: every 5 minutes (suggestion alerts, no auto-post)');
 console.log('  • Email triage (IMAP): every 5 minutes');
 console.log('  • Book & merch campaign: 7 AM + 6 PM CT (when armed via /launch)');
+console.log('  • Context brief (context.md): 5 AM CT daily + on major events');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');
