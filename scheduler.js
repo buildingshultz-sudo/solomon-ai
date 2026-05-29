@@ -9,6 +9,7 @@ const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID);
@@ -256,6 +257,17 @@ cron.schedule("*/5 * * * *", async () => {
         const bump = (k) => mem.set("email_stats", k, String((parseInt(mem.get("email_stats", k), 10) || 0) + 1));
         bump("total"); bump(classification);
         mem.set("email_stats", "last_email_at", new Date().toISOString());
+      } catch (_) {}
+      // Revenue / subscription detection → append (append-only) to master context REVENUE log.
+      // Runs regardless of classification so a sale email is never missed.
+      try {
+        const hay = `${em.from_email || ""} ${em.from_name || ""} ${em.subject || ""}`.toLowerCase();
+        if (/gumroad|stripe|paypal|\bpayout\b|you (made|received) a sale|new sale|payment (received|succeeded)|order confirm|subscription|invoice|receipt|renewed|cancell?ed/.test(hay)) {
+          await executeTool("append_master_context", {
+            section: "REVENUE",
+            entry: `Revenue/billing email from ${em.from_name || em.from_email}: "${(em.subject || "").slice(0, 120)}"`
+          }).catch(() => {});
+        }
       } catch (_) {}
       if (classification === "newsletter") continue;
       const icon = classification === "urgent" ? "🚨" : "📧";
@@ -679,14 +691,36 @@ cron.schedule('0 18 * * *', () => runCampaignSlot('evening'), { timezone: 'Ameri
 // (Major events also regenerate it on the fly via the update_context tool.)
 // ══════════════════════════════════════════════════════════════════════════
 cron.schedule('0 5 * * *', async () => {
-  console.log('[SCHEDULER] 5 AM — regenerating context.md...');
+  console.log('[SCHEDULER] 5 AM — regenerating context.md + master context heartbeat...');
   try {
     const r = await executeTool('update_context', {});
     console.log('[SCHEDULER] context.md:', r.ok ? (r.bytes + ' bytes') : r.error);
   } catch (err) {
     console.error('[SCHEDULER] context.md update error:', err.message);
   }
+  // Daily heartbeat into the permanent master context (append-only).
+  await executeTool('append_master_context', { section: 'GENERAL', entry: 'Daily 5 AM check-in — context refreshed; Solomon online.' }).catch(() => {});
 }, { timezone: 'America/Chicago' });
+
+// ══════════════════════════════════════════════════════════════════════════
+// ITEM 19 — COMMIT WATCHER: every 15 min, log new GitHub commits to master context.
+// Detects "a new feature built and committed" by watching the HEAD commit hash.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('*/15 * * * *', () => {
+  try {
+    const head = execSync('git -C /root/solomon-v4 rev-parse --short HEAD', { timeout: 8000 }).toString().trim();
+    if (!head) return;
+    const last = mem.get('context', 'last_seen_commit');
+    if (head !== last) {
+      if (last) { // skip first run — just record the baseline so we don't log existing HEAD as "new"
+        let subj = '';
+        try { subj = execSync('git -C /root/solomon-v4 log -1 --pretty=%s', { timeout: 8000 }).toString().trim(); } catch (_) {}
+        executeTool('append_master_context', { section: 'PROJECTS', entry: `Feature shipped — commit ${head}: ${subj.slice(0, 140)}` }).catch(() => {});
+      }
+      mem.set('context', 'last_seen_commit', head);
+    }
+  } catch (_) {}
+});
 
 // Generate context.md shortly after startup so the file always exists and is fresh.
 setTimeout(() => {
@@ -703,6 +737,8 @@ console.log('  • FB comment monitor: every 5 minutes (suggestion alerts, no au
 console.log('  • Email triage (IMAP): every 5 minutes');
 console.log('  • Book & merch campaign: 7 AM + 6 PM CT (when armed via /launch)');
 console.log('  • Context brief (context.md): 5 AM CT daily + on major events');
+console.log('  • Master context (shultz_master_context.md): append-only; 5 AM + sales/commits/events');
+console.log('  • Commit watcher: every 15 min (logs new commits to master context)');
 console.log('  • Scheduled posts publisher: every 5 minutes');
 console.log('  • Weekly report: Monday 6:00 AM CT');
 console.log('  • Task worker (with exponential backoff): every 5 minutes');

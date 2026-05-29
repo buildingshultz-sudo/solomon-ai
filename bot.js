@@ -999,6 +999,14 @@ bot.on('message', async (msg) => {
     return;
   }
 
+  // ── "update the context" — Jed explicitly logs a note to the permanent master context ──
+  if (/update (the )?context/i.test(text)) {
+    const note = text.replace(/.*update (the )?context[:,\s\-–—]*/i, '').trim();
+    const r = await executeTool('append_master_context', { section: 'GENERAL', entry: note || 'Manual context update (no note provided).' });
+    bot.sendMessage(msg.chat.id, r.ok ? `📝 Logged to master context (${r.section}):\n${r.entry}` : `⚠️ ${r.error}`).catch(() => {});
+    return;
+  }
+
   // Show typing indicator
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
 
@@ -1146,6 +1154,7 @@ bot.onText(/^\/post\b/i, async (msg) => {
   const content = (msg.text || '').replace(/^\/post\b/i, '').trim();
   if (!content) { bot.sendMessage(msg.chat.id, 'Usage: /post <content to distribute to all socials>').catch(() => {}); return; }
   await handleCrossPost(content, msg.chat.id);
+  executeTool('append_master_context', { section: 'GENERAL', entry: `/post ran — content: "${content.slice(0, 80)}"` }).catch(() => {});
 });
 
 // /launch — start the 30-day book & merch launch campaign sequence.
@@ -1156,26 +1165,27 @@ bot.onText(/^\/launch\b/i, async (msg) => {
     const r = await executeTool('launch_campaign', {});
     const out = r.ok ? `🚀 ${r.message || 'Campaign launched.'}` : `⚠️ ${r.error}`;
     bot.sendMessage(msg.chat.id, out, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(msg.chat.id, out.replace(/[*_`]/g, '')));
+    if (r.ok) executeTool('append_master_context', { section: 'GENERAL', entry: '/launch ran — ' + (r.message || 'campaign armed') }).catch(() => {});
   } catch (e) {
     bot.sendMessage(msg.chat.id, `❌ Launch error: ${e.message.slice(0, 150)}`).catch(() => {});
   }
 });
 
-// /brief — refresh and send the full context.md brief (the paste-ready status snapshot).
+// /brief — send the full PERMANENT master context (shultz_master_context.md), the
+// authoritative paste-into-Claude brief for Nathan. Plain text, chunked if long.
 bot.onText(/^\/brief\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
   try {
-    // Refresh context.md first (best-effort), then send its full contents.
-    await executeTool('update_context', {}).catch(() => {});
     let content = '';
-    try { content = fs.readFileSync(path.join(__dirname, 'context.md'), 'utf8'); } catch (_) {}
+    try { content = fs.readFileSync(path.join(__dirname, 'shultz_master_context.md'), 'utf8'); } catch (_) {}
     if (!content.trim()) {
-      await bot.sendMessage(msg.chat.id, '⚠️ context.md is empty or missing — the scheduler regenerates it at 5 AM CT and on major events.').catch(() => {});
+      await bot.sendMessage(msg.chat.id, '⚠️ shultz_master_context.md is missing — that file is the master source of truth.').catch(() => {});
       return;
     }
-    // Plain text (no parse_mode) so the markdown is shown cleanly without Telegram parse errors; chunked if long.
-    await sendLongMessage(msg.chat.id, content, {});
+    const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const header = `NATHAN CONTEXT BRIEF — CURRENT AS OF ${today}\n(Authoritative. Paste this whole message into a new Claude chat to brief Nathan with zero context loss.)\n\n`;
+    await sendLongMessage(msg.chat.id, header + content, {});
   } catch (e) {
     bot.sendMessage(msg.chat.id, `❌ Brief error: ${e.message.slice(0, 150)}`).catch(() => {});
   }

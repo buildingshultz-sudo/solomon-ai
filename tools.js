@@ -308,6 +308,18 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: 'append_master_context',
+    description: "Append a timestamped entry to the PERMANENT master context file (shultz_master_context.md) WITHOUT deleting anything — history is never lost. Use this whenever a major event happens: a new sale or revenue, a feature shipped, a subscription added/cancelled, a notable command outcome, or when Jed says to update the context. The entry is added under the chosen section's log marker.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        section: { type: 'string', enum: ['REVENUE', 'PROJECTS', 'STACK', 'SAMQUEUE', 'GENERAL'], description: 'Which section log to append under. REVENUE=sales/income; PROJECTS=builds/features; STACK=services/subscriptions; SAMQUEUE=Sam build items; GENERAL=change log / everything else (default).' },
+        entry: { type: 'string', description: 'The note to log, e.g. "New sale: 3 hoodies via Gumroad ($87)".' }
+      },
+      required: ['entry']
+    }
+  },
+  {
     name: 'generate_voice',
     description: 'Generate speech audio from text using ElevenLabs API. Returns audio file path on VPS.',
     input_schema: {
@@ -2056,6 +2068,10 @@ Output format (JSON):
           return { ok: false, error: 'update_context failed: ' + e.message };
         }
       }
+      // MASTER CONTEXT — append-only timestamped entry to shultz_master_context.md
+      case 'append_master_context': {
+        return appendMasterContext(input && input.section, input && input.entry);
+      }
       // EMAIL TRIAGE — read new inbox mail over Gmail IMAP (imap.gmail.com:993)
       case 'check_inbox': {
         const imapUser = process.env.SMTP_USER;
@@ -2821,6 +2837,52 @@ public class Wallpaper {
 function ctxNowCT() {
   try { return new Date().toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'full', timeStyle: 'short' }) + ' CT'; }
   catch (_) { return new Date().toISOString(); }
+}
+
+// ── MASTER CONTEXT (shultz_master_context.md) — permanent, APPEND-ONLY ──────
+// Appends a timestamped entry under a section's <!-- LOG:KEY --> marker. Never
+// deletes existing content. Refreshes the LAST UPDATED line. This is the durable
+// source of truth (distinct from the regenerated context.md snapshot above).
+const MASTER_CTX_PATH = path.join(__dirname, 'shultz_master_context.md');
+const MASTER_MARKERS = {
+  REVENUE: '<!-- LOG:REVENUE -->',
+  PROJECTS: '<!-- LOG:PROJECTS -->',
+  STACK: '<!-- LOG:STACK -->',
+  SAMQUEUE: '<!-- LOG:SAMQUEUE -->',
+  GENERAL: '<!-- LOG:GENERAL -->'
+};
+function nowCT() {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).formatToParts(new Date());
+    const g = (t) => (parts.find(p => p.type === t) || {}).value || '';
+    return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')} CT`;
+  } catch (_) { return new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC'; }
+}
+function appendMasterContext(sectionKey, entry) {
+  if (!entry || !String(entry).trim()) return { ok: false, error: 'empty entry' };
+  const key = MASTER_MARKERS[String(sectionKey || '').toUpperCase()] ? String(sectionKey).toUpperCase() : 'GENERAL';
+  const marker = MASTER_MARKERS[key];
+  let text;
+  try { text = fs.readFileSync(MASTER_CTX_PATH, 'utf8'); }
+  catch (e) { return { ok: false, error: 'cannot read master context: ' + e.message }; }
+  const ts = nowCT();
+  const line = `- [${ts}] ${String(entry).trim()}`;
+  const idx = text.indexOf(marker); // first occurrence = the section's intended log point
+  if (idx === -1) {
+    text = text.replace(/\s*$/, '') + `\n${line}\n`; // marker missing: append at EOF, never lose it
+  } else {
+    const insertAt = idx + marker.length;
+    text = text.slice(0, insertAt) + `\n${line}` + text.slice(insertAt);
+  }
+  // Refresh the LAST UPDATED line (keep its marker).
+  text = text.replace(/\*\*LAST UPDATED:\*\*.*?<!-- LASTUPDATED -->/,
+    `**LAST UPDATED:** ${ts} — [${key}] ${String(entry).trim().slice(0, 80)} <!-- LASTUPDATED -->`);
+  try { fs.writeFileSync(MASTER_CTX_PATH, text, 'utf8'); }
+  catch (e) { return { ok: false, error: 'cannot write master context: ' + e.message }; }
+  return { ok: true, section: key, entry: line };
 }
 
 async function buildAndWriteContext(eventStr) {
