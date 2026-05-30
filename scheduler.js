@@ -751,7 +751,7 @@ ALWAYS call write_lesson after completing.`,
 // ITEM 20 — STARTUP SELF-TEST
 // Verifies all scheduler components are working on startup.
 // ══════════════════════════════════════════════════════════════════════════
-setTimeout(async () => {
+if (_IS_SCHEDULER_MAIN) setTimeout(async () => {
   console.log('[SCHEDULER] Startup self-test...');
   try {
     const pending = tasks.getPending();
@@ -961,7 +961,7 @@ cron.schedule('*/15 * * * *', () => {
 });
 
 // Generate context.md shortly after startup so the file always exists and is fresh.
-setTimeout(() => {
+if (_IS_SCHEDULER_MAIN) setTimeout(() => {
   executeTool('update_context', {})
     .then(r => console.log('[SCHEDULER] context.md ready:', r.ok ? (r.bytes + ' bytes') : r.error))
     .catch(e => console.error('[SCHEDULER] context.md startup gen error:', e.message));
