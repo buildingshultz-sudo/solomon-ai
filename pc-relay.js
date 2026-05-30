@@ -62,6 +62,74 @@ app.post('/execute', (req, res) => {
   });
 });
 
+// ── CALEB TASK QUEUE ─────────────────────────────────────────────────────
+// Solomon's dispatch engine (caleb-relay.js on the VPS) POSTs structured
+// Caleb tasks here. We persist them as JSON files in the Caleb queue dir
+// for Cowork (the desktop agent) to pick up. The payload schema is the one
+// shaped by shapeCalebPayload() in /root/solomon-v4/caleb-relay.js.
+const CALEB_QUEUE_DIR = process.env.CALEB_QUEUE_DIR || (os.platform() === 'win32' ? 'D:\\caleb-queue' : path.join(os.homedir(), 'caleb-queue'));
+try {
+  if (!fs.existsSync(CALEB_QUEUE_DIR)) fs.mkdirSync(CALEB_QUEUE_DIR, { recursive: true });
+  console.log(`[PC RELAY] Caleb queue dir: ${CALEB_QUEUE_DIR}`);
+} catch (e) {
+  console.error(`[PC RELAY] Could not create Caleb queue dir at ${CALEB_QUEUE_DIR}: ${e.message}`);
+}
+
+app.post('/caleb-task', (req, res) => {
+  const p = req.body || {};
+  // Required fields (matches shapeCalebPayload in caleb-relay.js on the VPS).
+  const missing = [];
+  for (const k of ['task', 'template_id', 'handler']) {
+    if (!p[k] || typeof p[k] !== 'string') missing.push(k);
+  }
+  if (missing.length) {
+    return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.join(',') });
+  }
+  if (p.handler !== 'caleb') {
+    return res.status(400).json({ ok: false, error: `Wrong handler: expected 'caleb', got '${p.handler}'` });
+  }
+  // Persist to queue dir. Filename = ISO timestamp + template id (filesystem-safe).
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const safeId = String(p.template_id).replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 80);
+  const filename = `${ts}-${safeId}.json`;
+  const filepath = path.join(CALEB_QUEUE_DIR, filename);
+  // Stamp received_at server-side so Cowork sees when it landed at the PC.
+  const persisted = Object.assign({}, p, {
+    received_at: new Date().toISOString(),
+    status: 'pending'
+  });
+  try {
+    fs.writeFileSync(filepath, JSON.stringify(persisted, null, 2), 'utf8');
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'write failed: ' + e.message });
+  }
+  console.log(`[PC RELAY] Caleb task queued: ${filename} (template ${p.template_id})`);
+  res.json({
+    ok: true,
+    file: filepath,
+    filename,
+    task_id: ts + '-' + safeId,
+    queue_dir: CALEB_QUEUE_DIR
+  });
+});
+
+// Lets Cowork (or anyone) check what's pending without consuming.
+app.get('/caleb-task/queue', (req, res) => {
+  try {
+    const files = fs.readdirSync(CALEB_QUEUE_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(f => {
+        const full = path.join(CALEB_QUEUE_DIR, f);
+        const st = fs.statSync(full);
+        return { filename: f, size: st.size, mtime: st.mtime.toISOString() };
+      })
+      .sort((a, b) => a.mtime.localeCompare(b.mtime));
+    res.json({ ok: true, queue_dir: CALEB_QUEUE_DIR, count: files.length, files });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── SCREENSHOT ───────────────────────────────────────────────────────────
 app.get('/screenshot', (req, res) => {
   const tmpFile = path.join(os.tmpdir(), `shot_${Date.now()}.png`);
