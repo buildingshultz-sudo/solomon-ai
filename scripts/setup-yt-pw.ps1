@@ -1,15 +1,18 @@
-# Solomon YouTube Playwright auth — one-shot PC setup
-# Pull this from the VPS and run it. It installs Playwright + Chromium into a
-# temp workspace (one-time, ~250MB), opens a browser for you to sign into
-# YouTube as the Building Shultz brand channel, then uploads the resulting
-# session file to the VPS so Solomon can post on your behalf.
+# Solomon YouTube Playwright auth - one-shot PC setup
+# Pull this from the VPS and run it. Drives your REAL installed Google Chrome
+# using your existing User Data / Default profile (where you are already signed
+# in). No login UI appears - Chrome opens already authenticated. Result: the
+# Playwright session file is captured and uploaded to the VPS so Solomon can
+# post on your behalf.
+#
+# Pure ASCII (no box-drawing / em-dashes) so PS 5.1 always parses cleanly.
 
 $ErrorActionPreference = 'Stop'
-$VpsHost = 'root@167.99.237.26'
-$SshKey  = 'C:\Users\Ashle\.ssh\hostinger_solomon'
-$Workdir = Join-Path $env:TEMP 'solomon-pw-auth'
-$ScriptName = 'capture_yt_pw_auth.js'
-$StateFile = '.pw_state_youtube.json'
+$VpsHost     = 'root@167.99.237.26'
+$SshKey      = 'C:\Users\Ashle\.ssh\hostinger_solomon'
+$Workdir     = Join-Path $env:TEMP 'solomon-pw-auth'
+$ScriptName  = 'capture_yt_pw_auth.js'
+$StateFile   = '.pw_state_youtube.json'
 
 Write-Host ''
 Write-Host '=== Solomon YouTube Playwright auth setup ===' -ForegroundColor Cyan
@@ -21,7 +24,7 @@ if (-not (Test-Path $Workdir)) {
 }
 Set-Location $Workdir
 
-# Step 1 — make sure Node.js is available
+# Step 1 - confirm Node.js
 try { $nodeVersion = node --version } catch {
     Write-Host '[ERROR] Node.js is not installed on this PC.' -ForegroundColor Red
     Write-Host 'Install it from https://nodejs.org (LTS), then re-run this script.'
@@ -29,7 +32,62 @@ try { $nodeVersion = node --version } catch {
 }
 Write-Host "Node $nodeVersion detected."
 
-# Step 2 — pull the capture script from the VPS (overwrites any old copy)
+# Step 2 - confirm Google Chrome is installed (we drive YOUR Chrome, not Chromium)
+$chromePaths = @(
+    "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+    "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+    "$env:LocalAppData\Google\Chrome\Application\chrome.exe"
+)
+$chromeExe = $chromePaths | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $chromeExe) {
+    Write-Host '[ERROR] Google Chrome not found in the usual locations.' -ForegroundColor Red
+    Write-Host 'Install Chrome from https://www.google.com/chrome/ and re-run.'
+    exit 1
+}
+Write-Host "Google Chrome detected: $chromeExe"
+
+# Step 2b - confirm the User Data directory exists (this is where your real
+#           profile + cookies + signed-in Google accounts live)
+$userDataDir = "$env:LocalAppData\Google\Chrome\User Data"
+if (-not (Test-Path $userDataDir)) {
+    Write-Host "[ERROR] Chrome User Data directory not found at: $userDataDir" -ForegroundColor Red
+    Write-Host 'Open Chrome at least once normally so the profile is created, then re-run.'
+    exit 1
+}
+Write-Host "Chrome profile dir found: $userDataDir"
+
+# Step 3 - Chrome cannot be running while we use its profile. Detect + offer to close.
+$running = Get-Process -Name 'chrome' -ErrorAction SilentlyContinue
+if ($running) {
+    Write-Host ''
+    Write-Host "[NOTICE] Google Chrome is currently running ($($running.Count) process(es))." -ForegroundColor Yellow
+    Write-Host '         Playwright needs the profile unlocked. Save any open tabs (Ctrl+Shift+T can'
+    Write-Host '         restore them later), then choose:'
+    Write-Host ''
+    Write-Host '         [Y] Close Chrome for me and continue'
+    Write-Host '         [N] Exit so I can close Chrome manually'
+    Write-Host ''
+    $answer = Read-Host 'Close Chrome now? (Y/N)'
+    if ($answer -notmatch '^(y|yes)$') {
+        Write-Host 'Exit. Close all Chrome windows manually (check the system tray too) and re-run.' -ForegroundColor Yellow
+        exit 0
+    }
+    Write-Host 'Closing Chrome...' -ForegroundColor Cyan
+    try {
+        Stop-Process -Name 'chrome' -Force -ErrorAction Stop
+    } catch {
+        Write-Host "[ERROR] Could not close Chrome: $_" -ForegroundColor Red
+        exit 1
+    }
+    Start-Sleep -Seconds 2
+    if (Get-Process -Name 'chrome' -ErrorAction SilentlyContinue) {
+        Write-Host '[ERROR] Chrome still running after Stop-Process. Close it manually and re-run.' -ForegroundColor Red
+        exit 1
+    }
+    Write-Host 'Chrome closed.' -ForegroundColor Green
+}
+
+# Step 4 - pull the latest capture script from the VPS (overwrites any old copy)
 Write-Host ''
 Write-Host 'Downloading capture script from VPS...' -ForegroundColor Cyan
 & scp -i $SshKey "$VpsHost`:/root/solomon-v4/scripts/$ScriptName" "$ScriptName"
@@ -38,31 +96,27 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Step 3 — install playwright + chromium ONCE (skipped on later runs)
+# Step 5 - install the playwright npm package once (no browser download; we drive system Chrome)
 if (-not (Test-Path 'node_modules\playwright')) {
     Write-Host ''
-    Write-Host 'Installing Playwright (one-time, ~30s)...' -ForegroundColor Cyan
+    Write-Host 'Installing Playwright npm package (one-time, ~30s, no big download)...' -ForegroundColor Cyan
     if (-not (Test-Path 'package.json')) {
         & npm init -y | Out-Null
     }
     & npm install playwright --silent
     if ($LASTEXITCODE -ne 0) { Write-Host '[ERROR] npm install playwright failed.' -ForegroundColor Red; exit 1 }
-
-    Write-Host ''
-    Write-Host 'Installing Chromium browser (one-time, ~250MB)...' -ForegroundColor Cyan
-    & npx playwright install chromium
-    if ($LASTEXITCODE -ne 0) { Write-Host '[ERROR] playwright install chromium failed.' -ForegroundColor Red; exit 1 }
 } else {
-    Write-Host 'Playwright already installed in workspace — skipping install.'
+    Write-Host 'Playwright already installed in workspace - skipping install.'
 }
 
-# Step 4 — run the capture (opens a browser, waits for login)
+# Step 6 - run the capture (opens YOUR signed-in Chrome)
 Write-Host ''
 Write-Host '=========================================================' -ForegroundColor Yellow
-Write-Host ' A browser window will open in a moment.'                    -ForegroundColor Yellow
-Write-Host ' Sign in as the Google account that owns Building Shultz.'   -ForegroundColor Yellow
-Write-Host ' If YouTube asks "Which channel?", pick Building Shultz.'    -ForegroundColor Yellow
-Write-Host ' Then return here and press Enter to save the session.'      -ForegroundColor Yellow
+Write-Host ' Your Google Chrome will open in a moment, ALREADY signed in.'   -ForegroundColor Yellow
+Write-Host ' Confirm that YouTube Studio shows the Building Shultz channel.' -ForegroundColor Yellow
+Write-Host ' If it shows a different channel: click avatar (top right) ->'   -ForegroundColor Yellow
+Write-Host ' Switch account -> pick Building Shultz, then return here.'      -ForegroundColor Yellow
+Write-Host ' Then press Enter to save the session.'                          -ForegroundColor Yellow
 Write-Host '=========================================================' -ForegroundColor Yellow
 Write-Host ''
 & node $ScriptName
@@ -71,9 +125,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Step 5 — upload the saved session file back to the VPS
+# Step 7 - upload the saved session file back to the VPS
 if (-not (Test-Path $StateFile)) {
-    Write-Host "[ERROR] $StateFile was not created. Did you actually sign in before pressing Enter?" -ForegroundColor Red
+    Write-Host "[ERROR] $StateFile was not created. Did you actually confirm the channel before pressing Enter?" -ForegroundColor Red
     exit 1
 }
 Write-Host ''
@@ -83,12 +137,11 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host '[ERROR] scp upload failed.' -ForegroundColor Red
     exit 1
 }
-# Lock down permissions on the VPS-side file
 & ssh -i $SshKey $VpsHost "chmod 600 /root/solomon-v4/$StateFile" 2>$null
 
 Write-Host ''
 Write-Host '=========================================================' -ForegroundColor Green
-Write-Host ' ✅ Done. Solomon can now post to YouTube community.'      -ForegroundColor Green
-Write-Host '    Test it by messaging Solomon: /post test YT post'      -ForegroundColor Green
+Write-Host ' Done. Solomon can now post to YouTube community.'           -ForegroundColor Green
+Write-Host '    Test it by messaging Solomon: /post test YT post'        -ForegroundColor Green
 Write-Host '=========================================================' -ForegroundColor Green
 Write-Host ''
