@@ -1,87 +1,87 @@
-# Playwright auth setup — one-time, per platform
+# Playwright Auth Setup — YouTube (one-time)
 
-Solomon's `post_via_browser` tool drives a real headless Chromium on the VPS to post to
-YouTube (community posts) and Instagram (feed), because their public APIs don't allow it.
-The browser needs a saved login session. This file tells you how to create that.
+This is a **one-time** setup. Once done, Solomon can post to the Building Shultz YouTube community page automatically (no API restrictions, no manual pasting).
 
-**The state files contain login cookies — never commit them. They're gitignored as
-`.pw_state_*.json` already.**
+You only have to do this **once per Google account**. You only have to redo it if Google logs you out (rare — usually months apart).
 
-## One-time setup (per platform)
+---
 
-### A. On Jed's PC (the one signed into the target Google/Instagram account)
+## What you're doing in one sentence
 
-1. In a terminal, create a temp folder and install Playwright:
+You're logging into YouTube **once** in a special browser on your PC, then sending the saved login session file to the VPS. After that, Solomon uses your saved session to post on your behalf.
+
+---
+
+## The steps — pick ONE path
+
+### Path A — Easiest (PowerShell, ~3 minutes)
+
+Open **PowerShell** on your Windows PC. Paste this **one line** and hit Enter:
+
+```powershell
+scp -i C:\Users\Ashle\.ssh\hostinger_solomon root@167.99.237.26:/root/solomon-v4/scripts/setup-yt-pw.ps1 $env:TEMP\setup-yt-pw.ps1; powershell -ExecutionPolicy Bypass -File $env:TEMP\setup-yt-pw.ps1
+```
+
+Then:
+1. Wait a moment — the first run installs Playwright + Chromium (~250MB, only happens once).
+2. A **Chromium browser window will open** and go to YouTube.
+3. **Sign in as the Google account that owns the Building Shultz brand channel** (NOT your personal account if they're different).
+4. If YouTube asks "Which channel?", pick **Building Shultz**.
+5. Once you see the YouTube home page logged in as Building Shultz, **return to the PowerShell window and press Enter**.
+6. The script saves your login session and **automatically uploads it to the VPS**. Done.
+
+When it's done you'll see: `✅ Uploaded .pw_state_youtube.json to VPS — Solomon can now post to YouTube community.`
+
+If anything fails, send me the last few lines of the PowerShell output and I'll fix it.
+
+---
+
+### Path B — Manual (if Path A's PowerShell line doesn't work)
+
+1. **Download the capture script:**
+   ```powershell
+   scp -i C:\Users\Ashle\.ssh\hostinger_solomon root@167.99.237.26:/root/solomon-v4/scripts/capture_yt_pw_auth.js C:\Users\Ashle\Desktop\capture_yt_pw_auth.js
    ```
-   mkdir pw_setup && cd pw_setup
+
+2. **In a new folder, install Playwright** (~250MB, one-time):
+   ```powershell
+   cd C:\Users\Ashle\Desktop
+   mkdir solomon-pw-auth -Force; cd solomon-pw-auth
    npm init -y
-   npm i playwright
+   npm install playwright
    npx playwright install chromium
    ```
 
-2. Save this as `save_state.js` in that folder (replace `youtube` with `instagram` to do IG):
-   ```js
-   // save_state.js — opens a real browser, you log in once, it saves the session.
-   const { chromium } = require('playwright');
-   (async () => {
-     const platform = process.argv[2] || 'youtube';
-     const url = platform === 'youtube'
-       ? 'https://studio.youtube.com/'
-       : 'https://www.instagram.com/accounts/login/';
-     const browser = await chromium.launch({ headless: false });
-     const ctx = await browser.newContext();
-     const page = await ctx.newPage();
-     await page.goto(url);
-     console.log(`\n>> A browser window just opened. Log into ${platform} normally`);
-     console.log(`>> (do 2FA / pass the consent screens / land on the home page).`);
-     console.log(`>> When you're fully signed in, come back here and press ENTER.\n`);
-     process.stdin.once('data', async () => {
-       await ctx.storageState({ path: `.pw_state_${platform}.json` });
-       await browser.close();
-       console.log(`Saved .pw_state_${platform}.json`);
-       process.exit(0);
-     });
-   })();
+3. **Move the script and run it:**
+   ```powershell
+   move ..\capture_yt_pw_auth.js .
+   node capture_yt_pw_auth.js
    ```
 
-3. Run it:
-   ```
-   node save_state.js youtube
-   ```
-   A Chromium window opens. Log into the target Google account, click through any
-   "Brand account" picker so you land on **Building Shultz** YouTube Studio. Once you
-   see the Studio dashboard, return to the terminal and press ENTER. It writes
-   `.pw_state_youtube.json` in the current folder.
+4. **Browser opens** → sign in to YouTube as the Building Shultz account → pick the Building Shultz channel if asked → return to PowerShell and press Enter.
 
-4. Upload it to the VPS:
-   ```
+5. **Upload the saved file to the VPS:**
+   ```powershell
    scp -i C:\Users\Ashle\.ssh\hostinger_solomon .pw_state_youtube.json root@167.99.237.26:/root/solomon-v4/.pw_state_youtube.json
    ```
 
-5. Repeat for Instagram: `node save_state.js instagram`, then scp the file. (Note:
-   IG auto-posting via browser is more fragile than YT and IG actively detects
-   automation — start with YT.)
+Done.
 
-## Test it
+---
 
-After the state file is in place, on the VPS:
-```
-ssh -i C:\Users\Ashle\.ssh\hostinger_solomon root@167.99.237.26
-cd /root/solomon-v4
-node -e "require('./tools').executeTool('post_via_browser',{platform:'youtube',content:'Test post from Solomon — please ignore'}).then(r=>console.log(JSON.stringify(r)))"
-```
+## How to know it worked
 
-You should see `{"ok":true,"platform":"youtube","message":"YouTube community post submitted via browser."}` and the post should appear on the channel.
+After the upload, send Solomon: `/post test community post — please ignore`. Solomon should post it to the Building Shultz YouTube community page within a minute. If you see a "auth state expired" error, the session is bad — just run Path A again.
 
-## When auth expires
+## Privacy / safety
 
-Sessions eventually expire (Google ~weeks-to-months, IG faster). When `post_via_browser`
-starts returning an "auth state expired" error, repeat step 3 + 4 to refresh.
+- The saved file (`.pw_state_youtube.json`) is your YouTube login cookies. **Never share it** with anyone or commit it to git.
+- It is gitignored on the VPS (pattern `.pw_state_*.json`).
+- File permissions on the VPS are chmod 600 (root-only).
+- You can revoke the saved session at any time by signing out everywhere from your Google Account → Security → Manage devices, then redoing Path A.
 
-## Important
+## When you need to redo this
 
-- **Never share or commit `.pw_state_*.json`** — anyone with the file can post as Jed.
-- IG/YT may flag automated activity. Use sparingly; don't post identical content rapidly.
-- Selectors in `_ytCommunityPost` / `_igFeedPost` are defensive but may break when
-  YouTube/Instagram updates their UI. If a post fails with a selector error, fall back
-  to manual posting and ping Sam to refresh the selectors.
+- If Solomon's YouTube community post returns "auth state expired"
+- If you've signed out from YouTube everywhere
+- If you changed the Google account's password recently and got logged out

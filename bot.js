@@ -1309,6 +1309,73 @@ bot.onText(/^\/setfbtoken\b/i, async (msg) => {
   }
 });
 
+// /generate <prompt> — generate an image via Black Forest Labs Flux and reply with it.
+bot.onText(/^\/generate\b\s*(.*)$/i, async (msg, match) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const prompt = (match && match[1] || '').trim();
+  if (!prompt) {
+    bot.sendMessage(msg.chat.id, 'Usage: `/generate <prompt>`\nExample: `/generate weathered leather book cover, "Motivation for Tough Guys" gold foil title, cinematic lighting`', { parse_mode: 'Markdown' }).catch(() => {});
+    return;
+  }
+  const apiKey = process.env.BFL_API_KEY;
+  if (!apiKey || apiKey === 'PLACEHOLDER') {
+    bot.sendMessage(msg.chat.id, '❌ BFL_API_KEY missing in .env.').catch(() => {});
+    return;
+  }
+  log('INFO', 'GENERATE', `prompt: ${prompt.slice(0, 120)}`);
+  bot.sendChatAction(msg.chat.id, 'upload_photo').catch(() => {});
+  const baseUrl = process.env.BFL_API_URL || 'https://api.bfl.ai';
+  const endpoint = process.env.BFL_MODEL_ENDPOINT || '/v1/flux-pro-1.1';
+  try {
+    const submitResp = await axios.post(`${baseUrl}${endpoint}`, {
+      prompt,
+      width: 1024,
+      height: 1024,
+      prompt_upsampling: false,
+      safety_tolerance: 2,
+      output_format: 'jpeg'
+    }, {
+      headers: { 'x-key': apiKey, 'Content-Type': 'application/json' },
+      timeout: 20000
+    });
+    const jobId = submitResp.data?.id;
+    const pollingUrl = submitResp.data?.polling_url || `${baseUrl}/v1/get_result?id=${jobId}`;
+    if (!jobId) throw new Error('BFL did not return a job id');
+    log('INFO', 'GENERATE', `job submitted: ${jobId}`);
+
+    let imageUrl = null;
+    const maxAttempts = 30; // ~60s total at 2s interval
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(r => setTimeout(r, 2000));
+      const pollResp = await axios.get(pollingUrl, {
+        headers: { 'x-key': apiKey, accept: 'application/json' },
+        timeout: 15000
+      });
+      const status = pollResp.data?.status;
+      if (status === 'Ready') {
+        imageUrl = pollResp.data?.result?.sample;
+        break;
+      }
+      if (status === 'Error' || status === 'Content Moderated' || status === 'Request Moderated') {
+        throw new Error(`BFL ${status}: ${JSON.stringify(pollResp.data?.result || {}).slice(0, 200)}`);
+      }
+      if (status === 'Task not found') throw new Error('BFL: task not found');
+      // else Pending / Queued → continue polling
+    }
+    if (!imageUrl) throw new Error('Generation timed out after 60s');
+
+    log('INFO', 'GENERATE', `image ready, sending to Telegram`);
+    await bot.sendPhoto(msg.chat.id, imageUrl, {
+      caption: `🎨 ${prompt.slice(0, 900)}`
+    });
+    activityLogger.logActivity('image_generated', { summary: prompt.slice(0, 100) });
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.response?.data || err.message;
+    log('ERROR', 'GENERATE', 'Image generation failed', { error: String(detail).slice(0, 200) });
+    bot.sendMessage(msg.chat.id, `❌ Image generation failed: ${String(detail).slice(0, 300)}`).catch(() => {});
+  }
+});
+
 // /help — list available commands.
 bot.onText(/^\/help\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
@@ -1318,6 +1385,7 @@ bot.onText(/^\/help\b/i, async (msg) => {
     '/post <content> — rewrite + distribute to all socials',
     '/launch — start the 30-day book & merch campaign',
     '/brief — send the morning brief now',
+    '/generate <prompt> — generate an image (Flux 1.1 via BFL) and reply with it',
     '/setfbtoken <page> <token> — paste a freshly-regenerated FB page token; Solomon validates + restarts',
     '/help — this list',
     '',
@@ -1482,13 +1550,17 @@ app.get('/oauth/start', (req, res) => {
     'https://www.googleapis.com/auth/gmail.send'
   ].join(' ');
 
+  // prompt=select_account+consent forces Google to show BOTH the account picker
+  // AND the consent screen — required so Jed can switch from his personal channel
+  // to the Building Shultz brand channel during reauth.
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&response_type=code` +
     `&scope=${encodeURIComponent(scopes)}` +
     `&access_type=offline` +
-    `&prompt=consent`;
+    `&include_granted_scopes=true` +
+    `&prompt=${encodeURIComponent('select_account consent')}`;
 
   console.log('[OAUTH] Serving desktop auth page...');
   res.send(`<!DOCTYPE html>
@@ -1510,10 +1582,15 @@ app.get('/oauth/start', (req, res) => {
 </head>
 <body>
 <h1>&#x1F4F9; Solomon YouTube Authorization</h1>
-<p>Follow these steps to authorize Solomon to upload videos to your YouTube channel.</p>
+<p>Authorize Solomon to post to the <strong>Building Shultz</strong> YouTube channel.</p>
+
+<div class="step" style="border-left-color:#1a73e8;background:#e8f0fe;">
+  <strong>&#x26A0;&#xFE0F; READ THIS FIRST — Pick the BRAND channel, not the personal one:</strong>
+  After you click the button below, Google will show you an account picker. Choose the Google account that owns <strong>Building Shultz</strong> (~1,450 subs). If Google then asks <em>"Which channel?"</em>, pick <strong>Building Shultz</strong>, NOT <em>Jedidiah Shultz</em>. Wrong pick = Solomon posts to the wrong channel.
+</div>
 
 <div class="step">
-  <strong>Step 1 — Click the link below to authorize on Google:</strong>
+  <strong>Step 1 — Click to authorize on Google:</strong>
   <a class="btn" href="${authUrl}" target="_blank">&#x1F517; Open Google Authorization</a>
   <p class="warn">&#x26A0;&#xFE0F; After clicking Allow, your browser will try to load <code>http://localhost</code> and show a connection error. That's expected.</p>
 </div>
@@ -1550,7 +1627,7 @@ app.post('/oauth/exchange', express.urlencoded({ extended: false }), async (req,
       redirect_uri: 'http://localhost',
       grant_type: 'authorization_code'
     });
-    const { refresh_token, expires_in } = tokenResp.data;
+    const { refresh_token, access_token, expires_in } = tokenResp.data;
     console.log('[OAUTH] Token exchange successful!');
     if (refresh_token) {
       const envPath = path.join(__dirname, '.env');
@@ -1559,12 +1636,36 @@ app.post('/oauth/exchange', express.urlencoded({ extended: false }), async (req,
       fs.writeFileSync(envPath, envContent);
       process.env.YOUTUBE_REFRESH_TOKEN = refresh_token;
       console.log('[OAUTH] Refresh token saved to .env');
-      bot.sendMessage(OWNER_ID, '\u2705 YouTube OAuth authorized! Refresh token saved. Video uploads are now enabled.').catch(() => {});
-      res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:500px;margin:60px auto;padding:20px;">
-        <h1 style="color:green;">&#x2705; YouTube Authorized!</h1>
-        <p>Refresh token saved. Solomon can now upload videos to YouTube.</p>
-        <p>You received a confirmation on Telegram. You can close this window.</p>
-      </body></html>`);
+
+      // Verify which channel was actually connected and surface it to Jed so he
+      // immediately knows if he picked the wrong one (personal vs Building Shultz).
+      let channelInfo = { title: '(could not fetch)', subs: '?', id: '?' };
+      try {
+        const chResp = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+          params: { part: 'snippet,statistics', mine: true },
+          headers: { Authorization: `Bearer ${access_token}` },
+          timeout: 10000
+        });
+        const ch = chResp.data?.items?.[0];
+        if (ch) {
+          channelInfo = {
+            title: ch.snippet?.title || '(no title)',
+            subs: ch.statistics?.subscriberCount || '?',
+            id: ch.id || '?'
+          };
+        }
+      } catch (chErr) {
+        console.error('[OAUTH] channel verify failed:', chErr.message);
+      }
+      const isBrand = /building\s*shultz/i.test(channelInfo.title);
+      const tgMsg = isBrand
+        ? `\u2705 YouTube OAuth authorized to the *${channelInfo.title}* channel (${channelInfo.subs} subs). Refresh token saved. Video uploads + community posts enabled.`
+        : `\u26a0\ufe0f YouTube OAuth saved BUT connected to *${channelInfo.title}* (${channelInfo.subs} subs) \u2014 this looks like the wrong channel. Re-run the auth flow and pick the Building Shultz brand channel during the picker step. URL: http://167.99.237.26:3000/oauth/start`;
+      bot.sendMessage(OWNER_ID, tgMsg, { parse_mode: 'Markdown' }).catch(() => {});
+      const banner = isBrand
+        ? `<h1 style="color:green;">&#x2705; Authorized to ${channelInfo.title}</h1><p>${channelInfo.subs} subscribers. Refresh token saved. You can close this window.</p>`
+        : `<h1 style="color:#b00;">&#x26A0;&#xFE0F; Wrong channel connected</h1><p>You connected <strong>${channelInfo.title}</strong> (${channelInfo.subs} subs). This is not the Building Shultz brand channel.</p><p><a href="/oauth/start">&#x2190; Try again</a> and pick Building Shultz during the channel picker step.</p>`;
+      res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:560px;margin:60px auto;padding:20px;">${banner}</body></html>`);
     } else {
       res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:500px;margin:60px auto;padding:20px;">
         <h2>&#x26A0;&#xFE0F; No refresh token returned.</h2>
@@ -1592,10 +1693,58 @@ app.get('/oauth/callback', (req, res) => {
   }
 });
 
+// ── GUMROAD WEBHOOK ──────────────────────────────────────────────────────
+// Gumroad's "Ping" webhook POSTs application/x-www-form-urlencoded on each sale.
+// No HMAC signature on free-tier Ping — we gate access via a secret in the URL
+// path so only Gumroad (with the right URL) can fire celebrations. Set the URL
+// at https://app.gumroad.com/settings/advanced under "Ping".
+const _gumroadSeenSales = new Set(); // dedup retried pings within a single bot lifetime
+app.post('/webhooks/gumroad/:secret', express.urlencoded({ extended: true }), async (req, res) => {
+  const expected = process.env.GUMROAD_WEBHOOK_SECRET;
+  if (!expected || expected === 'PLACEHOLDER') {
+    log('WARN', 'GUMROAD', 'Webhook hit but GUMROAD_WEBHOOK_SECRET not configured');
+    return res.status(503).send('webhook not configured');
+  }
+  if (req.params.secret !== expected) {
+    log('WARN', 'GUMROAD', 'Bad secret', { ip: req.ip });
+    return res.status(403).send('forbidden');
+  }
+  const b = req.body || {};
+  const saleId = b.sale_id || b.id || `${b.product_id || ''}-${b.sale_timestamp || Date.now()}`;
+  if (_gumroadSeenSales.has(saleId)) {
+    return res.status(200).send('duplicate ignored');
+  }
+  _gumroadSeenSales.add(saleId);
+  if (_gumroadSeenSales.size > 500) {
+    const keep = [..._gumroadSeenSales].slice(-250);
+    _gumroadSeenSales.clear();
+    keep.forEach(k => _gumroadSeenSales.add(k));
+  }
+  // Gumroad price is in cents (string) per their docs.
+  const priceCents = parseInt(b.price || '0', 10);
+  const currency = (b.currency || 'usd').toUpperCase();
+  const amount = isNaN(priceCents) ? b.price : (priceCents / 100).toFixed(2);
+  const product = b.product_name || b.permalink || '(unnamed product)';
+  const buyer = b.full_name || b.email || '(buyer)';
+  const quantity = b.quantity || '1';
+  const refunded = b.refunded === 'true' || b.refunded === true;
+  const test = b.test === 'true' || b.test === true;
+  const header = refunded ? '↩️ *Refund processed*' : (test ? '🧪 *Test sale*' : '🎉 *NEW SALE!* 💰');
+  const message = `${header}\n\n*Product:* ${product}\n*Amount:* ${currency} $${amount}${quantity !== '1' ? ` × ${quantity}` : ''}\n*Buyer:* ${buyer}`;
+  bot.sendMessage(OWNER_ID, message, { parse_mode: 'Markdown' })
+    .catch(() => bot.sendMessage(OWNER_ID, message.replace(/[*_`]/g, '')));
+  log('INFO', 'GUMROAD', 'Sale celebrated', { product, amount, currency, test, refunded });
+  activityLogger.logActivity('gumroad_sale', { summary: `${product} ${currency} $${amount}` });
+  res.status(200).send('ok');
+});
+
 // ── LISTEN ───────────────────────────────────────────────────────────────
 app.listen(parseInt(process.env.PORT || '3000'), '0.0.0.0', () => {
   log('INFO', 'SYSTEM', `Inject endpoint listening on port ${process.env.PORT || 3000}`);
   log('INFO', 'SYSTEM', 'OAuth: visit http://167.99.237.26:3000/oauth/start to authorize YouTube');
+  if (process.env.GUMROAD_WEBHOOK_SECRET && process.env.GUMROAD_WEBHOOK_SECRET !== 'PLACEHOLDER') {
+    log('INFO', 'SYSTEM', 'Gumroad webhook ready at /webhooks/gumroad/<secret>');
+  }
 });
 
 // ── STARTUP MESSAGE ──────────────────────────────────────────────────────
