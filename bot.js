@@ -1016,6 +1016,100 @@ async function generateBrief(chatId) {
   await bot.sendMessage(chatId, brief, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(chatId, brief.replace(/[*_`]/g, '')));
 }
 
+// ══ INLINE-BUTTON APPROVAL FLOWS ════════════════════════════════════════
+// Two flows share this plumbing:
+//   • FB comment auto-reply       (✅ Post It / ✍️ Edit)
+//   • Campaign post preview       (✅ Post Now / ✍️ Edit / ⏭️ Skip)
+// The scheduler creates a row in mem('pending_action', id) = JSON({type, status,
+// deadline_ts, payload, …}). Telegram inline_keyboard buttons carry callback_data
+// "act:<id>:<verb>". Here we look up the action, dispatch, and persist the new
+// status so the watcher cron knows whether to auto-fire later.
+async function _executeFbReply(action, replyText) {
+  const p = action.payload;
+  const r = await executeTool('reply_fb_comment', { page: p.page, comment_id: p.comment_id, message: replyText });
+  return r.ok
+    ? `✅ Posted reply on ${p.page_label || p.page} (reply id ${r.reply_id})`
+    : `❌ Reply failed: ${r.error}`;
+}
+
+async function _executeCampaignPost(action, overrideFacebook) {
+  const p = action.payload;
+  const fbText = (overrideFacebook && overrideFacebook.trim()) || p.facebook;
+  const fbResults = [];
+  for (const [pageKey, label] of [['building_shultz', 'Building Shultz'], ['irish_craftsman', 'Irish Craftsman']]) {
+    try {
+      const r = await executeTool('social_post', { page: pageKey, platform: 'facebook', message: fbText });
+      fbResults.push(`${r.ok ? '✅' : '❌'} ${label}${r.ok ? ` (id ${r.post_id})` : `: ${r.error || 'failed'}`}`);
+    } catch (e) { fbResults.push(`❌ ${label}: ${e.message.slice(0, 80)}`); }
+  }
+  return `📅 *Day ${p.dayIndex}/30 — ${p.slot}* posted to Facebook:\n${fbResults.join('\n')}\n\n📸 Instagram + ▶️ YouTube handbacks were sent at preview time.`;
+}
+
+function _setActionStatus(actionId, status, patch) {
+  const raw = mem.get('pending_action', actionId);
+  if (!raw) return null;
+  let a; try { a = JSON.parse(raw); } catch (_) { return null; }
+  a.status = status;
+  if (patch) Object.assign(a, patch);
+  mem.set('pending_action', actionId, JSON.stringify(a));
+  return a;
+}
+
+bot.on('callback_query', async (cq) => {
+  try {
+    if (!cq.from || cq.from.id !== OWNER_ID) {
+      bot.answerCallbackQuery(cq.id, { text: 'Not authorized.' }).catch(() => {});
+      return;
+    }
+    const data = cq.data || '';
+    const m = data.match(/^act:([a-zA-Z0-9_-]+):(post|edit|skip)$/);
+    if (!m) { bot.answerCallbackQuery(cq.id, { text: 'Unknown action.' }).catch(() => {}); return; }
+    const [, actionId, verb] = m;
+    const raw = mem.get('pending_action', actionId);
+    if (!raw) { bot.answerCallbackQuery(cq.id, { text: 'This action expired.' }).catch(() => {}); return; }
+    let action; try { action = JSON.parse(raw); } catch (_) { return; }
+    if (action.status && action.status !== 'pending') {
+      bot.answerCallbackQuery(cq.id, { text: `Already ${action.status}.` }).catch(() => {});
+      return;
+    }
+    bot.answerCallbackQuery(cq.id, { text: '👍' }).catch(() => {});
+
+    if (verb === 'skip') {
+      _setActionStatus(actionId, 'skipped');
+      await bot.sendMessage(cq.message.chat.id, `⏭️ Skipped: ${action.payload?.label || action.type}.`).catch(() => {});
+      return;
+    }
+
+    if (verb === 'edit') {
+      // Park us in edit-mode for this user. The next non-slash text message
+      // becomes the replacement content for this action.
+      mem.set('pending_edit', String(OWNER_ID), JSON.stringify({ actionId, type: action.type, ts: Date.now() }));
+      const hint = action.type === 'fb_reply'
+        ? `✍️ Send your replacement reply text now. It will be posted to ${action.payload.page_label || action.payload.page} as the reply to ${action.payload.commenter}.`
+        : `✍️ Send the replacement Facebook post text now. It will be posted to BOTH pages. (Instagram + YouTube handbacks at preview time still stand.)`;
+      await bot.sendMessage(cq.message.chat.id, hint).catch(() => {});
+      return;
+    }
+
+    // verb === 'post' — fire immediately with the original content.
+    _setActionStatus(actionId, 'posting');
+    let resultMsg;
+    if (action.type === 'fb_reply') {
+      resultMsg = await _executeFbReply(action, action.payload.suggestion);
+    } else if (action.type === 'campaign_preview') {
+      resultMsg = await _executeCampaignPost(action, null);
+    } else {
+      resultMsg = `Unknown action type: ${action.type}`;
+    }
+    _setActionStatus(actionId, 'posted');
+    await bot.sendMessage(cq.message.chat.id, resultMsg, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(cq.message.chat.id, resultMsg.replace(/[*_`]/g, '')));
+  } catch (e) {
+    log('ERROR', 'CALLBACK', 'callback_query handler failed', { error: e.message });
+    try { bot.answerCallbackQuery(cq.id, { text: 'Internal error.' }); } catch (_) {}
+  }
+});
+
 // ── TELEGRAM MESSAGE HANDLER ─────────────────────────────────────────────
 bot.on('message', async (msg) => {
   // Only respond to Jed
@@ -1032,6 +1126,45 @@ bot.on('message', async (msg) => {
   }
   const text = msg.text || msg.caption || '';
   if (!text && !msg.photo) return;
+
+  // ── EDIT-MODE INTERCEPT (inline-button ✍️ flow) ──────────────────────
+  // If we asked Jed for replacement text, treat his next text message as the
+  // edited content and fire the action. Slash commands and photos bypass.
+  if (text && !text.startsWith('/') && !msg.photo) {
+    const rawEdit = mem.get('pending_edit', String(OWNER_ID));
+    if (rawEdit) {
+      let ed; try { ed = JSON.parse(rawEdit); } catch (_) { ed = null; }
+      // Expire stale edit windows after 15 minutes so a random later message
+      // is never accidentally treated as a reply.
+      if (ed && ed.actionId && (Date.now() - (ed.ts || 0)) < 15 * 60 * 1000) {
+        mem.set('pending_edit', String(OWNER_ID), ''); // clear immediately
+        const raw = mem.get('pending_action', ed.actionId);
+        if (raw) {
+          let action; try { action = JSON.parse(raw); } catch (_) {}
+          if (action) {
+            _setActionStatus(ed.actionId, 'posting');
+            let resultMsg;
+            try {
+              if (action.type === 'fb_reply') resultMsg = await _executeFbReply(action, text);
+              else if (action.type === 'campaign_preview') resultMsg = await _executeCampaignPost(action, text);
+              else resultMsg = `Unknown action type: ${action.type}`;
+              _setActionStatus(ed.actionId, 'posted');
+            } catch (e) {
+              _setActionStatus(ed.actionId, 'failed');
+              resultMsg = `❌ Edit-and-post failed: ${e.message.slice(0, 200)}`;
+            }
+            await bot.sendMessage(msg.chat.id, resultMsg, { parse_mode: 'Markdown' })
+              .catch(() => bot.sendMessage(msg.chat.id, resultMsg.replace(/[*_`]/g, '')));
+            return;
+          }
+        }
+        // Couldn't find the action — fall through to normal handling.
+      } else if (ed) {
+        // Stale entry, clear it silently.
+        mem.set('pending_edit', String(OWNER_ID), '');
+      }
+    }
+  }
 
   // ── PHOTO HANDLER (Phase 8B — Rate-Limited Queue + Album Batching) ────
   if (msg.photo) {

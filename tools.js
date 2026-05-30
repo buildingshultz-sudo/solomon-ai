@@ -1031,9 +1031,16 @@ const TOOL_DEFINITIONS = [
       required: ["page", "message", "scheduled_for"]
     }
   }
-
-
-
+  ,{
+    name: "kdp_check_royalties",
+    description: "Scrape Amazon KDP reports for yesterday's royalty total via a logged-in Playwright session at /root/solomon-v4/.pw_state_kdp.json. KDP has no public real-time API on Jed's tier; this is the substitute. If the auth state file is missing, returns a clear error pointing to PLAYWRIGHT_KDP_AUTH.md.",
+    input_schema: {
+      type: "object",
+      properties: {
+        save_to_mem: { type: "boolean", description: "If true (default), writes result to mem('kdp','last') for the morning brief." }
+      }
+    }
+  }
 ];
 
 // ── LOCAL VPS FILE HELPER ────────────────────────────────────────────────
@@ -2085,6 +2092,57 @@ Output format (JSON):
         } catch (fbErr) {
           const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
           return { ok: false, error: "reply_fb_comment failed: " + msg };
+        }
+      }
+      case "kdp_check_royalties": {
+        // KDP has no real-time API on the free tier — Playwright is the substitute.
+        let chromium;
+        try { chromium = require('playwright').chromium; }
+        catch (e) { return { ok: false, error: 'playwright not installed: ' + e.message }; }
+        const statePath = path.join(__dirname, '.pw_state_kdp.json');
+        if (!fs.existsSync(statePath)) {
+          return { ok: false, auth_missing: true, error: 'KDP Playwright auth not set up — see /root/solomon-v4/PLAYWRIGHT_KDP_AUTH.md for the one-time login step.' };
+        }
+        let browser = null, ctx = null;
+        try {
+          browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+          ctx = await browser.newContext({
+            storageState: statePath,
+            userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36',
+            viewport: { width: 1440, height: 900 }
+          });
+          const page = await ctx.newPage();
+          // Reports landing — Amazon may redirect us to sign-in if auth expired.
+          await page.goto('https://kdp.amazon.com/en_US/reports-new', { waitUntil: 'domcontentloaded', timeout: 30000 });
+          await page.waitForTimeout(3500); // KDP dashboards hydrate client-side
+          if (/signin|ap\/signin/i.test(page.url())) {
+            return { ok: false, auth_expired: true, error: 'KDP auth state expired — redo the Playwright login (PLAYWRIGHT_KDP_AUTH.md).' };
+          }
+          // Scrape the visible text and pull dollar-formatted royalty figures from it.
+          // KDP rebuilds this dashboard frequently — we deliberately use a tolerant
+          // strategy (regex over rendered text) rather than brittle CSS selectors.
+          const bodyText = (await page.locator('body').first().innerText({ timeout: 15000 }).catch(() => '')) || '';
+          const royaltyMatches = bodyText.match(/\$\s*[0-9][0-9,]*\.[0-9]{2}/g) || [];
+          // Heuristic: the "yesterday" / "prior day" royalty is typically the first
+          // currency value in the rendered "Royalties" card. Pull the first money
+          // match and also surface raw candidates so we can refine if it's wrong.
+          const priorDay = royaltyMatches[0] || null;
+          const result = {
+            ok: true,
+            prior_day_royalty: priorDay,
+            currency: 'USD',
+            top_money_candidates: royaltyMatches.slice(0, 6),
+            checked_at: new Date().toISOString()
+          };
+          if (input && input.save_to_mem !== false) {
+            try { mem.set('kdp', 'last', JSON.stringify(result)); } catch (_) {}
+          }
+          return result;
+        } catch (e) {
+          return { ok: false, error: 'kdp_check_royalties failed: ' + String(e.message || e).slice(0, 240) };
+        } finally {
+          try { if (ctx) await ctx.close(); } catch (_) {}
+          try { if (browser) await browser.close(); } catch (_) {}
         }
       }
       case "schedule_social_post": {

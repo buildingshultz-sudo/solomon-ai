@@ -7,9 +7,62 @@ const TelegramBot = require('node-telegram-bot-api');
 const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
+const axios = require('axios');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+
+// ── PENDING-ACTION HELPERS (shared by FB-reply & campaign-preview flows) ────
+// Button taps are handled inside bot.js — scheduler only CREATES the action rows
+// and persists them in mem('pending_action', id) so the bot can look them up.
+// A short hex id keeps callback_data well under Telegram's 64-byte limit.
+function newActionId() { return crypto.randomBytes(4).toString('hex'); }
+
+function savePendingAction(id, obj) {
+  obj.status = obj.status || 'pending';
+  obj.created_at = new Date().toISOString();
+  mem.set('pending_action', id, JSON.stringify(obj));
+}
+
+function fbReplyKeyboard(id) {
+  return { inline_keyboard: [[
+    { text: '✅ Post It', callback_data: `act:${id}:post` },
+    { text: '✍️ Edit',   callback_data: `act:${id}:edit` }
+  ]]};
+}
+
+function campaignPreviewKeyboard(id) {
+  return { inline_keyboard: [[
+    { text: '✅ Post Now', callback_data: `act:${id}:post` },
+    { text: '✍️ Edit',    callback_data: `act:${id}:edit` },
+    { text: '⏭️ Skip',    callback_data: `act:${id}:skip` }
+  ]]};
+}
+
+// Cache the YT access token across calls in a single scheduler run so we are
+// not refreshing on every cron tick.
+let _ytAccessToken = null;
+let _ytAccessTokenExpiresAt = 0;
+async function getYouTubeAccessToken() {
+  const now = Date.now();
+  if (_ytAccessToken && now < _ytAccessTokenExpiresAt - 60_000) return _ytAccessToken;
+  if (!process.env.YOUTUBE_REFRESH_TOKEN || process.env.YOUTUBE_REFRESH_TOKEN === 'PLACEHOLDER') return null;
+  try {
+    const r = await axios.post('https://oauth2.googleapis.com/token', {
+      client_id: process.env.YOUTUBE_CLIENT_ID,
+      client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+      refresh_token: process.env.YOUTUBE_REFRESH_TOKEN,
+      grant_type: 'refresh_token'
+    }, { timeout: 12000 });
+    _ytAccessToken = r.data.access_token;
+    _ytAccessTokenExpiresAt = now + (r.data.expires_in || 3600) * 1000;
+    return _ytAccessToken;
+  } catch (e) {
+    console.error('[SCHEDULER] YouTube token refresh failed:', e.response?.data?.error_description || e.message);
+    return null;
+  }
+}
 
 const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
 const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID);
@@ -37,80 +90,140 @@ cron.schedule('45 5 * * *', async () => {
 }, { timezone: 'America/Chicago' });
 
 // ══════════════════════════════════════════════════════════════════════════
-// ITEM 15B — MORNING BRIEF SEND: 6:00 AM CT daily
-// Read the compiled brief and send a formatted summary to Jed via Claude.
+// ITEM 15B — MORNING BRIEF SEND: 6:00 AM CT daily — scorecard
+// A scannable single-message scorecard. Direct, no LLM prose, 30-sec read.
+// Pulls live: YT subs+views, Gumroad 24h sales, Spreadshirt (note), campaign
+// engagement on most-recent post, budget vs hard stop, KDP yesterday royalty.
 // ══════════════════════════════════════════════════════════════════════════
+async function buildMorningScorecard() {
+  const lines = [];
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'long', month: 'short', day: 'numeric' });
+  lines.push(`🌅 *Good Morning Jed — ${dateStr}*`);
+  lines.push('');
+
+  // ── YouTube (Building Shultz brand channel, live) ──────────────────────
+  let ytLine = '📺 *YouTube*: not connected';
+  const accessToken = await getYouTubeAccessToken();
+  if (accessToken) {
+    try {
+      const r = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+        params: { part: 'snippet,statistics', mine: true },
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 12000
+      });
+      const ch = r.data?.items?.[0];
+      if (ch) {
+        const title = ch.snippet?.title || '(channel)';
+        const subs = ch.statistics?.subscriberCount || '?';
+        const views = ch.statistics?.viewCount || '?';
+        const videos = ch.statistics?.videoCount || '?';
+        ytLine = `📺 *YouTube* (${title}): *${Number(subs).toLocaleString()}* subs · ${Number(views).toLocaleString()} views · ${videos} videos`;
+        mem.set('business', 'youtube_subscribers', String(subs));
+        mem.set('business', 'youtube_views', String(views));
+        mem.set('business', 'youtube_channel_title', title);
+      }
+    } catch (e) {
+      ytLine = `📺 *YouTube*: fetch failed (${(e.response?.data?.error?.message || e.message).slice(0, 80)})`;
+    }
+  }
+  lines.push(ytLine);
+
+  // ── Gumroad (last 24h via activity_log entries written by the webhook) ─
+  let gumroadLine = '💰 *Gumroad*: no sales in 24h';
+  try {
+    const rows = db.prepare(`SELECT summary FROM activity_log WHERE type = 'gumroad_sale' AND timestamp >= datetime('now','-24 hours')`).all();
+    if (rows.length) {
+      // summaries look like "Product Name USD $9.99"
+      let total = 0, count = 0;
+      for (const r of rows) {
+        const m = (r.summary || '').match(/\$\s*([\d.]+)/);
+        if (m) { total += parseFloat(m[1]); count++; }
+      }
+      gumroadLine = `💰 *Gumroad* (24h): ${count} sale${count === 1 ? '' : 's'} · *$${total.toFixed(2)}*`;
+    }
+  } catch (e) { gumroadLine = `💰 *Gumroad*: query failed (${e.message.slice(0, 60)})`; }
+  lines.push(gumroadLine);
+
+  // ── Spreadshirt — no API on Jed's plan ─────────────────────────────────
+  lines.push('🧵 *Spreadshirt*: not connected (no API on current plan)');
+
+  // ── KDP — last scrape result (cron writes mem.kdp.last) ────────────────
+  let kdpLine = '📚 *KDP*: not connected — see /root/solomon-v4/PLAYWRIGHT_KDP_AUTH.md to enable';
+  try {
+    const raw = mem.get('kdp', 'last');
+    if (raw) {
+      const k = JSON.parse(raw);
+      if (k.auth_missing) {
+        kdpLine = '📚 *KDP*: auth setup pending (PLAYWRIGHT_KDP_AUTH.md)';
+      } else if (k.auth_expired) {
+        kdpLine = '📚 *KDP*: auth expired — redo PLAYWRIGHT_KDP_AUTH.md';
+      } else if (k.prior_day_royalty) {
+        kdpLine = `📚 *KDP* yesterday: *${k.prior_day_royalty}* (${k.currency || 'USD'}, last checked ${k.checked_at?.slice(11, 16) || 'recently'} UTC)`;
+      } else if (k.error) {
+        kdpLine = `📚 *KDP*: scrape error (${String(k.error).slice(0, 80)})`;
+      }
+    }
+  } catch (_) {}
+  lines.push(kdpLine);
+
+  // ── Campaign engagement (last post in social_log) ──────────────────────
+  let campaignLine = '📣 *Campaign*: idle';
+  try {
+    const recent = db.prepare(`SELECT key, value FROM memory WHERE category='social_log' ORDER BY key DESC LIMIT 1`).all();
+    if (recent.length) {
+      const entry = JSON.parse(recent[0].value || '{}');
+      const ts = recent[0].key;
+      const when = ts.slice(0, 10);
+      const kind = entry.kind || 'post';
+      // Try to pull engagement counts from the first FB post id we logged.
+      let engagementBits = '';
+      const firstFb = (entry.fb || []).find(s => /id (\d+)/.test(s));
+      if (firstFb && process.env.FB_BUILDING_SHULTZ_TOKEN && process.env.FB_BUILDING_SHULTZ_TOKEN !== 'PLACEHOLDER') {
+        const postId = firstFb.match(/id (\d+(_\d+)?)/)?.[1];
+        if (postId) {
+          try {
+            const er = await axios.get(`https://graph.facebook.com/v19.0/${postId}`, {
+              params: { fields: 'reactions.summary(true).limit(0),comments.summary(true).limit(0),shares', access_token: process.env.FB_BUILDING_SHULTZ_TOKEN },
+              timeout: 8000
+            });
+            const reactions = er.data?.reactions?.summary?.total_count ?? '?';
+            const comments = er.data?.comments?.summary?.total_count ?? '?';
+            const shares = er.data?.shares?.count ?? 0;
+            engagementBits = ` · 👍 ${reactions} · 💬 ${comments} · 🔁 ${shares}`;
+          } catch (_) { engagementBits = ' · engagement unavailable'; }
+        }
+      }
+      campaignLine = `📣 *Campaign* (${kind}, ${when})${engagementBits}`;
+    }
+  } catch (_) {}
+  lines.push(campaignLine);
+
+  // ── Budget vs $100 hard stop ───────────────────────────────────────────
+  const monthSpend = budget.getMonthTotal();
+  const hardStop = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100');
+  const pct = Math.min(100, Math.round((monthSpend / hardStop) * 100));
+  const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));
+  const budgetWarn = pct >= 80 ? '  ⚠️' : '';
+  lines.push(`💵 *Budget*: $${monthSpend.toFixed(2)} / $${hardStop.toFixed(0)} (${pct}%) ${bar}${budgetWarn}`);
+  lines.push('');
+
+  // ── What needs attention today ─────────────────────────────────────────
+  const pendingCount = tasks.getPending().length;
+  const stale = getStaleTaskCount();
+  const unreadInbox = nathanInbox.getUnread().length;
+  const queueCount = projectQueue.getQueued ? projectQueue.getQueued().length : 0;
+  lines.push(`📋 *Today*: ${pendingCount} pending task${pendingCount === 1 ? '' : 's'}${stale ? ` (${stale} stale)` : ''} · ${unreadInbox} unread inbox · ${queueCount} queued project${queueCount === 1 ? '' : 's'}`);
+
+  return lines.join('\n');
+}
+
 cron.schedule('0 6 * * *', async () => {
   console.log('[SCHEDULER] Morning brief send running (6:00 AM)...');
   try {
-    const compiledRaw = mem.get('system', 'morning_brief_compiled');
-    const stale = getStaleTaskCount();
-    const ytSubs = mem.get('business', 'youtube_subscribers') || 'unknown';
-
-    let briefData;
-    if (compiledRaw) {
-      try { briefData = JSON.parse(compiledRaw); } catch (_) { briefData = null; }
-    }
-
-    let context;
-    if (briefData) {
-      const activeDesc = briefData.project_status.active
-        ? `${briefData.project_status.active.name} (progress: ${briefData.project_status.active.progress}, spent: $${briefData.project_status.active.spent})`
-        : 'None';
-      const completedDesc = briefData.project_status.completed_last_24h > 0
-        ? `${briefData.project_status.completed_last_24h} (${briefData.project_status.completed_names.join(', ')})`
-        : '0';
-      const featureDesc = briefData.feature_requests.items.map(f => `  - [${f.priority}] ${f.desc}`).join('\n') || '  None';
-      const nathanDesc = briefData.nathan_inbox.items.map(m => `  - [${m.priority}] ${m.subject}`).join('\n') || '  None';
-      const errorDesc = briefData.errors_24h.length
-        ? briefData.errors_24h.map(e => `${e.signature} (x${e.times})`).join(', ')
-        : 'None';
-
-      context = `Generate a concise morning brief for Jedidiah Shultz based on this compiled data:
-
-PROJECT STATUS:
-- Active project: ${activeDesc}
-- Queued apps: ${briefData.project_status.queued_count}
-- Completed last 24h: ${completedDesc}
-
-FEATURE REQUESTS (${briefData.feature_requests.pending_count} pending):
-${featureDesc}
-
-NATHAN INBOX (${briefData.nathan_inbox.unread_count} unread):
-${nathanDesc}
-
-BUDGET: $${briefData.budget.month_total} / $${briefData.budget.hard_stop} this month
-ERRORS (24h): ${errorDesc}
-PENDING TASKS: ${briefData.pending_tasks}
-STALE TASKS (>24h): ${stale}
-YouTube subs: ${ytSubs}
-
-Format: Short, bullet points, what needs his attention today. Highlight any urgent items. Keep under 400 words.`;
-    } else {
-      const pending = tasks.getPending();
-      const budgetTotal = budget.getMonthTotal();
-      context = `Generate a concise morning brief for Jedidiah Shultz.
-Pending tasks: ${pending.length} (${JSON.stringify(pending.slice(0, 3).map(t => t.title))})
-Stale tasks (>24h): ${stale}
-Month spend: $${budgetTotal.toFixed(2)}
-YouTube subs: ${ytSubs}
-Format: Short, bullet points, what needs his attention today. Keep under 300 words.`;
-    }
-
-    const resp = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 600,
-      messages: [{ role: 'user', content: context }]
-    });
-
-    budget.log({
-      inputTokens: resp.usage.input_tokens,
-      outputTokens: resp.usage.output_tokens,
-      model: MODEL
-    });
-
-    const brief = `🌅 *Good Morning Jed*\n${resp.content[0].text}`;
-    await bot.sendMessage(OWNER_ID, brief, { parse_mode: 'Markdown' });
+    const scorecard = await buildMorningScorecard();
+    await bot.sendMessage(OWNER_ID, scorecard, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, scorecard.replace(/[*_`]/g, '')));
     console.log('[SCHEDULER] Morning brief sent');
   } catch (err) {
     console.error('[SCHEDULER] Morning brief failed:', err.message);
@@ -199,16 +312,40 @@ cron.schedule("*/5 * * * *", async () => {
         } catch (sugErr) {
           console.error(`[SCHEDULER] FB suggestion error (${pageInfo.key}):`, sugErr.message);
         }
+        // Heuristic flag for sensitive comments — these still require manual review,
+        // we WON'T attach a one-tap post button to those.
+        const sensitive = /\b(refund|lawsuit|sue|legal|attorney|stole|scam|fraud|hate|kill|threat)\b/i.test(c.text || '');
         const alert =
           `💬 *New Facebook comment* — ${pageInfo.label}\n\n` +
           `*From:* ${c.from}\n` +
           `*Comment:* ${c.text}\n` +
           (c.post_snippet ? `*On post:* ${c.post_snippet}\n` : "") +
-          `\n*Suggested reply:*\n${suggestion}\n\n` +
-          `_Not posted. To post it, tell me: "reply to FB comment ${c.comment_id} on ${pageInfo.key}: <your text>"._`;
-        await bot.sendMessage(OWNER_ID, alert, { parse_mode: "Markdown" }).catch(() =>
-          bot.sendMessage(OWNER_ID, alert.replace(/[*_`]/g, "")).catch(() => {})
-        );
+          `\n*Suggested reply:*\n${suggestion}` +
+          (sensitive ? `\n\n⚠️ *Flagged sensitive (refund/legal/etc.) — manual reply only, no auto-post button.*` : '');
+        if (sensitive) {
+          await bot.sendMessage(OWNER_ID, alert, { parse_mode: "Markdown" }).catch(() =>
+            bot.sendMessage(OWNER_ID, alert.replace(/[*_`]/g, "")).catch(() => {})
+          );
+        } else {
+          const actionId = newActionId();
+          savePendingAction(actionId, {
+            type: 'fb_reply',
+            payload: {
+              page: pageInfo.key,
+              page_label: pageInfo.label,
+              comment_id: c.comment_id,
+              commenter: c.from,
+              comment_text: c.text,
+              suggestion
+            }
+          });
+          await bot.sendMessage(OWNER_ID, alert, {
+            parse_mode: "Markdown",
+            reply_markup: fbReplyKeyboard(actionId)
+          }).catch(() =>
+            bot.sendMessage(OWNER_ID, alert.replace(/[*_`]/g, ""), { reply_markup: fbReplyKeyboard(actionId) }).catch(() => {})
+          );
+        }
       }
     } catch (err) {
       console.error(`[SCHEDULER] FB comment monitor error (${pageInfo.key}):`, err.message);
@@ -641,7 +778,15 @@ function loadCampaignDays() {
   } catch (_) { return []; }
 }
 
-async function runCampaignSlot(slot) {
+// Campaign preview + auto-post flow:
+//   • At T-30min  → previewCampaignSlot(slot) generates variants, sends Telegram
+//                   preview with ✅/✍️/⏭️ buttons, persists action with deadline
+//                   = T-5min so the post fires at the original slot time (within
+//                   25 min of preview, per spec).
+//   • Button taps are handled in bot.js (callback_query).
+//   • If status is still 'pending' past deadline_ts, the watcher cron below
+//     auto-fires the post so the schedule never breaks.
+async function previewCampaignSlot(slot) {
   try {
     if (mem.get('campaign', 'active') !== 'true') return;
     const startStr = mem.get('campaign', 'start_date');
@@ -660,7 +805,7 @@ async function runCampaignSlot(slot) {
     if (!plan) return;
     const brief = slot === 'morning' ? plan.morning : plan.evening;
     if (!brief) return;
-    console.log(`[SCHEDULER] Campaign day ${dayIndex}/30 (${slot}) firing...`);
+    console.log(`[SCHEDULER] Campaign day ${dayIndex}/30 (${slot}) PREVIEW...`);
 
     let variants;
     try {
@@ -676,7 +821,7 @@ async function runCampaignSlot(slot) {
       variants = mt ? JSON.parse(mt[0]) : null;
     } catch (e) {
       console.error('[SCHEDULER] Campaign generate error:', e.message);
-      await bot.sendMessage(OWNER_ID, `⚠️ Campaign day ${dayIndex} (${slot}) generation failed: ${e.message.slice(0, 120)}`).catch(() => {});
+      await bot.sendMessage(OWNER_ID, `⚠️ Campaign day ${dayIndex} (${slot}) preview generation failed: ${e.message.slice(0, 120)}`).catch(() => {});
       return;
     }
     if (!variants || !variants.facebook) {
@@ -684,28 +829,85 @@ async function runCampaignSlot(slot) {
       return;
     }
 
-    // Auto-post Facebook to both pages (social_post falls back to the spare token)
-    const fbResults = [];
-    for (const [pageKey, label] of [['building_shultz', 'Building Shultz'], ['irish_craftsman', 'Irish Craftsman']]) {
-      try {
-        const r = await executeTool('social_post', { page: pageKey, platform: 'facebook', message: variants.facebook });
-        fbResults.push(`${r.ok ? '✅' : '❌'} ${label}${r.ok ? ` (id ${r.post_id})` : `: ${r.error || 'failed'}`}`);
-      } catch (e) { fbResults.push(`❌ ${label}: ${e.message.slice(0, 80)}`); }
-    }
+    // Build the pending action — auto-fires 25 min from now if Jed doesn't tap.
+    const actionId = newActionId();
+    const deadlineTs = Date.now() + 25 * 60 * 1000;
+    savePendingAction(actionId, {
+      type: 'campaign_preview',
+      deadline_ts: deadlineTs,
+      payload: {
+        dayIndex, slot, title: plan.title,
+        facebook: variants.facebook,
+        instagram_caption: variants.instagram_caption || '',
+        instagram_hashtags: variants.instagram_hashtags || '',
+        youtube_community: variants.youtube_community || '',
+        label: `Campaign Day ${dayIndex} (${slot})`
+      }
+    });
 
-    const send = (m) => bot.sendMessage(OWNER_ID, m, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, m.replace(/[*_`]/g, '')).catch(() => {}));
-    await send(`📅 *Campaign Day ${dayIndex}/30 — ${slot}*\n_${plan.title}_\n\n📘 *Facebook (auto-posted):*\n${fbResults.join('\n')}`);
-    await send(`📸 *Instagram — copy/paste:*\n\n${variants.instagram_caption || ''}\n\n${variants.instagram_hashtags || ''}`);
-    await send(`▶️ *YouTube community — copy/paste:*\n\n${variants.youtube_community || ''}`);
-    try { mem.set('social_log', new Date().toISOString(), JSON.stringify({ kind: `campaign d${dayIndex} ${slot}`, fb: fbResults })); } catch (_) {}
-    console.log(`[SCHEDULER] Campaign day ${dayIndex} (${slot}) done: ${fbResults.join('; ')}`);
+    const previewMsg =
+      `📅 *Campaign Day ${dayIndex}/30 — ${slot}* preview\n_${plan.title}_\n\n` +
+      `📘 *Facebook (will auto-post to BOTH pages in 25 min unless you tap):*\n${variants.facebook}\n\n` +
+      `📸 *Instagram caption (handback — paste manually):*\n${variants.instagram_caption || ''}\n${variants.instagram_hashtags || ''}\n\n` +
+      `▶️ *YouTube community (handback):*\n${variants.youtube_community || ''}`;
+    await bot.sendMessage(OWNER_ID, previewMsg, {
+      parse_mode: 'Markdown',
+      reply_markup: campaignPreviewKeyboard(actionId)
+    }).catch(() => bot.sendMessage(OWNER_ID, previewMsg.replace(/[*_`]/g, ''), { reply_markup: campaignPreviewKeyboard(actionId) }));
+
+    console.log(`[SCHEDULER] Campaign day ${dayIndex} (${slot}) preview sent — action ${actionId}, deadline ${new Date(deadlineTs).toISOString()}`);
   } catch (err) {
-    console.error('[SCHEDULER] Campaign slot error:', err.message);
+    console.error('[SCHEDULER] Campaign preview error:', err.message);
   }
 }
 
-cron.schedule('0 7 * * *', () => runCampaignSlot('morning'), { timezone: 'America/Chicago' });
-cron.schedule('0 18 * * *', () => runCampaignSlot('evening'), { timezone: 'America/Chicago' });
+// Executes the actual FB auto-post for a campaign action and writes the
+// social_log. Used by both the auto-post watcher (timeout fallback) and the
+// callback handler in bot.js (Jed tapped ✅). Idempotent via status flag.
+async function executeCampaignActionFromScheduler(actionId, action, reason) {
+  const p = action.payload;
+  const fbResults = [];
+  for (const [pageKey, label] of [['building_shultz', 'Building Shultz'], ['irish_craftsman', 'Irish Craftsman']]) {
+    try {
+      const r = await executeTool('social_post', { page: pageKey, platform: 'facebook', message: p.facebook });
+      fbResults.push(`${r.ok ? '✅' : '❌'} ${label}${r.ok ? ` (id ${r.post_id})` : `: ${r.error || 'failed'}`}`);
+    } catch (e) { fbResults.push(`❌ ${label}: ${e.message.slice(0, 80)}`); }
+  }
+  action.status = 'posted';
+  action.posted_at = new Date().toISOString();
+  action.posted_reason = reason;
+  mem.set('pending_action', actionId, JSON.stringify(action));
+  try { mem.set('social_log', new Date().toISOString(), JSON.stringify({ kind: `campaign d${p.dayIndex} ${p.slot}`, fb: fbResults })); } catch (_) {}
+  const summary = `📅 *Day ${p.dayIndex}/30 — ${p.slot}* auto-posted (${reason}):\n${fbResults.join('\n')}`;
+  await bot.sendMessage(OWNER_ID, summary, { parse_mode: 'Markdown' })
+    .catch(() => bot.sendMessage(OWNER_ID, summary.replace(/[*_`]/g, '')));
+  console.log(`[SCHEDULER] Campaign action ${actionId} auto-posted (${reason}): ${fbResults.join('; ')}`);
+}
+
+// 30 min EARLIER than the prior 7:00 AM / 6:00 PM CT slots → preview at 6:30 AM
+// and 5:30 PM CT. Auto-post fires 25 min later via the watcher = 6:55 AM / 5:55 PM
+// CT, ~5 min before the original schedule.
+cron.schedule('30 6 * * *', () => previewCampaignSlot('morning'), { timezone: 'America/Chicago' });
+cron.schedule('30 17 * * *', () => previewCampaignSlot('evening'), { timezone: 'America/Chicago' });
+
+// Watcher — every minute, look for pending campaign_preview actions past
+// deadline_ts and auto-post them. Survives bot restarts because state is in mem.
+cron.schedule('* * * * *', async () => {
+  try {
+    const rows = db.prepare(`SELECT key, value FROM memory WHERE category='pending_action'`).all();
+    const now = Date.now();
+    for (const r of rows) {
+      let a; try { a = JSON.parse(r.value); } catch (_) { continue; }
+      if (a.type !== 'campaign_preview') continue;
+      if (a.status !== 'pending') continue;
+      if (!a.deadline_ts || a.deadline_ts > now) continue;
+      try { await executeCampaignActionFromScheduler(r.key, a, 'no response in 25 min'); }
+      catch (e) { console.error('[SCHEDULER] auto-post failed for', r.key, e.message); }
+    }
+  } catch (err) {
+    console.error('[SCHEDULER] campaign watcher error:', err.message);
+  }
+});
 
 // ══════════════════════════════════════════════════════════════════════════
 // ITEM 18 — CONTEXT BRIEF: regenerate context.md at 5:00 AM CT daily.
@@ -806,13 +1008,140 @@ cron.schedule('0 */6 * * *', async () => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// KDP DAILY SCRAPE: 5:50 AM CT — runs just before the 6 AM brief reads it.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('50 5 * * *', async () => {
+  console.log('[SCHEDULER] KDP daily scrape running...');
+  try {
+    const r = await executeTool('kdp_check_royalties', { save_to_mem: true });
+    if (r.ok) console.log('[SCHEDULER] KDP yesterday royalty:', r.prior_day_royalty || '(none parsed)');
+    else console.log('[SCHEDULER] KDP scrape returned:', r.error);
+  } catch (e) {
+    console.error('[SCHEDULER] KDP scrape exception:', e.message);
+    try { mem.set('kdp', 'last', JSON.stringify({ ok: false, error: e.message, checked_at: new Date().toISOString() })); } catch (_) {}
+  }
+}, { timezone: 'America/Chicago' });
+
+// ══════════════════════════════════════════════════════════════════════════
+// WEEKLY CONTENT REPURPOSING: Monday 7 AM CT
+// Pick the top-viewed Building Shultz YouTube video from the past 7 days,
+// pull its auto-caption transcript, and have Claude produce three repurposed
+// outputs in Jed's voice. Delivers all three to Telegram for him to approve.
+// ══════════════════════════════════════════════════════════════════════════
+async function runWeeklyRepurpose() {
+  console.log('[SCHEDULER] Weekly content repurpose running...');
+  const accessToken = await getYouTubeAccessToken();
+  if (!accessToken) {
+    await bot.sendMessage(OWNER_ID, '⚠️ Weekly repurpose skipped — YouTube OAuth not connected. Visit /oauth/start to authorize.').catch(() => {});
+    return;
+  }
+  try {
+    // 1. Find my uploads playlist
+    const chResp = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+      params: { part: 'contentDetails', mine: true },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 12000
+    });
+    const uploadsPl = chResp.data?.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    if (!uploadsPl) throw new Error('Could not find uploads playlist');
+
+    // 2. List most recent uploads, filter to last 7 days, get IDs
+    const plResp = await axios.get('https://www.googleapis.com/youtube/v3/playlistItems', {
+      params: { part: 'snippet,contentDetails', playlistId: uploadsPl, maxResults: 25 },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 12000
+    });
+    const cutoff = Date.now() - 7 * 86400000;
+    const recent = (plResp.data?.items || []).filter(it => new Date(it.snippet?.publishedAt || 0).getTime() >= cutoff);
+    if (recent.length === 0) {
+      await bot.sendMessage(OWNER_ID, '📭 Weekly repurpose: no Building Shultz videos uploaded in the past 7 days. Skipped.').catch(() => {});
+      return;
+    }
+    const videoIds = recent.map(it => it.contentDetails?.videoId).filter(Boolean);
+
+    // 3. Pull view counts for those videos, pick top
+    const vidsResp = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+      params: { part: 'snippet,statistics', id: videoIds.join(',') },
+      headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: 12000
+    });
+    const ranked = (vidsResp.data?.items || []).sort((a, b) => (parseInt(b.statistics?.viewCount || 0) - parseInt(a.statistics?.viewCount || 0)));
+    const top = ranked[0];
+    if (!top) throw new Error('No videos returned');
+    const topId = top.id, topTitle = top.snippet?.title || '(untitled)', topViews = top.statistics?.viewCount || '0';
+
+    // 4. Fetch caption track list, pick first available (auto-generated usually first)
+    let transcript = '';
+    try {
+      const capResp = await axios.get('https://www.googleapis.com/youtube/v3/captions', {
+        params: { part: 'snippet', videoId: topId },
+        headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 12000
+      });
+      const tracks = capResp.data?.items || [];
+      const track = tracks.find(t => t.snippet?.trackKind === 'asr') || tracks[0];
+      if (track) {
+        // captions.download returns SRT/text; we ask for raw SBV-style text via tfmt
+        const dl = await axios.get(`https://www.googleapis.com/youtube/v3/captions/${track.id}`, {
+          params: { tfmt: 'srt' },
+          headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 15000,
+          responseType: 'text'
+        });
+        transcript = String(dl.data || '')
+          .replace(/^\d+\s*$/gm, '')
+          .replace(/\d{2}:\d{2}:\d{2}[,.]\d{3} --> \d{2}:\d{2}:\d{2}[,.]\d{3}/g, '')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+      }
+    } catch (capErr) {
+      console.error('[SCHEDULER] caption fetch failed:', capErr.response?.data?.error?.message || capErr.message);
+    }
+    if (!transcript) {
+      await bot.sendMessage(OWNER_ID, `📭 Weekly repurpose: could not fetch a transcript for "${topTitle}" (auto-captions may not be ready). Skipped this week.`).catch(() => {});
+      return;
+    }
+    // Trim transcript so we stay well under token limits
+    const transcriptClipped = transcript.length > 18000 ? transcript.slice(0, 18000) + '\n[...transcript truncated]' : transcript;
+
+    // 5. One Claude call → three outputs
+    const resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 2400,
+      system: "You are Solomon, content repurposing engine for Jedidiah Shultz / Building Shultz. Voice rules: direct, blue-collar, no fluff, plainspoken, motivational, never corporate. Always end pieces with the tag line 'Be Inspired. Stay Humble. And Build.' Output ONLY compact JSON with these three keys, no preamble, no code fences: \"shorts_script\" (60-second YouTube Shorts script with [HOOK], [BEATS] bullet timeline, [CTA] — tight, actionable, written for camera), \"facebook_post\" (1-2 short paragraphs that stand alone on FB), \"newsletter_snippet\" (a 3-5 line snippet that opens an email update — first-person, conversational).",
+      messages: [{ role: 'user', content: `Source: Building Shultz YouTube video\nTitle: ${topTitle}\nViews (7-day): ${topViews}\n\nTRANSCRIPT:\n${transcriptClipped}` }]
+    });
+    budget.log({ inputTokens: resp.usage.input_tokens, outputTokens: resp.usage.output_tokens, model: MODEL });
+    const txt = (resp.content.find(b => b.type === 'text') || {}).text || '';
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('Claude did not return parseable JSON');
+    const outputs = JSON.parse(m[0]);
+
+    const header = `♻️ *Weekly repurpose — top video of last 7 days*\n_${topTitle}_ (${Number(topViews).toLocaleString()} views)\nReview each below, edit if needed, then post manually.`;
+    await bot.sendMessage(OWNER_ID, header, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, header.replace(/[*_`]/g, '')));
+    const send = (m) => bot.sendMessage(OWNER_ID, m, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, m.replace(/[*_`]/g, '')));
+    await send(`🎬 *Shorts script (60 sec):*\n\n${outputs.shorts_script || '(empty)'}`);
+    await send(`📘 *Facebook post:*\n\n${outputs.facebook_post || '(empty)'}`);
+    await send(`📧 *Newsletter snippet:*\n\n${outputs.newsletter_snippet || '(empty)'}`);
+    console.log('[SCHEDULER] Weekly repurpose sent for:', topTitle);
+  } catch (err) {
+    console.error('[SCHEDULER] Weekly repurpose failed:', err.message);
+    await bot.sendMessage(OWNER_ID, `⚠️ Weekly repurpose failed: ${err.message.slice(0, 200)}`).catch(() => {});
+  }
+}
+cron.schedule('0 7 * * 1', runWeeklyRepurpose, { timezone: 'America/Chicago' });
+
 console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
-console.log('  • Morning brief send: 6:00 AM CT daily');
+console.log('  • Morning brief send: 6:00 AM CT daily (now a live scorecard: YT/Gumroad/KDP/campaign/budget)');
+console.log('  • KDP daily royalty scrape: 5:50 AM CT (just before the brief)');
 console.log('  • Shorts check: every 30 minutes');
-console.log('  • FB comment monitor: every 5 minutes (suggestion alerts, no auto-post)');
+console.log('  • FB comment monitor: every 5 minutes (✅/✍️ inline buttons; sensitive comments stay manual)');
 console.log('  • Email triage (IMAP): every 5 minutes');
-console.log('  • Book & merch campaign: 7 AM + 6 PM CT (when armed via /launch)');
+console.log('  • Book & merch campaign PREVIEW: 6:30 AM + 5:30 PM CT (✅/✍️/⏭️ buttons; auto-posts at +25 min if no tap)');
+console.log('  • Campaign auto-post watcher: every minute (deadline-driven)');
+console.log('  • Weekly content repurpose: Monday 7 AM CT (top YT video → Shorts/FB/newsletter)');
 console.log('  • Context brief (context.md): 5 AM CT daily + on major events');
 console.log('  • Master context (shultz_master_context.md): append-only; 5 AM + sales/commits/events');
 console.log('  • Commit watcher: every 15 min (logs new commits to master context)');
