@@ -1,4 +1,4 @@
-# caleb-cutover.ps1 — Elevated cutover script for adding /caleb-task to PC relay.
+# caleb-cutover.ps1 -- Elevated cutover script for adding /caleb-task to PC relay.
 #
 # This is the ONLY script Caleb needs to run on Jed's PC. It:
 #   1. Stops the running pc-relay node process (if any)
@@ -28,7 +28,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ── 0. Self-elevate if not Administrator ───────────────────────────────────
+# -- 0. Self-elevate if not Administrator -----------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
     Write-Host 'Re-launching elevated...' -ForegroundColor Yellow
@@ -43,12 +43,12 @@ if (-not $isAdmin) {
 
 Write-Host ''
 Write-Host '======================================================' -ForegroundColor Cyan
-Write-Host ' Solomon PC relay cutover — adding /caleb-task'         -ForegroundColor Cyan
+Write-Host ' Solomon PC relay cutover -- adding /caleb-task'         -ForegroundColor Cyan
 Write-Host ' (elevated session)'                                    -ForegroundColor Cyan
 Write-Host '======================================================' -ForegroundColor Cyan
 Write-Host ''
 
-# ── 1. Verify prerequisites ────────────────────────────────────────────────
+# -- 1. Verify prerequisites ------------------------------------------------
 if (-not (Test-Path $PcRelayDir)) {
     Write-Host "[ERROR] PcRelayDir not found: $PcRelayDir" -ForegroundColor Red
     Write-Host "Pass -PcRelayDir <path> to override. The default assumes the relay lives in C:\Users\Ashle\solomon-pc-relay."
@@ -64,7 +64,7 @@ if (-not (Test-Path $relayJs)) {
     exit 1
 }
 
-# ── 2. Stop the running pc-relay process (best-effort, multiple strategies) ──
+# -- 2. Stop the running pc-relay process (best-effort, multiple strategies) --
 Write-Host 'Stopping current pc-relay process (if running)...' -ForegroundColor Cyan
 # Try PM2 first
 $pm2Available = $false
@@ -89,7 +89,7 @@ if ($portPid) {
 }
 Start-Sleep -Seconds 1
 
-# ── 3. Pull new pc-relay.js from VPS ──────────────────────────────────────
+# -- 3. Pull new pc-relay.js from VPS --------------------------------------
 Write-Host 'Pulling new pc-relay.js from VPS...' -ForegroundColor Cyan
 $bakPath = "$relayJs.bak.$(Get-Date -Format 'yyyy-MM-dd-HHmmss')"
 Copy-Item -Path $relayJs -Destination $bakPath
@@ -103,7 +103,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  Wrote new pc-relay.js" -ForegroundColor Green
 
-# ── 4. Quick syntax check (only if node is on PATH) ────────────────────────
+# -- 4. Quick syntax check (only if node is on PATH) ------------------------
 try {
     & node --check $relayJs
     if ($LASTEXITCODE -ne 0) {
@@ -113,10 +113,10 @@ try {
     }
     Write-Host '  node --check: PASS' -ForegroundColor Green
 } catch {
-    Write-Host '  (node not on PATH for syntax check — skipping)' -ForegroundColor DarkGray
+    Write-Host '  (node not on PATH for syntax check -- skipping)' -ForegroundColor DarkGray
 }
 
-# ── 5. Create Caleb queue dir ──────────────────────────────────────────────
+# -- 5. Create Caleb queue dir ----------------------------------------------
 if (-not (Test-Path $QueueDir)) {
     New-Item -ItemType Directory -Path $QueueDir -Force | Out-Null
     Write-Host "Created Caleb queue dir: $QueueDir" -ForegroundColor Green
@@ -124,7 +124,7 @@ if (-not (Test-Path $QueueDir)) {
     Write-Host "Caleb queue dir already exists: $QueueDir" -ForegroundColor DarkGray
 }
 
-# ── 6. Firewall inbound allow rule (elevated) ──────────────────────────────
+# -- 6. Firewall inbound allow rule (elevated) ------------------------------
 if (-not $SkipFirewall) {
     $ruleName = "Solomon PC Relay (port $RelayPort)"
     $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
@@ -140,14 +140,14 @@ if (-not $SkipFirewall) {
     }
 }
 
-# ── 7. Restart pc-relay ────────────────────────────────────────────────────
+# -- 7. Restart pc-relay ----------------------------------------------------
 if (-not $SkipRestart) {
     Push-Location $PcRelayDir
     try {
         if ($pm2Available) {
             & pm2 start pc-relay 2>$null | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                # First time — register with PM2
+                # First time -- register with PM2
                 & pm2 start pc-relay.js --name pc-relay | Out-Null
             }
             & pm2 save | Out-Null
@@ -164,7 +164,7 @@ if (-not $SkipRestart) {
     Start-Sleep -Seconds 3
 }
 
-# ── 8. Smoke-test the new /caleb-task endpoint ────────────────────────────
+# -- 8. Smoke-test the new /caleb-task endpoint ----------------------------
 Write-Host ''
 Write-Host 'Smoke-testing POST /caleb-task...' -ForegroundColor Cyan
 $secret = $null
@@ -176,7 +176,7 @@ try {
     }
 } catch {}
 if (-not $secret) {
-    Write-Host '[WARN] Could not read PC_RELAY_SECRET from .env — skipping live smoke test.' -ForegroundColor Yellow
+    Write-Host '[WARN] Could not read PC_RELAY_SECRET from .env -- skipping live smoke test.' -ForegroundColor Yellow
     Write-Host '       Manually test with the curl example in the report.' -ForegroundColor Yellow
 } else {
     $testPayload = @{
@@ -197,21 +197,21 @@ if (-not $secret) {
                                   -Body $testPayload `
                                   -TimeoutSec 10
         if ($resp.ok -and $resp.file -and (Test-Path $resp.file)) {
-            Write-Host "  Smoke test PASS — payload written to $($resp.file)" -ForegroundColor Green
+            Write-Host "  Smoke test PASS -- payload written to $($resp.file)" -ForegroundColor Green
             Remove-Item -Path $resp.file -Force -ErrorAction SilentlyContinue
             Write-Host '  (test payload cleaned up)' -ForegroundColor DarkGray
         } else {
-            Write-Host "  Smoke test FAIL — response: $($resp | ConvertTo-Json -Compress)" -ForegroundColor Red
+            Write-Host "  Smoke test FAIL -- response: $($resp | ConvertTo-Json -Compress)" -ForegroundColor Red
             exit 2
         }
     } catch {
-        Write-Host "  Smoke test FAIL — request error: $_" -ForegroundColor Red
+        Write-Host "  Smoke test FAIL -- request error: $_" -ForegroundColor Red
         Write-Host '  Check that the relay is running and the secret matches the VPS.' -ForegroundColor Yellow
         exit 2
     }
 }
 
-# ── 9. Final verify: hit /status ───────────────────────────────────────────
+# -- 9. Final verify: hit /status -------------------------------------------
 try {
     $status = Invoke-RestMethod -Uri "http://127.0.0.1:$RelayPort/status" -Method Get `
                                 -Headers @{ 'X-Secret' = $secret } -TimeoutSec 5
