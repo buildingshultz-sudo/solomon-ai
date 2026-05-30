@@ -1,0 +1,29 @@
+{
+  "id": "solomon_fb_reply",
+  "name": "Reply to a Facebook comment",
+  "description": "Solomon posts a reply to a specific Facebook comment on Building Shultz or Irish Craftsman, using the existing reply_fb_comment tool.",
+  "handler": "solomon",
+  "categories": ["public_brand"],
+  "trigger_examples": [
+    "reply to that comment from John on Building Shultz saying thanks for sharing",
+    "respond to the FB comment with: appreciate you, brother",
+    "post that reply we drafted to comment 12345 on irish craftsman"
+  ],
+  "prompt_template": "Use the reply_fb_comment tool with page={{page}}, comment_id={{comment_id}}, message={{reply_text}}. Then confirm to Jed with a one-line summary including the new reply id.",
+  "required_inputs": ["page", "comment_id", "reply_text"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "missing comment_id (Jed must say which comment)",
+    "reply_text contains profanity, refund / legal / threat language → bumped to jed-escalate",
+    "reply_text is empty"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.92,
+  "smoke_test": {
+    "trigger_message": "Reply to FB comment 99 on building_shultz with: Thanks for sharing brother",
+    "expected_inputs_filled": ["page", "comment_id", "reply_text"],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Public-brand category means Nathan cannot authorize this alone — only Solomon at high confidence. The existing inline-button flow (Session 7) is the preferred manual path; this dispatch template is for explicit Jed-initiated replies via free-text Telegram."
+}

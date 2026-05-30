@@ -1,0 +1,27 @@
+{
+  "id": "future_solomon_debt_snowball_alert",
+  "name": "[FUTURE] Debt snowball milestone alert",
+  "description": "PLACEHOLDER — when Mercury bank is wired and Solomon can read transaction data, alerts Jed when each debt is paid in full or when a major milestone (25%/50%/75% of total debt eliminated) is hit. Per master-context section 11, debt elimination is a load-bearing variable in every Jed decision.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "show me debt snowball progress",
+    "where am I on the debt payoff",
+    "how much debt left"
+  ],
+  "prompt_template": "[NOT YET IMPLEMENTED] Read mem('debt','total_remaining'), mem('debt','starting_total'), and mem('debt','last_payment'); compute % paid down; Telegram-report. Until Mercury wired, returns 'Debt snowball tracker not connected — Mercury must be live first.'",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "Mercury not yet connected — surface the gap to Jed"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.65,
+  "smoke_test": {
+    "trigger_message": "where am I on the debt payoff",
+    "expected_inputs_filled": [],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "FUTURE template — staged for when Mercury bank is live. Today it returns the not-connected message. Gap: needs Mercury → mem('debt') ingestion job."
+}

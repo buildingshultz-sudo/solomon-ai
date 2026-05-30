@@ -1,0 +1,25 @@
+{
+  "id": "solomon_status_check",
+  "name": "Report Solomon system status",
+  "description": "Show PM2 processes, uptime, recent posts, email triage stats, OAuth status. Equivalent to /status slash command.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "what's your status",
+    "are you up and running",
+    "system check"
+  ],
+  "prompt_template": "Run the /status handler logic in bot.js (PM2 process list + email_stats + recent social_log + OAuth status via getSocialAuthStatus()).",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [],
+  "irreversible": false,
+  "confidence_default": 0.95,
+  "smoke_test": {
+    "trigger_message": "status",
+    "expected_inputs_filled": [],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Pure read — no side effects."
+}

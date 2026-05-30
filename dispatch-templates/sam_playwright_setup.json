@@ -1,0 +1,28 @@
+{
+  "id": "sam_playwright_setup",
+  "name": "Walk Jed through Playwright auth setup for a platform",
+  "description": "Jed asks how to set up the Playwright session for a platform (YouTube / KDP / Instagram). Sam confirms the platform, points to the right doc, and reposts the one-PowerShell-line setup command.",
+  "handler": "sam",
+  "categories": [],
+  "trigger_examples": [
+    "how do I set up playwright for youtube",
+    "redo the kdp browser login",
+    "playwright setup for instagram"
+  ],
+  "prompt_template": "Sam: identify {{platform}} (youtube | kdp | instagram). Reply to Jed with the matching doc path (/root/solomon-v4/PLAYWRIGHT_{{PLATFORM_UPPER}}_AUTH.md) + the exact one-PowerShell-line command to paste. If platform is not yet wired (e.g. instagram), say so and offer to build the auth flow.",
+  "required_inputs": ["platform"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "platform is not in {youtube, kdp, instagram}",
+    "the platform's capture script does not exist yet on the VPS"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.9,
+  "smoke_test": {
+    "trigger_message": "I need to redo the kdp playwright setup",
+    "expected_inputs_filled": ["platform"],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "Instagram auth not yet built — Solomon should escalate that ask to Jed for prioritization."
+}

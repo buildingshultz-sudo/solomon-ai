@@ -1,0 +1,37 @@
+{
+  "id": "caleb_affiliate_link_verify",
+  "name": "Verify affiliate links across YouTube videos",
+  "description": "Caleb task — open the last N Building Shultz YouTube videos in a browser, check that each affiliate link in the description still resolves (no 404, no expired affiliate ID), and report bad links so Jed can fix them.",
+  "handler": "caleb",
+  "categories": [],
+  "trigger_examples": [
+    "verify affiliate links on youtube",
+    "check all the amazon links across the channel",
+    "audit affiliate links in the last 30 videos"
+  ],
+  "prompt_template": "Caleb: open https://studio.youtube.com/channel/UC... → Content. For each of the last {{video_count}} videos, open the description, extract all affiliate URLs (amazon, acmetool, etc.), HEAD-request each one, and flag any that 404 or redirect to a parked domain. Return a structured list: video_title, broken_url, suggested_replacement.",
+  "required_inputs": ["video_count"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "more than 20% of links broken — escalate for batch repair plan",
+    "any link redirects to spam/sketchy domain — flag immediately"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.8,
+  "caleb_steps": [
+    "Open browser to studio.youtube.com",
+    "Navigate to Content tab",
+    "For each of the latest N videos, expand description",
+    "Regex out all URLs",
+    "HEAD-request each",
+    "Compile broken_url list",
+    "Return JSON to Solomon"
+  ],
+  "smoke_test": {
+    "trigger_message": "audit affiliate links in the last 20 videos",
+    "expected_inputs_filled": ["video_count"],
+    "expected_handler": "caleb",
+    "expected_escalation": false
+  },
+  "notes": "PC-side because YouTube Studio is most reliably read through a logged-in browser session. Requires the PC relay /caleb-task endpoint to exist (pending)."
+}

@@ -1,0 +1,29 @@
+{
+  "id": "sam_token_refresh",
+  "name": "Refresh a Facebook page token from Jed",
+  "description": "Jed has a freshly-regenerated FB page token and wants it installed. Solomon already has the /setfbtoken receiver — this template handles the Sam-side validation + commit if /setfbtoken is broken or Jed sends the token in free text.",
+  "handler": "sam",
+  "categories": ["public_brand"],
+  "trigger_examples": [
+    "new Building Shultz token: <token>",
+    "fix the irish craftsman fb token, here's the new one: <token>",
+    "rotate fb token for irish_craftsman"
+  ],
+  "prompt_template": "Sam: validate the new Facebook page token {{token}} for page {{page}} by hitting Graph API /me?access_token=...; if valid, update the FB_{{page_upper}}_TOKEN line in /root/solomon-v4/.env and pm2 restart solomon-v4 --update-env. Confirm to Solomon with the validated page name + expiry. Never log the token itself.",
+  "required_inputs": ["page", "token"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "token validation fails (expired, wrong page, wrong account)",
+    "token is missing or looks like a placeholder",
+    "page name doesn't match the validation response"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.85,
+  "smoke_test": {
+    "trigger_message": "set fb token for irish_craftsman: EAAB...example",
+    "expected_inputs_filled": ["page", "token"],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "Prefer the existing /setfbtoken slash command (bot.js) — that path validates + persists without going through dispatch. This template is the dispatch fallback for free-text phrasings."
+}

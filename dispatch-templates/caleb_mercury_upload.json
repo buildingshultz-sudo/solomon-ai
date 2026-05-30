@@ -1,0 +1,36 @@
+{
+  "id": "caleb_mercury_upload",
+  "name": "Upload supporting docs to Mercury for the LLC bank account",
+  "description": "Caleb task — log into mercury.com, navigate to the application/documents area, and upload the documents Jed has placed in D:\\\\Mercury-uploads\\\\ on his PC.",
+  "handler": "caleb",
+  "categories": ["financial"],
+  "trigger_examples": [
+    "upload the mercury docs",
+    "send the LLC paperwork to mercury",
+    "do the mercury document upload"
+  ],
+  "prompt_template": "Caleb: open Chrome to mercury.com → sign in → navigate to the Shultz Enterprises application/documents section. For each file in D:\\\\Mercury-uploads\\\\, click Upload, attach the file, confirm the type matches the document (LLC confirmation, EIN, ID, etc.). Take a screenshot of the final document list and return it to Solomon.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "Mercury asks to verify identity / 2FA / phone code — pause and tell Jed",
+    "any document is missing or mislabeled in D:\\\\Mercury-uploads — pause"
+  ],
+  "irreversible": true,
+  "confidence_default": 0.5,
+  "caleb_steps": [
+    "Open mercury.com in Chrome",
+    "Sign in",
+    "Go to Documents section",
+    "Upload each file in D:\\\\Mercury-uploads\\\\",
+    "Verify upload list",
+    "Screenshot + return"
+  ],
+  "smoke_test": {
+    "trigger_message": "upload the mercury docs",
+    "expected_inputs_filled": [],
+    "expected_handler": "jed-escalate",
+    "expected_escalation": true
+  },
+  "notes": "Marked irreversible=true → ALWAYS escalates to Jed. Bank-account-touching action."
+}

@@ -1442,6 +1442,53 @@ bot.onText(/^\/setfbtoken\b/i, async (msg) => {
   }
 });
 
+// /dispatch <message> — run a Telegram message through the new dispatch engine
+// (opt-in for safety). Defaults to shadow mode = classify+route+nathan-consult
+// but DO NOT actually fire handlers — log what would have happened to
+// dispatch-shadow-log.json. Flip with: /dispatch mode live  (and back with shadow).
+bot.onText(/^\/dispatch\b\s*(.*)$/i, async (msg, match) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const arg = (match && match[1] || '').trim();
+  // mode flip subcommand
+  const modeMatch = arg.match(/^mode\s+(shadow|live)$/i);
+  if (modeMatch) {
+    const m = modeMatch[1].toLowerCase();
+    mem.set('dispatch', 'mode', m);
+    bot.sendMessage(msg.chat.id, `🔀 Dispatch mode set to *${m}*. ${m === 'live' ? 'Handlers will now fire on /dispatch.' : 'Shadow only — no side effects.'}`, { parse_mode: 'Markdown' }).catch(() => {});
+    return;
+  }
+  if (!arg) {
+    bot.sendMessage(msg.chat.id, 'Usage: `/dispatch <message you would send>`\nOr: `/dispatch mode shadow|live`\nCurrent mode: ' + (mem.get('dispatch', 'mode') || (process.env.DISPATCH_MODE === 'live' ? 'live' : 'shadow')), { parse_mode: 'Markdown' }).catch(() => {});
+    return;
+  }
+  bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+  let dispatch;
+  try { dispatch = require('./dispatch'); }
+  catch (e) {
+    bot.sendMessage(msg.chat.id, `❌ Dispatch engine not loadable: ${e.message}`).catch(() => {});
+    return;
+  }
+  try {
+    const result = await dispatch.classifyAndRoute(arg, { mem });
+    const tpl = result.template?.id || '(no template)';
+    const reply = [
+      `🧭 *Dispatch result*  _(${result.mode})_`,
+      `Template: \`${tpl}\``,
+      `Confidence: ${result.confidence?.toFixed(2) ?? '?'}`,
+      `Decision: *${result.decision}*`,
+      `Reason: ${result.reason}`,
+      result.nathan_consult ? `\nNathan: *${result.nathan_consult.recommendation}* (agreement ${result.nathan_consult.agreement?.toFixed?.(2) ?? '?'})` : '',
+      result.nathan_consult?.concerns?.length ? `Concerns: ${result.nathan_consult.concerns.join(' · ')}` : '',
+      result.action_result ? `\nAction: \`${result.action_result.kind || result.action_result.mode}\`` : ''
+    ].filter(Boolean).join('\n');
+    await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(msg.chat.id, reply.replace(/[*_`]/g, '')));
+  } catch (e) {
+    log('ERROR', 'DISPATCH', 'dispatch failed', { error: e.message });
+    bot.sendMessage(msg.chat.id, `❌ Dispatch failed: ${e.message.slice(0, 300)}`).catch(() => {});
+  }
+});
+
 // /generate <prompt> — generate an image via Black Forest Labs Flux and reply with it.
 bot.onText(/^\/generate\b\s*(.*)$/i, async (msg, match) => {
   if (msg.chat.id !== OWNER_ID) return;
@@ -1519,6 +1566,7 @@ bot.onText(/^\/help\b/i, async (msg) => {
     '/launch — start the 30-day book & merch campaign',
     '/brief — send the morning brief now',
     '/generate <prompt> — generate an image (Flux 1.1 via BFL) and reply with it',
+    '/dispatch <message> — run the message through the dispatch engine (shadow mode default; flip with /dispatch mode live)',
     '/setfbtoken <page> <token> — paste a freshly-regenerated FB page token; Solomon validates + restarts',
     '/help — this list',
     '',

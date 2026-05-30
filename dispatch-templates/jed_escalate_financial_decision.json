@@ -1,0 +1,29 @@
+{
+  "id": "jed_escalate_financial_decision",
+  "name": "Any financial decision (Jed only)",
+  "description": "Catch-all for any request that involves money movement, billing changes, account creation/closure, pricing changes, payment method updates, tax filings, debt actions, or S-corp election. Always Jed.",
+  "handler": "jed-escalate",
+  "categories": ["financial", "irreversible"],
+  "trigger_examples": [
+    "transfer $500 from mercury to my personal account",
+    "raise the book price to $14.99",
+    "cancel the claude max sub",
+    "elect s-corp status",
+    "pay down the chase card"
+  ],
+  "prompt_template": "Tell Jed: 'Financial action — this is yours. Here's what I would have done: {{intent_summary}}. Confirm and I can prepare the workflow (with you in the loop), or this stops here.'",
+  "required_inputs": ["intent_summary"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "always"
+  ],
+  "irreversible": true,
+  "confidence_default": 0.95,
+  "smoke_test": {
+    "trigger_message": "raise the book price to 14.99",
+    "expected_inputs_filled": ["intent_summary"],
+    "expected_handler": "jed-escalate",
+    "expected_escalation": true
+  },
+  "notes": "Safety net. Per master-context rules, Solomon never makes financial decisions autonomously."
+}

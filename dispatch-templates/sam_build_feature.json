@@ -1,0 +1,29 @@
+{
+  "id": "sam_build_feature",
+  "name": "Generic Sam: build a small feature in Solomon",
+  "description": "Catch-all Sam template for 'add this feature to Solomon' requests where the feature is small (single file, single PM2 process, ≤1 day of work) and explicit (Jed described what he wants).",
+  "handler": "sam",
+  "categories": [],
+  "trigger_examples": [
+    "add a /reminders slash command",
+    "build a daily YouTube subscriber check at noon CT",
+    "wire a new tool that does X"
+  ],
+  "prompt_template": "Sam: build {{feature_description}}. Follow the standard build protocol — backup the file, show diff, node --check, restart the affected PM2 process, confirm online + log clean, commit + push to buildingshultz-sudo/solomon-ai. Acceptance: feature ships and Jed sees it work in Telegram (or wherever the change manifests).",
+  "required_inputs": ["feature_description"],
+  "optional_inputs": ["affected_file", "priority"],
+  "escalation_conditions": [
+    "feature description is vague (under 10 words and no concrete behavior)",
+    "feature touches financial/legal/irreversible — escalate",
+    "feature would require >1 day or multiple new processes — escalate so Jed can scope it"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.72,
+  "smoke_test": {
+    "trigger_message": "build me a /reminders slash command in solomon that lists pending tasks",
+    "expected_inputs_filled": ["feature_description"],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "This is the safety-net template for engineering asks. Below 0.85 confidence (likely common for generic build requests), it will route through Nathan first."
+}

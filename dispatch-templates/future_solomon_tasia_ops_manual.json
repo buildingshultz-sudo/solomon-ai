@@ -1,0 +1,27 @@
+{
+  "id": "future_solomon_tasia_ops_manual",
+  "name": "[FUTURE] Generate / update the Tasia operations manual",
+  "description": "PLACEHOLDER — per master-context, Tasia should be able to run the operation if Jed is unavailable. Solomon generates and maintains a plain-English operations manual covering: what Solomon does, what each platform/login is, how to send Solomon basic commands, who to contact in emergencies. Updated quarterly or on major changes.",
+  "handler": "solomon",
+  "categories": ["sensitive_pii"],
+  "trigger_examples": [
+    "update tasia's manual",
+    "regenerate the ops manual for tasia",
+    "tasia ops doc refresh"
+  ],
+  "prompt_template": "Generate /root/solomon-v4/TASIA_OPERATIONS_MANUAL.md from the master context. Cover: Solomon's role in plain English, how to send him basic Telegram commands (/status, /brief), what each business asset is and where, who to contact for: tech issues (Sam → text Nathan), bank issues (Mercury support number), urgent operational issues (Nathan). No credentials. Save and Telegram Tasia + Jed a copy.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "tasia category → sensitive_pii — Nathan will short-circuit; only Jed authorizes the send to Tasia"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.7,
+  "smoke_test": {
+    "trigger_message": "regenerate tasia's ops manual",
+    "expected_inputs_filled": [],
+    "expected_handler": "jed-escalate",
+    "expected_escalation": true
+  },
+  "notes": "FUTURE — sensitive_pii category means any send-to-Tasia step always escalates to Jed first. Solomon CAN generate the doc; Jed approves the actual delivery."
+}

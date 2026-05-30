@@ -1,0 +1,35 @@
+{
+  "id": "caleb_gmail_labels_setup",
+  "name": "Set up Gmail labels and filters across the three Shultz inboxes",
+  "description": "Caleb task — create the agreed-upon label set (Revenue, Customer, Legal, Marketing, Newsletter, Personal) in each of buildingshultz@, irishcraftsman7@, jedidiahshultz3@ and wire filters that auto-apply them.",
+  "handler": "caleb",
+  "categories": [],
+  "trigger_examples": [
+    "set up gmail labels across all 3 inboxes",
+    "configure gmail filters",
+    "do the gmail label setup"
+  ],
+  "prompt_template": "Caleb: in Chrome, log into each of the three Gmail accounts (buildingshultz, irishcraftsman7, jedidiahshultz3). Create labels: Revenue, Customer, Legal, Marketing, Newsletter, Personal. Create filters matching the spec in /root/solomon-v4/manus/gmail_filter_spec.md (or, if absent, use the default heuristics: 'invoice|payment' → Revenue; 'reply|inquiry|customer' → Customer; etc.). Return a summary per-account: labels created, filters created.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "manus filter spec missing — escalate to Jed to confirm rules",
+    "Gmail asks for a re-login or 2FA — pause and tell Jed to authenticate"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.78,
+  "caleb_steps": [
+    "Open gmail.com",
+    "For each of 3 accounts, switch profile",
+    "Settings → Labels → Create label",
+    "Settings → Filters → Create filter",
+    "Save and confirm"
+  ],
+  "smoke_test": {
+    "trigger_message": "configure gmail filters across all three accounts",
+    "expected_inputs_filled": [],
+    "expected_handler": "caleb",
+    "expected_escalation": false
+  },
+  "notes": "From Cowork Task Queue item #1 in master context."
+}

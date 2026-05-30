@@ -1,0 +1,28 @@
+{
+  "id": "jed_escalate_legal_filing",
+  "name": "Any legal filing or signed document (Jed only)",
+  "description": "INBiz filings, IRS forms, signed contracts, trademark applications, registered agent changes. Always Jed.",
+  "handler": "jed-escalate",
+  "categories": ["legal", "irreversible"],
+  "trigger_examples": [
+    "file the EIN application",
+    "submit the trademark for Building Shultz",
+    "change the registered agent on the LLC",
+    "sign and submit the contractor agreement"
+  ],
+  "prompt_template": "Tell Jed: 'Legal filing — this is yours. Here's what I see you want: {{intent_summary}}. I can prep paperwork or walk you through the form, but the actual submission is your signature.'",
+  "required_inputs": ["intent_summary"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "always"
+  ],
+  "irreversible": true,
+  "confidence_default": 0.95,
+  "smoke_test": {
+    "trigger_message": "file the EIN",
+    "expected_inputs_filled": ["intent_summary"],
+    "expected_handler": "jed-escalate",
+    "expected_escalation": true
+  },
+  "notes": "EIN application itself takes 5 min — irs.gov/ein. Jed completes it."
+}

@@ -1,0 +1,28 @@
+{
+  "id": "solomon_generate_image",
+  "name": "Generate an image via Black Forest Labs Flux",
+  "description": "Solomon submits a prompt to BFL Flux Pro 1.1 and returns the rendered image to Telegram. Used for book cover variations, campaign art, and quick visual mockups.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "generate a book cover with weathered leather and gold foil title",
+    "make me an image of a jobsite at sunrise with tools laid out",
+    "spin up a campaign image: motivational message on a worksite background"
+  ],
+  "prompt_template": "Run the existing /generate command pipeline with prompt={{prompt}}. Reply via bot.sendPhoto with the image and the original prompt as caption.",
+  "required_inputs": ["prompt"],
+  "optional_inputs": ["width", "height", "aspect_hint"],
+  "escalation_conditions": [
+    "prompt requests likeness of a real person other than Jed/Tasia → jed-escalate",
+    "prompt contains anything that could violate content policy"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.95,
+  "smoke_test": {
+    "trigger_message": "generate a moody jobsite photo, golden hour, hammers on a workbench",
+    "expected_inputs_filled": ["prompt"],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "This is wired in bot.js via /generate. Dispatch may route here for free-text 'make me an image' style requests."
+}

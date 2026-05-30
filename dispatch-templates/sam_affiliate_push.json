@@ -1,0 +1,28 @@
+{
+  "id": "sam_affiliate_push",
+  "name": "Submit affiliate program applications",
+  "description": "Sam queue job — pull the affiliate application packets from the Manus library and submit them via web forms (1Password, NordVPN, DaVinci Resolve, plus any new program Jed names).",
+  "handler": "sam",
+  "categories": ["public_brand"],
+  "trigger_examples": [
+    "submit the 1password affiliate app",
+    "push the affiliate applications",
+    "apply to the davinci affiliate program"
+  ],
+  "prompt_template": "Sam: locate the affiliate packet for {{program}} in the Manus library (look under /root/solomon-v4/manus/ or C:\\\\Users\\\\Ashle\\\\Desktop\\\\Shultz Scripts\\\\manus). Fill in the application using Jed's standard details from the master context (channel size, audience description, BS branding). Submit via the program's web form using Playwright. Save the submission receipt + application URL to mem('affiliate', {{program}}). Telegram Jed a confirmation.",
+  "required_inputs": ["program"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "packet missing — escalate to Jed to author it",
+    "program asks for a tax form, signature, or banking info — escalate immediately"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.7,
+  "smoke_test": {
+    "trigger_message": "submit the 1password affiliate application",
+    "expected_inputs_filled": ["program"],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "Public-brand category — Nathan will likely want to review the application copy before submission."
+}

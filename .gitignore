@@ -16,3 +16,9 @@ context.md
 .pw_state_*
 .pw_state_*.json
 .GUMROAD_WEBHOOK_URL
+dispatch-shadow-log.json
+nathan-consult-log.json
+nathan-consult-log.*.json
+sam-queue/*.json
+!sam-queue/README.md
+sam-queue-done/*.json

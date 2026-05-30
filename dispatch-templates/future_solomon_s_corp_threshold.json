@@ -1,0 +1,27 @@
+{
+  "id": "future_solomon_s_corp_threshold",
+  "name": "[FUTURE] S-Corp election reminder at revenue threshold",
+  "description": "PLACEHOLDER — when month-trailing revenue crosses $X (commonly cited threshold ~$40-50k/year of profit), Solomon flags Jed to talk to a CPA about S-Corp election. Currently the LLC is taxed as a sole prop / single-member LLC. Per master-context section 11 (the third fear: managing increased income), this is a known future trigger.",
+  "handler": "nathan-consult",
+  "categories": ["financial", "legal"],
+  "trigger_examples": [
+    "should I elect s corp yet",
+    "what about the s corp election",
+    "do i need s corp now"
+  ],
+  "prompt_template": "Pass to Nathan with proposed_action='Recommend S-Corp election eval', context='Trailing-12-month profit estimate: {{ttm_profit_estimate}}'. Nathan will say 'escalate_to_jed' due to financial+legal categories — Solomon then sends Jed: 'S-Corp election is a CPA conversation. Worth talking to one if your TTM profit is past $40k. Want me to draft a CPA outreach email?'",
+  "required_inputs": [],
+  "optional_inputs": ["ttm_profit_estimate"],
+  "escalation_conditions": [
+    "always — financial + legal both apply, always Jed via Nathan short-circuit"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.7,
+  "smoke_test": {
+    "trigger_message": "should I elect s-corp yet?",
+    "expected_inputs_filled": [],
+    "expected_handler": "nathan-consult",
+    "expected_escalation": true
+  },
+  "notes": "FUTURE / advisory only. Solomon never files Form 2553 itself."
+}

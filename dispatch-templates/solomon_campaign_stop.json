@@ -1,0 +1,25 @@
+{
+  "id": "solomon_campaign_stop",
+  "name": "Stop the 30-day campaign",
+  "description": "Disarms the campaign so the preview crons stop firing. Sets mem('campaign','active') = false.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "stop the campaign",
+    "pause the 30 day campaign",
+    "kill auto posting for now"
+  ],
+  "prompt_template": "Call executeTool('launch_campaign', {action: 'stop'}). Confirm.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [],
+  "irreversible": false,
+  "confidence_default": 0.92,
+  "smoke_test": {
+    "trigger_message": "stop the campaign",
+    "expected_inputs_filled": [],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Reversible — Jed can re-arm anytime with solomon_campaign_launch."
+}

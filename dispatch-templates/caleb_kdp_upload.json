@@ -1,0 +1,38 @@
+{
+  "id": "caleb_kdp_upload",
+  "name": "Prep KDP upload workflow on PC",
+  "description": "Caleb task — walk through the KDP upload UI to get to the publish-ready state (cover, interior, metadata all set). Stops at the actual 'Publish' button — that's always Jed.",
+  "handler": "caleb",
+  "categories": [],
+  "trigger_examples": [
+    "prep the kdp upload for motivation for tough guys",
+    "get the kdp draft ready to publish",
+    "kdp upload prep"
+  ],
+  "prompt_template": "Caleb: open kdp.amazon.com → Bookshelf → 'Motivation for Tough Guys' → Continue Setup. Upload the cover from D:\\\\Books\\\\MFTG\\\\cover.pdf, the interior from D:\\\\Books\\\\MFTG\\\\interior.pdf, fill metadata from D:\\\\Books\\\\MFTG\\\\metadata.json. Save as draft. Screenshot the publish-ready state and return to Solomon. DO NOT click Publish.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "any of cover/interior/metadata missing in D:\\\\Books\\\\MFTG\\\\",
+    "KDP shows validation errors after fill",
+    "Publish button is the next step — escalate Jed before clicking"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.78,
+  "caleb_steps": [
+    "Open kdp.amazon.com",
+    "Bookshelf → Continue Setup",
+    "Upload cover PDF",
+    "Upload interior PDF",
+    "Fill metadata from JSON",
+    "Save draft",
+    "Screenshot + return — STOP, do not publish"
+  ],
+  "smoke_test": {
+    "trigger_message": "prep the kdp draft",
+    "expected_inputs_filled": [],
+    "expected_handler": "caleb",
+    "expected_escalation": false
+  },
+  "notes": "Prep only — explicitly stops at the Publish button. The irreversible Publish step lives in jed_escalate_kdp_publish (handler: jed-escalate, categories: irreversible+public_brand)."
+}

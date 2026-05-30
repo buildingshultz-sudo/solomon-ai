@@ -1,0 +1,26 @@
+{
+  "id": "solomon_send_morning_brief",
+  "name": "Send the morning scorecard now",
+  "description": "On-demand version of the 6 AM morning brief — sends the live YT/Gumroad/KDP/campaign/budget scorecard to Jed's Telegram.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "send me the morning brief",
+    "give me today's scorecard",
+    "what's the rundown right now",
+    "run brief"
+  ],
+  "prompt_template": "Call buildMorningScorecard() from scheduler.js, then bot.sendMessage(OWNER_ID, scorecard, parse_mode: Markdown). No additional commentary.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [],
+  "irreversible": false,
+  "confidence_default": 0.95,
+  "smoke_test": {
+    "trigger_message": "give me the scorecard",
+    "expected_inputs_filled": [],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Equivalent to /brief slash command. Useful for natural-language phrasings."
+}

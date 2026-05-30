@@ -1,0 +1,27 @@
+{
+  "id": "jed_escalate_kdp_publish",
+  "name": "Publish a KDP book (Jed only)",
+  "description": "Hitting the KDP Publish button is irreversible — once live the book is on Amazon and pulling it requires customer-service intervention. ALWAYS Jed, never Solomon, never Caleb, never Sam.",
+  "handler": "jed-escalate",
+  "categories": ["irreversible", "public_brand"],
+  "trigger_examples": [
+    "publish the kdp book",
+    "hit publish on motivation for tough guys",
+    "go live on amazon"
+  ],
+  "prompt_template": "Tell Jed: 'KDP publish is yours alone — open kdp.amazon.com → Bookshelf → Motivation for Tough Guys → Save and Publish. Caleb has prepped the draft; you just need to click. Once you do, send me a one-liner and I'll log it to master context.'",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "always — this template never executes, only flags Jed"
+  ],
+  "irreversible": true,
+  "confidence_default": 0.99,
+  "smoke_test": {
+    "trigger_message": "publish the kdp book now",
+    "expected_inputs_filled": [],
+    "expected_handler": "jed-escalate",
+    "expected_escalation": true
+  },
+  "notes": "Per master-context section 12: 'always get explicit approval before any legal, financial, or irreversible action.'"
+}

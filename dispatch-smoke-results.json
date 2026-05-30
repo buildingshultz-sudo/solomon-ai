@@ -1,0 +1,1130 @@
+{
+  "ran_at": "2026-05-30T18:42:13.518Z",
+  "total": 28,
+  "pass": 28,
+  "fail": 0,
+  "pass_rate": "1.00",
+  "nathan_consult_count": 10,
+  "results": [
+    {
+      "id": "caleb_affiliate_link_verify",
+      "trigger": "audit affiliate links in the last 20 videos",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "caleb_affiliate_link_verify",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "caleb_affiliate_link_verify",
+          "actual": "caleb_affiliate_link_verify"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "caleb",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "video_count"
+          ],
+          "actual": {
+            "video_count": "20"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "caleb_gmail_labels_setup",
+      "trigger": "configure gmail filters across all three accounts",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "caleb_gmail_labels_setup",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "caleb_gmail_labels_setup",
+          "actual": "caleb_gmail_labels_setup"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "caleb",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "caleb_kdp_upload",
+      "trigger": "prep the kdp draft",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "caleb_kdp_upload",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "caleb_kdp_upload",
+          "actual": "caleb_kdp_upload"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "caleb",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "caleb_mercury_upload",
+      "trigger": "upload the mercury docs",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "caleb_mercury_upload",
+      "decision": "escalate_jed",
+      "reason": "Template 'caleb_mercury_upload' is marked irreversible — Jed approval required",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "caleb_mercury_upload",
+          "actual": "caleb_mercury_upload"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "jed-escalate",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "future_solomon_debt_snowball_alert",
+      "trigger": "where am I on the debt payoff",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "future_solomon_debt_snowball_alert",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "future_solomon_debt_snowball_alert",
+          "actual": "future_solomon_debt_snowball_alert"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "future_solomon_hire_first_va",
+      "trigger": "time to hire a VA?",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "future_solomon_hire_first_va",
+      "decision": "escalate_jed",
+      "reason": "Nathan: escalate_to_jed — Hard safety rail — financial/legal/irreversible/sensitive_pii/public_brand always go to Jed.",
+      "nathan_consulted": true,
+      "nathan_recommendation": "escalate_to_jed",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "future_solomon_hire_first_va",
+          "actual": "future_solomon_hire_first_va"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "nathan-consult",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "future_solomon_s_corp_threshold",
+      "trigger": "should I elect s-corp yet?",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "future_solomon_s_corp_threshold",
+      "decision": "escalate_jed",
+      "reason": "Nathan: escalate_to_jed — Hard safety rail — financial/legal/irreversible/sensitive_pii/public_brand always go to Jed.",
+      "nathan_consulted": true,
+      "nathan_recommendation": "escalate_to_jed",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "future_solomon_s_corp_threshold",
+          "actual": "future_solomon_s_corp_threshold"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "nathan-consult",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "future_solomon_tasia_ops_manual",
+      "trigger": "regenerate tasia's ops manual",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "future_solomon_tasia_ops_manual",
+      "decision": "escalate_jed",
+      "reason": "Nathan: escalate_to_jed — Hard safety rail — financial/legal/irreversible/sensitive_pii/public_brand always go to Jed.",
+      "nathan_consulted": true,
+      "nathan_recommendation": "escalate_to_jed",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "future_solomon_tasia_ops_manual",
+          "actual": "future_solomon_tasia_ops_manual"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "jed-escalate",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "future_solomon_tradequote_kickoff",
+      "trigger": "kick off the tradequote ai build",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "future_solomon_tradequote_kickoff",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "future_solomon_tradequote_kickoff",
+          "actual": "future_solomon_tradequote_kickoff"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "jed_escalate_financial_decision",
+      "trigger": "raise the book price to 14.99",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "jed_escalate_financial_decision",
+      "decision": "escalate_jed",
+      "reason": "Template 'jed_escalate_financial_decision' is marked irreversible — Jed approval required",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "jed_escalate_financial_decision",
+          "actual": "jed_escalate_financial_decision"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "jed-escalate",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "intent_summary"
+          ],
+          "actual": {
+            "intent_summary": "Change book price to $14.99"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "jed_escalate_kdp_publish",
+      "trigger": "publish the kdp book now",
+      "passed": true,
+      "classifier_confidence": 1,
+      "classifier_template_id": "jed_escalate_kdp_publish",
+      "decision": "escalate_jed",
+      "reason": "Template 'jed_escalate_kdp_publish' is marked irreversible — Jed approval required",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "jed_escalate_kdp_publish",
+          "actual": "jed_escalate_kdp_publish"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "jed-escalate",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "jed_escalate_legal_filing",
+      "trigger": "file the EIN",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "jed_escalate_legal_filing",
+      "decision": "escalate_jed",
+      "reason": "Template 'jed_escalate_legal_filing' is marked irreversible — Jed approval required",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "jed_escalate_legal_filing",
+          "actual": "jed_escalate_legal_filing"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "jed-escalate",
+          "actual": "escalate_jed"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "intent_summary"
+          ],
+          "actual": {
+            "intent_summary": "File EIN application"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": true,
+          "actual": true
+        }
+      ]
+    },
+    {
+      "id": "nathan_strategy_question",
+      "trigger": "ask nathan what he thinks about pricing the book at $9 vs $19",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "nathan_strategy_question",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.3: modify",
+      "nathan_consulted": true,
+      "nathan_recommendation": "modify",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "nathan_strategy_question",
+          "actual": "nathan_strategy_question"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "nathan-consult",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "question"
+          ],
+          "actual": {
+            "question": "What are your thoughts on pricing the book at $9 vs $19?"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "sam_affiliate_push",
+      "trigger": "submit the 1password affiliate application",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "sam_affiliate_push",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.75: modify",
+      "nathan_consulted": true,
+      "nathan_recommendation": "modify",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "sam_affiliate_push",
+          "actual": "sam_affiliate_push"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "program"
+          ],
+          "actual": {
+            "program": "1password"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "sam_build_feature",
+      "trigger": "build me a /reminders slash command in solomon that lists pending tasks",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "sam_build_feature",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "sam_build_feature",
+          "actual": "sam_build_feature"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "feature_description"
+          ],
+          "actual": {
+            "feature_description": "Add a /reminders slash command to Solomon that lists pending tasks"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "sam_instagram_link",
+      "trigger": "instagram is hooked up now finish the integration",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "sam_instagram_link",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.75: modify",
+      "nathan_consulted": true,
+      "nathan_recommendation": "modify",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "sam_instagram_link",
+          "actual": "sam_instagram_link"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "sam_playwright_setup",
+      "trigger": "I need to redo the kdp playwright setup",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "sam_playwright_setup",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "sam_playwright_setup",
+          "actual": "sam_playwright_setup"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "platform"
+          ],
+          "actual": {
+            "platform": "kdp"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "sam_stripe_audit",
+      "trigger": "do a stripe audit",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "sam_stripe_audit",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "sam_stripe_audit",
+          "actual": "sam_stripe_audit"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "sam_token_refresh",
+      "trigger": "set fb token for irish_craftsman: EAAB...example",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "sam_token_refresh",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.95: proceed",
+      "nathan_consulted": true,
+      "nathan_recommendation": "proceed",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "sam_token_refresh",
+          "actual": "sam_token_refresh"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "sam",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "page",
+            "token"
+          ],
+          "actual": {
+            "page": "irish_craftsman",
+            "token": "EAAB...example"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_campaign_launch",
+      "trigger": "launch the campaign",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_campaign_launch",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.85: proceed",
+      "nathan_consulted": true,
+      "nathan_recommendation": "proceed",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_campaign_launch",
+          "actual": "solomon_campaign_launch"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_campaign_stop",
+      "trigger": "stop the campaign",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_campaign_stop",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_campaign_stop",
+          "actual": "solomon_campaign_stop"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_check_budget",
+      "trigger": "what's the API budget at?",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_check_budget",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_check_budget",
+          "actual": "solomon_check_budget"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_cross_post",
+      "trigger": "post this to all socials: Finished a 14ft retaining wall today — long day, good work. Be inspired, stay humble, and build.",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_cross_post",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.85: modify",
+      "nathan_consulted": true,
+      "nathan_recommendation": "modify",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_cross_post",
+          "actual": "solomon_cross_post"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "content"
+          ],
+          "actual": {
+            "content": "Finished a 14ft retaining wall today — long day, good work. Be inspired, stay humble, and build."
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_fb_reply",
+      "trigger": "Reply to FB comment 99 on building_shultz with: Thanks for sharing brother",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_fb_reply",
+      "decision": "execute_after_nathan",
+      "reason": "Nathan agreement 0.85: modify",
+      "nathan_consulted": true,
+      "nathan_recommendation": "modify",
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_fb_reply",
+          "actual": "solomon_fb_reply"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_after_nathan"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "page",
+            "comment_id",
+            "reply_text"
+          ],
+          "actual": {
+            "page": "building_shultz",
+            "comment_id": "99",
+            "reply_text": "Thanks for sharing brother"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_generate_image",
+      "trigger": "generate a moody jobsite photo, golden hour, hammers on a workbench",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_generate_image",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_generate_image",
+          "actual": "solomon_generate_image"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "prompt"
+          ],
+          "actual": {
+            "prompt": "generate a moody jobsite photo, golden hour, hammers on a workbench"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_ironedit_pipeline_kick",
+      "trigger": "ironedit on D:\\\\RawFootage\\\\jobsite001.mp4 — trim silence and cut to 60 sec",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_ironedit_pipeline_kick",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_ironedit_pipeline_kick",
+          "actual": "solomon_ironedit_pipeline_kick"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [
+            "clip_path",
+            "instruction"
+          ],
+          "actual": {
+            "clip_path": "D:\\RawFootage\\jobsite001.mp4",
+            "instruction": "trim silence and cut to 60 sec"
+          },
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_send_morning_brief",
+      "trigger": "give me the scorecard",
+      "passed": true,
+      "classifier_confidence": 0.95,
+      "classifier_template_id": "solomon_send_morning_brief",
+      "decision": "execute_direct",
+      "reason": "Confidence 0.95 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_send_morning_brief",
+          "actual": "solomon_send_morning_brief"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    },
+    {
+      "id": "solomon_status_check",
+      "trigger": "status",
+      "passed": true,
+      "classifier_confidence": 1,
+      "classifier_template_id": "solomon_status_check",
+      "decision": "execute_direct",
+      "reason": "Confidence 1.00 ≥ 0.85",
+      "nathan_consulted": false,
+      "nathan_recommendation": null,
+      "checks": [
+        {
+          "name": "template_match",
+          "pass": true,
+          "expected": "solomon_status_check",
+          "actual": "solomon_status_check"
+        },
+        {
+          "name": "handler_decision",
+          "pass": true,
+          "expected": "solomon",
+          "actual": "execute_direct"
+        },
+        {
+          "name": "inputs_extracted",
+          "pass": true,
+          "expected": [],
+          "actual": {},
+          "missing": []
+        },
+        {
+          "name": "escalation_match",
+          "pass": true,
+          "expected": false,
+          "actual": false
+        }
+      ]
+    }
+  ]
+}

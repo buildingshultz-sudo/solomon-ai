@@ -1,0 +1,28 @@
+{
+  "id": "future_solomon_tradequote_kickoff",
+  "name": "[FUTURE] Kick off TradeQuote AI build (App #2)",
+  "description": "PLACEHOLDER — per the 12-app roadmap, App #2 (TradeQuote AI) cannot start until IronEdit has ≥1 paying customer. When that gate clears, Jed triggers the TradeQuote build kickoff and Solomon scaffolds the project on the VPS (mirroring the IronEdit pattern from the prior session).",
+  "handler": "sam",
+  "categories": [],
+  "trigger_examples": [
+    "kick off tradequote ai",
+    "start the tradequote build",
+    "app #2 — tradequote — let's go"
+  ],
+  "prompt_template": "Sam: confirm IronEdit has ≥1 paying customer (read mem('ironedit','first_customer_at')) — if NOT set, escalate to Jed since roadmap order is non-negotiable. If gate is clear: create /root/tradequote-v1/ with README.md (product brief), architecture.md, roadmap.md, src/. Create public GH repo buildingshultz-sudo/tradequote. Mirror the IronEdit foundation pattern. Telegram Jed when done.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "IronEdit gate not cleared (no paying customer yet) — escalate Jed",
+    "Jed has not explicitly approved kickoff in same message"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.75,
+  "smoke_test": {
+    "trigger_message": "kick off the tradequote ai build",
+    "expected_inputs_filled": [],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "FUTURE — Solomon Phase 8 (autonomous app factory). The roadmap order (master context section 10) is explicitly NON-NEGOTIABLE — gate enforced by the template."
+}

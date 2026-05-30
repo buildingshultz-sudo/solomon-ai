@@ -1,0 +1,28 @@
+{
+  "id": "solomon_ironedit_pipeline_kick",
+  "name": "Kick off an IronEdit edit job (post-Resolve-Studio)",
+  "description": "Once DaVinci Resolve Studio is installed and DaVinci MCP is wired (Phase 2 of IronEdit), Jed asks Solomon to start an edit on a clip. Solomon calls iron_edit_start with the clip path + instruction.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "iron edit on D:\\\\RawFootage\\\\jobsite001.mp4 — trim silence and cut to 60 sec",
+    "start an ironedit job on the latest clip",
+    "edit that footage with ironedit, tight cut"
+  ],
+  "prompt_template": "Call executeTool('iron_edit_start', { clip_path: {{clip_path}}, instruction: {{instruction}} }). Solomon should immediately Telegram-confirm 'Job queued — render typically 3-8 min, I'll ping when done.'",
+  "required_inputs": ["clip_path", "instruction"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "iron_edit_start tool not yet wired (Phase 2 of IronEdit) — escalate with status update",
+    "Resolve Studio not installed on Jed's PC"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.85,
+  "smoke_test": {
+    "trigger_message": "ironedit on D:\\\\RawFootage\\\\jobsite001.mp4 — trim silence and cut to 60 sec",
+    "expected_inputs_filled": ["clip_path", "instruction"],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "PLACEHOLDER — iron_edit_start tool doesn't exist yet. Template is staged for the day Resolve Studio is purchased and IronEdit Phase 2 ships. Until then this template's smoke test will surface the gap."
+}

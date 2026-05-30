@@ -1,0 +1,27 @@
+{
+  "id": "sam_instagram_link",
+  "name": "Wire Instagram Business account to the Building Shultz FB page",
+  "description": "Sam queue job — after Jed has linked the IG Business account in Meta Business Suite, Sam validates the FB page can see the IG account ID, persists IG_BUSINESS_ACCOUNT_ID in .env, and confirms cross-posting now reaches Instagram automatically.",
+  "handler": "sam",
+  "categories": ["public_brand"],
+  "trigger_examples": [
+    "instagram is linked now, finish the wiring",
+    "ig business account is connected — wire it up",
+    "finish the instagram integration"
+  ],
+  "prompt_template": "Sam: hit Graph API /{{fb_page_id}}?fields=instagram_business_account with FB_BUILDING_SHULTZ_TOKEN. If instagram_business_account.id is returned, append IG_BUSINESS_ACCOUNT_ID to .env, restart solomon-v4 --update-env, and run a test cross-post in shadow mode. If the field is absent, tell Jed the linkage hasn't propagated and to wait 5 min and retry.",
+  "required_inputs": [],
+  "optional_inputs": ["fb_page_id"],
+  "escalation_conditions": [
+    "IG account not linked — escalate to Jed with link to Meta Business Suite instructions"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.83,
+  "smoke_test": {
+    "trigger_message": "instagram is hooked up now finish the integration",
+    "expected_inputs_filled": [],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "Once wired, solomon_cross_post stops handing back IG and auto-posts via the existing social_post tool's instagram branch."
+}

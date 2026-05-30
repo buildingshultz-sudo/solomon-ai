@@ -1,0 +1,28 @@
+{
+  "id": "sam_stripe_audit",
+  "name": "Audit the Stripe account",
+  "description": "Sam queue job — locate the Manus-connected Stripe account, list active subscriptions / products / payouts, and report findings. Read-only audit.",
+  "handler": "sam",
+  "categories": [],
+  "trigger_examples": [
+    "audit my stripe account",
+    "what's going on in stripe",
+    "do a stripe review"
+  ],
+  "prompt_template": "Sam: locate the Stripe account currently connected (likely via Manus). Use the Stripe API in read-only mode to list: active products, recent payouts (last 90 days), active subscriptions, total fees YTD. Surface anything unexpected. Do NOT modify any Stripe state.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "no Stripe credentials found — escalate to Jed",
+    "any write/modify intent — must escalate"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.78,
+  "smoke_test": {
+    "trigger_message": "do a stripe audit",
+    "expected_inputs_filled": [],
+    "expected_handler": "sam",
+    "expected_escalation": false
+  },
+  "notes": "Read-only audit. NO financial category set because nothing is written. If this template ever grows a write capability (e.g. cancel a subscription), add categories: ['financial'] which will hard-escalate to Jed via the Nathan bridge."
+}

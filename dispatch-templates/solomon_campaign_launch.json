@@ -1,0 +1,27 @@
+{
+  "id": "solomon_campaign_launch",
+  "name": "Arm the 30-day book & merch campaign",
+  "description": "Arms the campaign so the 6:30 AM and 5:30 PM CT preview crons start firing previews + auto-posts. Sets mem('campaign','active') = true and start_date = today.",
+  "handler": "solomon",
+  "categories": ["public_brand"],
+  "trigger_examples": [
+    "launch the campaign",
+    "arm the 30 day campaign",
+    "kick off the book merch campaign starting today"
+  ],
+  "prompt_template": "Call executeTool('launch_campaign', {action: 'start'}). Confirm with the response message (which includes start_date and gates).",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "campaign is already active — confirm with Jed before re-arming"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.88,
+  "smoke_test": {
+    "trigger_message": "launch the campaign",
+    "expected_inputs_filled": [],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Equivalent to /launch slash command. The first auto-post fires at the next 6:30 AM or 5:30 PM CT slot."
+}

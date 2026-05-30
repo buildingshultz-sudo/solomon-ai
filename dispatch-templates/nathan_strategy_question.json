@@ -1,0 +1,28 @@
+{
+  "id": "nathan_strategy_question",
+  "name": "Ask Nathan a strategy question",
+  "description": "Jed wants Nathan's take on a non-irreversible strategic question — pricing, sequencing, scope, audience positioning, etc. Solomon proxies the question with full master context loaded.",
+  "handler": "nathan-consult",
+  "categories": [],
+  "trigger_examples": [
+    "ask nathan what he thinks about pricing the book at $9 vs $19",
+    "what would nathan say about launching tradequote before ironedit ships",
+    "get nathan's read on whether to push affiliate apps this week"
+  ],
+  "prompt_template": "Pass {{question}} through consultNathan() with: task='strategy_question', confidence=0.7, context='Jed asked: {{question}}. Full master context attached.', proposed_action=null, question={{question}}, categories=[]. Return Nathan's reasoning + recommendation verbatim to Jed.",
+  "required_inputs": ["question"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "question implies a financial/legal/irreversible move — Nathan will short-circuit to escalate_to_jed",
+    "question is about Tasia or the kids — escalate"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.85,
+  "smoke_test": {
+    "trigger_message": "ask nathan what he thinks about pricing the book at $9 vs $19",
+    "expected_inputs_filled": ["question"],
+    "expected_handler": "nathan-consult",
+    "expected_escalation": false
+  },
+  "notes": "Use sparingly — every Nathan consult is an API spend hit. The dispatcher already auto-consults Nathan for any template in the 0.60-0.85 confidence band; this template is for Jed explicitly asking for Nathan's input."
+}

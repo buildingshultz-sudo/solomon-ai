@@ -1,0 +1,25 @@
+{
+  "id": "solomon_check_budget",
+  "name": "Check Anthropic API budget vs hard stop",
+  "description": "Returns this month's spend, the alert threshold ($50), and the hard stop ($100), with current status (OK / WARNING / HARD_STOP).",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "what's my API spend this month",
+    "budget check",
+    "how close to the hard stop are we"
+  ],
+  "prompt_template": "Call executeTool('check_budget', {}). Format the response as: $X.XX / $100 (P%). Status: OK|WARNING|HARD_STOP.",
+  "required_inputs": [],
+  "optional_inputs": [],
+  "escalation_conditions": [],
+  "irreversible": false,
+  "confidence_default": 0.95,
+  "smoke_test": {
+    "trigger_message": "what's the API budget at?",
+    "expected_inputs_filled": [],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Wired through existing check_budget tool."
+}

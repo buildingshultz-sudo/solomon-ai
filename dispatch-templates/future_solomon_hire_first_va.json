@@ -1,0 +1,27 @@
+{
+  "id": "future_solomon_hire_first_va",
+  "name": "[FUTURE] Hire the first virtual assistant",
+  "description": "PLACEHOLDER — when revenue is consistently >$X/month and Jed's time-on-build is still >Y hrs/week, Solomon flags the hiring milestone. From the Solomon Phase 10 roadmap (org director).",
+  "handler": "nathan-consult",
+  "categories": ["financial"],
+  "trigger_examples": [
+    "time to hire a VA?",
+    "should I get help with the inbox",
+    "solomon, do we need a person yet"
+  ],
+  "prompt_template": "Pass to Nathan with context='Current trailing revenue: {{ttm_revenue}}, current Jed hours/week on Shultz Enterprises: {{jed_hours}}'. Nathan considers whether a VA is justified given debt snowball priority. Solomon relays Nathan's recommendation + a draft job description if go-ahead.",
+  "required_inputs": [],
+  "optional_inputs": ["ttm_revenue", "jed_hours"],
+  "escalation_conditions": [
+    "always — hiring is a financial commitment, Jed signs off"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.7,
+  "smoke_test": {
+    "trigger_message": "time to hire a VA?",
+    "expected_inputs_filled": [],
+    "expected_handler": "nathan-consult",
+    "expected_escalation": true
+  },
+  "notes": "FUTURE — Solomon Phase 10 (organizational director). Hiring decisions go through Nathan first for sanity check, then Jed."
+}

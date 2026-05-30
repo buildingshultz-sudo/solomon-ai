@@ -1,0 +1,28 @@
+{
+  "id": "solomon_cross_post",
+  "name": "Cross-post content to all socials",
+  "description": "Solomon takes a piece of content, has Claude rewrite per platform, auto-posts to Facebook (both pages), and hands back Instagram + YouTube versions to Jed via Telegram.",
+  "handler": "solomon",
+  "categories": ["public_brand"],
+  "trigger_examples": [
+    "post this to all socials: We finished framing the deck today, what a day",
+    "share across all platforms: New blueprint just dropped",
+    "fb + ig + youtube: shop tour video coming Sunday"
+  ],
+  "prompt_template": "Run handleCrossPost({{content}}). The existing pipeline auto-posts Facebook to both pages, sends Instagram caption + hashtags to Telegram for manual paste, and sends YouTube community draft to Telegram. Confirm to Jed with success/fail per platform.",
+  "required_inputs": ["content"],
+  "optional_inputs": ["image_url"],
+  "escalation_conditions": [
+    "content references unconfirmed pricing, financial promise, or partnership",
+    "content mentions Tasia or the kids without explicit Jed approval in same message"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.9,
+  "smoke_test": {
+    "trigger_message": "post this to all socials: Finished a 14ft retaining wall today — long day, good work. Be inspired, stay humble, and build.",
+    "expected_inputs_filled": ["content"],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "public_brand category — irreversible Once Posted; classifier should default to high confidence since Jed's intent is explicit."
+}
