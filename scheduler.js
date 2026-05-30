@@ -13,6 +13,21 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// ── DUAL-USE GUARD ──────────────────────────────────────────────────────────
+// scheduler.js is BOTH the solomon-scheduler PM2 process AND a library that
+// bot.js / tools.js import to call buildMorningScorecard / runWeeklyRepurpose
+// on demand. When imported, we must NOT register cron jobs (would cause
+// duplicate Telegram messages, double FB posts, etc.). Monkey-patch
+// cron.schedule into a no-op when require.main !== module so the rest of this
+// file stays unchanged and registers cron jobs ONLY when run directly.
+const _IS_SCHEDULER_MAIN = require.main === module;
+if (!_IS_SCHEDULER_MAIN) {
+  const _origSchedule = cron.schedule.bind(cron);
+  cron.schedule = function () { return { stop: () => {}, start: () => {} }; };
+  // Keep _origSchedule for debugging; unused on import path.
+  void _origSchedule;
+}
+
 // ── PENDING-ACTION HELPERS (shared by FB-reply & campaign-preview flows) ────
 // Button taps are handled inside bot.js — scheduler only CREATES the action rows
 // and persists them in mem('pending_action', id) so the bot can look them up.
@@ -1131,6 +1146,23 @@ async function runWeeklyRepurpose() {
   }
 }
 cron.schedule('0 7 * * 1', runWeeklyRepurpose, { timezone: 'America/Chicago' });
+
+// ── EXPORTS (callable by bot.js / tools.js on demand) ──────────────────────
+// These were always declared above but never exported, so Solomon could not
+// invoke them on demand (e.g. for an on-demand brief or weekly repurpose).
+// Safe to export now thanks to the DUAL-USE GUARD at the top of this file.
+module.exports = {
+  buildMorningScorecard,
+  runWeeklyRepurpose,
+  previewCampaignSlot,
+  executeCampaignActionFromScheduler,
+  getYouTubeAccessToken,
+  loadCampaignDays,
+  getStaleTaskCount
+};
+
+// Startup banner only fires when scheduler.js is the main module (PM2 process).
+if (!_IS_SCHEDULER_MAIN) return;
 
 console.log('[SCHEDULER] Running. Cron jobs active:');
 console.log('  • Morning brief prep: 5:45 AM CT daily');
