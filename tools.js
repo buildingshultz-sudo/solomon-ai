@@ -1041,6 +1041,36 @@ const TOOL_DEFINITIONS = [
       }
     }
   }
+  ,{
+    name: "generate_pdf_report",
+    description: "Render a structured report to a Building-Shultz-branded PDF using briefToPdf(). Use this primitive whenever Jed asks for a brief / report / scorecard / audit as a PDF, or after generating any structured report content. Returns the absolute file path. Use send_telegram_file to deliver it to Jed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        title:    { type: "string", description: "PDF title (shown in the orange title bar at top)." },
+        subtitle: { type: "string", description: "Optional subtitle in the title bar." },
+        sections: {
+          type: "array",
+          description: "Ordered report sections. Each is {type:'text'|'list'|'kv'|'table', heading?:string, content?:string, items?:array, header?:array}.",
+          items: { type: "object" }
+        },
+        send_to_telegram: { type: "boolean", description: "If true, immediately bot.sendDocument the PDF to Jed (default false — return path only)." },
+        filename: { type: "string", description: "Optional explicit filename (default: <timestamp>-<slug>.pdf in /tmp/solomon-pdfs)." }
+      },
+      required: ["title", "sections"]
+    }
+  }
+  ,{
+    name: "employee_stack_audit",
+    description: "Run the Shultz Enterprises 'employee stack' audit: team roster (Nathan/Sam/Solomon/Cowork/Caleb), active integrations (env keys by NAME only), month-to-date API spend, recent activity from the activity_log, dispatch-template inventory, PM2 process health, and a ranked simplification recommendation list. Emits a Building-Shultz-branded PDF. Use this when Jed asks for 'employee stack audit', 'team stack breakdown', 'who's doing what', etc.",
+    input_schema: {
+      type: "object",
+      properties: {
+        send_to_telegram: { type: "boolean", description: "If true, immediately Telegram the PDF to Jed (default true for this tool — it's report-oriented)." },
+        days_back:        { type: "number",  description: "Activity-log window in days (default 7)." }
+      }
+    }
+  }
 ];
 
 // ── LOCAL VPS FILE HELPER ────────────────────────────────────────────────
@@ -2092,6 +2122,192 @@ Output format (JSON):
         } catch (fbErr) {
           const msg = (fbErr.response && fbErr.response.data && fbErr.response.data.error && fbErr.response.data.error.message) || fbErr.message;
           return { ok: false, error: "reply_fb_comment failed: " + msg };
+        }
+      }
+      case 'generate_pdf_report': {
+        try {
+          const { briefToPdf } = require('./report-pdf');
+          if (!input.title || !Array.isArray(input.sections)) {
+            return { ok: false, error: "generate_pdf_report requires { title, sections: [...] }" };
+          }
+          const filepath = await briefToPdf(input.title, input.sections, {
+            subtitle: input.subtitle,
+            filename: input.filename
+          });
+          const result = { ok: true, file: filepath };
+          if (input.send_to_telegram) {
+            const sent = await executeTool('send_telegram_file', { file_path: filepath, caption: input.title });
+            result.telegram = sent;
+          }
+          return result;
+        } catch (e) {
+          return { ok: false, error: 'generate_pdf_report failed: ' + (e.message || String(e)).slice(0, 240) };
+        }
+      }
+      case 'employee_stack_audit': {
+        try {
+          const { briefToPdf } = require('./report-pdf');
+          const daysBack = input.days_back || 7;
+          const sendToTelegram = (input.send_to_telegram !== false); // default true for this tool
+
+          // ── Section 1: Team roster (the AI "employees") ────────────────────
+          const roster = [
+            { k: 'Nathan',  v: 'Claude chat (strategy, planning, second opinions). Anthropic API + Nathan-bridge.' },
+            { k: 'Sam',     v: 'Claude Code (engineering: features, fixes, deploys). Builds & ships.' },
+            { k: 'Solomon', v: 'Telegram bot on VPS — 24/7 operator, dispatch routing, automations.' },
+            { k: 'Cowork',  v: 'Claude desktop agent on PC (browser + GUI tasks).' },
+            { k: 'Caleb',   v: 'Desktop-side queue worker (executes Solomon-dispatched PC tasks).' },
+            { k: 'Dispatch',v: "Cowork's phone interface (remote control from Jed's iPhone)." }
+          ];
+
+          // ── Section 2: Active integrations (env keys by NAME ONLY) ─────────
+          const envPath = path.join(__dirname, '.env');
+          let envKeys = [];
+          try {
+            envKeys = fs.readFileSync(envPath, 'utf8').split(/\r?\n/)
+              .map(l => l.trim())
+              .filter(l => l && !l.startsWith('#') && l.includes('='))
+              .map(l => l.split('=')[0])
+              .filter(k => /^[A-Z][A-Z0-9_]*$/.test(k));
+          } catch (_) {}
+          const integrationCategories = {
+            'Anthropic / LLM': envKeys.filter(k => /ANTHROPIC|MODEL|MAX_TOKENS/.test(k)),
+            'Telegram':       envKeys.filter(k => /^TELEGRAM/.test(k)),
+            'Facebook / IG':  envKeys.filter(k => /^FB_|^FACEBOOK|^IG_|^INSTAGRAM/.test(k)),
+            'YouTube':        envKeys.filter(k => /^YOUTUBE/.test(k)),
+            'Email':          envKeys.filter(k => /^EMAIL|^SMTP/.test(k)),
+            'Image gen / search': envKeys.filter(k => /^BFL_|^SERPER|^ELEVENLABS/.test(k)),
+            'PC relay / dashboard': envKeys.filter(k => /^PC_RELAY|^DASHBOARD/.test(k)),
+            'Budget / commerce':  envKeys.filter(k => /BUDGET|GUMROAD|STRIPE|MERCURY/.test(k))
+          };
+
+          // ── Section 3: Budget MTD ──────────────────────────────────────────
+          const monthSpend = budget.getMonthTotal();
+          const hardStop = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100');
+          const budgetPct = Math.round((monthSpend / hardStop) * 100);
+
+          // ── Section 4: Recent activity from activity_log ───────────────────
+          let activityRows = [];
+          try {
+            activityRows = db.prepare(
+              `SELECT type, COUNT(*) AS n
+               FROM activity_log
+               WHERE timestamp >= datetime('now', '-' || ? || ' days')
+               GROUP BY type
+               ORDER BY n DESC
+               LIMIT 25`
+            ).all(daysBack);
+          } catch (_) {}
+
+          // ── Section 5: Dispatch templates inventory ────────────────────────
+          let templates = [];
+          try {
+            const tplDir = path.join(__dirname, 'dispatch-templates');
+            templates = fs.readdirSync(tplDir).filter(f => f.endsWith('.json') && !f.startsWith('_'));
+          } catch (_) {}
+          const byHandler = {};
+          for (const f of templates) {
+            try {
+              const t = JSON.parse(fs.readFileSync(path.join(__dirname, 'dispatch-templates', f), 'utf8'));
+              const h = t.handler || '(unknown)';
+              byHandler[h] = (byHandler[h] || 0) + 1;
+            } catch (_) {}
+          }
+
+          // ── Section 6: PM2 process health ──────────────────────────────────
+          let pm2Rows = [];
+          try {
+            const { execSync } = require('child_process');
+            const raw = execSync('pm2 jlist 2>/dev/null', { encoding: 'utf8', timeout: 4000 });
+            const procs = JSON.parse(raw);
+            pm2Rows = procs.map(p => [
+              p.name,
+              p.pm2_env && p.pm2_env.status,
+              String(p.pm2_env && p.pm2_env.restart_time || 0),
+              p.monit && p.monit.memory ? `${Math.round(p.monit.memory / 1024 / 1024)} MB` : '-'
+            ]);
+          } catch (_) {}
+
+          // ── Section 7: Simplification recommendations (heuristic) ──────────
+          const recs = [];
+          // Heuristic: budget near hard stop
+          if (budgetPct >= 70) {
+            recs.push(`Budget at ${budgetPct}% of $${hardStop} hard stop — consider raising CONSULT_THRESHOLD in dispatch.js (cuts Nathan-bridge spend) or trimming a high-volume cron.`);
+          }
+          // Heuristic: lots of email triage
+          const triageRow = activityRows.find(r => /email/i.test(r.type));
+          if (triageRow && triageRow.n > 50) {
+            recs.push(`Email triage logged ${triageRow.n} events in ${daysBack}d — most likely newsletter noise. Consider dropping IMAP poll from every 5 min to every 15 min (saves Anthropic calls on classification).`);
+          }
+          // Heuristic: dashboard never touched
+          const dashAge = pm2Rows.find(r => r[0] === 'solomon-dashboard');
+          if (dashAge) {
+            recs.push(`solomon-dashboard process is online. If Jed has not opened it this week, consider pm2 stop solomon-dashboard until needed (saves ~67MB RAM, near-zero CPU).`);
+          }
+          // Heuristic: stale template
+          const futureCount = templates.filter(t => t.startsWith('future_')).length;
+          if (futureCount > 4) {
+            recs.push(`${futureCount} 'future_*' templates are staged but not yet load-bearing. Keep -- they cost nothing -- but treat them as a roadmap, not delivered capabilities.`);
+          }
+          // Always-on recommendations
+          recs.push('Solomon, Sam, and Cowork should never run PC actions simultaneously — confirm pc_queue is draining before manual PC kicks.');
+          recs.push('Master context (shultz_master_context.md) is the source of truth — review it monthly to retire stale entries.');
+
+          // ── Build PDF sections ──────────────────────────────────────────────
+          const today = new Date().toISOString().slice(0, 10);
+          const sections = [
+            { type: 'text', heading: 'Summary', content:
+              `Generated ${today}. Active "employees" (AI agents + integrations) operating Shultz Enterprises, with recent activity, cost, and ranked simplification recommendations.` },
+            { type: 'kv', heading: 'Team Roster', items: roster }
+          ];
+          for (const [cat, keys] of Object.entries(integrationCategories)) {
+            if (keys.length) sections.push({ type: 'list', heading: `Integrations — ${cat}`, items: keys });
+          }
+          sections.push({ type: 'kv', heading: 'Budget (this month)', items: [
+            { k: 'Anthropic spend MTD', v: `$${monthSpend.toFixed(2)}` },
+            { k: 'Hard stop',           v: `$${hardStop.toFixed(0)} (${budgetPct}% used)` }
+          ]});
+          if (activityRows.length) {
+            sections.push({
+              type: 'table',
+              heading: `Activity (last ${daysBack} days)`,
+              header: ['Event type', 'Count'],
+              items: activityRows.map(r => [r.type, String(r.n)])
+            });
+          }
+          if (Object.keys(byHandler).length) {
+            sections.push({
+              type: 'table',
+              heading: 'Dispatch templates by handler',
+              header: ['Handler', 'Templates'],
+              items: Object.entries(byHandler).map(([h, n]) => [h, String(n)])
+            });
+          }
+          if (pm2Rows.length) {
+            sections.push({
+              type: 'table',
+              heading: 'PM2 processes (health snapshot)',
+              header: ['Process', 'Status', 'Restarts', 'Memory'],
+              items: pm2Rows
+            });
+          }
+          sections.push({
+            type: 'list',
+            heading: 'Ranked simplification recommendations',
+            items: recs
+          });
+
+          const filepath = await briefToPdf(`Employee Stack Audit — ${today}`, sections, {
+            subtitle: `Shultz Enterprises  ·  ${daysBack}-day activity window`
+          });
+          const result = { ok: true, file: filepath, sections_count: sections.length };
+          if (sendToTelegram) {
+            const sent = await executeTool('send_telegram_file', { file_path: filepath, caption: 'Employee Stack Audit (PDF)' });
+            result.telegram = sent;
+          }
+          return result;
+        } catch (e) {
+          return { ok: false, error: 'employee_stack_audit failed: ' + (e.message || String(e)).slice(0, 240) };
         }
       }
       case "kdp_check_royalties": {
