@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-05-29 — repopulated from the three Nathan source documents (Sam) <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-05-30 — [SAMQUEUE] Two new pending Sam tasks queued: PC-side Caleb `/caleb-task` endpoint + auto-dispatch on free text <!-- LASTUPDATED -->
 
 ---
 
@@ -54,7 +54,7 @@
 - **INBiz Access Indiana login:** buildingshultz@gmail.com (password in password manager — not committed).
 
 ## 5. ACTIVE PROJECTS AND STATUS
-- **Solomon V4 (the bot)** — LIVE. DONE: relay; stability fixes (50MB log cap, self-patch lockdown, history/web_search fix); model→sonnet-4-6; email triage (IMAP, 5-min); FB comment monitor (5-min suggestions); social cross-posting (`/post`); slash menu (`/status /post /launch /brief /help`); 30-day campaign engine; context.md + this master-context system; scheduledPosts SQL bug fixed. PENDING: Facebook (Irish Craftsman) token; Instagram connect; Playwright browser automation; Solomon/Cowork conflict detection.
+- **Solomon V4 (the bot)** — LIVE. DONE: relay; stability fixes (50MB log cap, self-patch lockdown, history/web_search fix); model→sonnet-4-6; email triage (IMAP, 5-min); FB comment monitor (5-min suggestions); social cross-posting (`/post`); slash menu (`/status /post /launch /brief /help`); 30-day campaign engine; context.md + this master-context system; scheduledPosts SQL bug fixed; morning scorecard + inline-button approvals; multi-photo album batching; Gumroad webhook; `/generate` (Flux); dispatch system (`/dispatch`, classifier + 28 templates + Nathan bridge, shadow default). PENDING: Facebook (Irish Craftsman) token; Instagram connect; Playwright browser automation; Solomon/Cowork conflict detection; **PC-side Caleb `/caleb-task` endpoint** (unlocks 4 Caleb templates); **auto-dispatch on free text** (Jed-flippable `/dispatch mode live|shadow`).
 - **Building Shultz (YouTube + brand)** — channel ~**1,450 subscribers, 287 videos (96% Shorts)**. Brand = community, projects, personality, story — **NOT an AI/tech channel; keep AI invisible.** Tagline: *Be Inspired. Stay Humble. And Build.*
 - **Irish Craftsman** — previous brand; active Facebook page (in Solomon's social monitoring).
 - **Book "Motivation for Tough Guys"** — Gumroad LIVE (`/l/ihjobd`); **KDP DRAFT — not published yet** (publish button never clicked).
@@ -63,6 +63,14 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-05-30] PENDING (Sam, in progress): PC-side Caleb `/caleb-task` endpoint (unlocks affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload); auto-dispatch on free text with Jed-flippable `/dispatch mode live|shadow` toggle.
+- [2026-05-30 14:00 CT] Feature shipped — commit 61e8d15: Dispatch system: templates + Nathan bridge + classifier (opt-in via /dispatch)
+- [2026-05-30 13:15 CT] Feature shipped — commit 8784e34: Morning scorecard, FB approval buttons, campaign preview, KDP scrape, weekly repurpose
+- [2026-05-30 12:00 CT] Feature shipped — commit 260b6dd: OAuth brand-channel fix, Gumroad webhook, /generate (BFL), Playwright setup
+- [2026-05-30 10:45 CT] Feature shipped — commit 5e520aa: Multi-photo album batching + sharp resize + 429 retry
+- [2026-05-29 17:15 CT] Feature shipped — commit 49712bf: T6 — /setfbtoken receiver for FB page token rotation
+- [2026-05-29 17:00 CT] Feature shipped — commit 09ff196: T3 — Weekly revenue report (Mon 6 AM CT, Gumroad/Spreadshirt/Amazon)
+- [2026-05-29 14:45 CT] Feature shipped — commit 79bc40e: CLAUDE.md: add FULL CONTEXT section; fully populate master context from Nathan docs
 
 ## 6. REVENUE STREAMS
 | Stream | Platform | Status | Last known amount |
@@ -89,6 +97,8 @@
 7. **Weekly revenue report** — Solomon sends Monday 6 AM CT P&L to Telegram (Gumroad + Spreadshirt + Amazon Associates).
 8. **YouTube milestone monitor** — alerts at 500/750/1,000 subs and 2,000/4,000 watch hours.
 9. **Stripe audit** — find and audit the Manus-connected Stripe account.
+10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
+11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
 
 ## 8. COWORK TASK QUEUE (desktop-agent priorities)
@@ -106,6 +116,8 @@
 6. **IRS EIN** — apply free at irs.gov/ein (instant, ~5 min).
 7. **Claude iOS rebill (June 27)** — cancel App Store sub, resubscribe at claude.ai ($100/mo, saves ~$25).
 8. **Rotate the Anthropic API key** (was exposed in chat) and the GitHub PAT (plaintext in the git remote URL).
+9. **YouTube OAuth test user (QUICK — unblocks Error 403):** Google Cloud Console → APIs & Services → OAuth consent screen → Test users → + ADD USERS → add `irishcraftsman7@gmail.com` (app is in "Testing" status). Clears the YouTube OAuth Error 403 access_denied. Full numbered steps in runbook `YouTube_OAuth_TestUser_and_BrandTransfer_Runbook.md`.
+10. **Transfer "Building Shultz" YouTube channel ownership (CAREFUL — Jedidiah-only):** Move Brand Account primary ownership `irishcraftsman7@gmail.com` → `buildingshultz@gmail.com` (invite → Manager → Owner → Make primary owner; ~7-day Google hold period). **Solomon's YT OAuth refresh token will likely need re-auth via `/oauth/start` after the move.** Sam/Solomon must NOT execute this — documented steps only in the same runbook.
 
 ## 10. THE 12-APP ROADMAP (build order is NON-NEGOTIABLE — IronEdit first; App #2 can't start until IronEdit V1.0 has ≥1 paying customer)
 1. **IronEdit** — AI video-editing desktop app. *(App #1, foundation in progress; needs DaVinci Resolve Studio $295.)*
@@ -145,6 +157,9 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-05-30] Queued two new pending Sam tasks (section 7 #10/#11): PC-side Caleb `/caleb-task` endpoint and auto-dispatch on free text. Master context pushed to VPS. (Sam)
+- [2026-05-30 CT] Documented two pending Jedidiah-only YouTube tasks (section 9 #9/#10): (a) add irishcraftsman7@gmail.com as OAuth test user to clear Error 403 access_denied; (b) transfer Building Shultz Brand Account ownership irishcraftsman7→buildingshultz. Runbook: YouTube_OAuth_TestUser_and_BrandTransfer_Runbook.md. Transfer is doc-only, NOT executed (Sam).
+- [2026-05-30 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-05-29] Fully repopulated from the three Nathan source documents (Soul Document, Context Brief, Master Prompt). Credentials referenced, not committed. (Sam)
 - [2026-05-29 12:51 CT] Append-only master-context auto-update system deployed and verified live (Sam).
 - [2026-05-29 — initial build] Master context created by Sam (Claude Code).

@@ -1202,6 +1202,67 @@ bot.on('message', async (msg) => {
     return;
   }
 
+  // ── AUTO-DISPATCH (invisible /dispatch) ───────────────────────────────
+  // When dispatch mode is 'live', every non-slash message is routed through
+  // the dispatch classifier automatically. 'shadow' (the default) reverts to
+  // normal conversational handling. Flip with /dispatch mode live|shadow.
+  {
+    const dmode = mem.get('dispatch', 'mode') || (process.env.DISPATCH_MODE === 'live' ? 'live' : 'shadow');
+    if (dmode === 'live') {
+      bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
+      try {
+        const dispatch = require('./dispatch');
+        const result = await dispatch.classifyAndRoute(text, {
+          mem,
+          executors: { solomon: async (t, inputs, filled) => askSolomon(filled || text) }
+        });
+        const ar = result.action_result || {};
+        if (result.decision === 'execute_direct' || result.decision === 'execute_after_nathan') {
+          log('INFO', 'AUTODISPATCH', `live route: ${result.template?.id} -> ${ar.kind}`, { decision: result.decision });
+          if (ar.kind === 'caleb_payload') {
+            // Hand the structured payload to the PC relay's /caleb-task endpoint.
+            let queued = false, detail = '';
+            try {
+              const resp = await axios.post(`${process.env.PC_RELAY_URL}/caleb-task`, ar.payload, {
+                headers: { 'X-Secret': process.env.PC_RELAY_SECRET, 'Content-Type': 'application/json' },
+                timeout: 15000
+              });
+              queued = !!(resp.data && resp.data.ok);
+              detail = resp.data && resp.data.file ? ` (${resp.data.file})` : '';
+            } catch (e) {
+              detail = ` — relay error: ${String(e.response?.data?.error || e.message || '').slice(0, 160)}`;
+            }
+            await bot.sendMessage(msg.chat.id,
+              `${queued ? '🤖 *Caleb task queued*' : '⚠️ *Caleb dispatch failed*'}\nTemplate: \`${result.template?.id}\`\nTask: ${ar.payload?.task || '(n/a)'}${detail}`,
+              { parse_mode: 'Markdown' }).catch(() => {});
+            return;
+          }
+          if (ar.kind === 'sam_queued') {
+            await bot.sendMessage(msg.chat.id,
+              `🛠️ *Sam task queued*\nTemplate: \`${result.template?.id}\`\nJob: \`${ar.job_id}\``,
+              { parse_mode: 'Markdown' }).catch(() => {});
+            return;
+          }
+          if (ar.kind === 'solomon_executed') {
+            const out = typeof ar.result === 'string' ? ar.result : (ar.result?.reply || String(JSON.stringify(ar.result)).slice(0, 1500));
+            await sendLongMessage(msg.chat.id, out, { parse_mode: 'Markdown' });
+            activityLogger.logActivity('message_sent', { summary: String(out).slice(0, 100) });
+            activityLogger.setStatus('IDLE', '');
+            return;
+          }
+          // unknown / no-executor kinds → fall through to normal handling.
+          log('INFO', 'AUTODISPATCH', `unhandled action kind, conversational fallback`, { kind: ar.kind });
+        } else {
+          // consult_nathan / escalate_jed → fall through to normal askSolomon
+          // so Jed always gets a helpful conversational answer.
+          log('INFO', 'AUTODISPATCH', `non-execute decision, conversational fallback`, { decision: result.decision, reason: String(result.reason || '').slice(0, 160) });
+        }
+      } catch (e) {
+        log('ERROR', 'AUTODISPATCH', 'auto-dispatch error, falling back to askSolomon', { error: e.message });
+      }
+    }
+  }
+
   // Show typing indicator
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
 
@@ -1454,7 +1515,7 @@ bot.onText(/^\/dispatch\b\s*(.*)$/i, async (msg, match) => {
   if (modeMatch) {
     const m = modeMatch[1].toLowerCase();
     mem.set('dispatch', 'mode', m);
-    bot.sendMessage(msg.chat.id, `🔀 Dispatch mode set to *${m}*. ${m === 'live' ? 'Handlers will now fire on /dispatch.' : 'Shadow only — no side effects.'}`, { parse_mode: 'Markdown' }).catch(() => {});
+    bot.sendMessage(msg.chat.id, `🔀 Dispatch mode set to *${m}*. ${m === 'live' ? 'Auto-dispatch *ON* — every non-slash message is now routed through the classifier automatically (Caleb/Sam tasks fire, solomon actions execute, anything uncertain falls back to normal chat).' : 'Auto-dispatch *OFF* — messages handled normally (revert). Use `/dispatch <msg>` to test a single message.'}`, { parse_mode: 'Markdown' }).catch(() => {});
     return;
   }
   if (!arg) {
@@ -1566,7 +1627,7 @@ bot.onText(/^\/help\b/i, async (msg) => {
     '/launch — start the 30-day book & merch campaign',
     '/brief — send the morning brief now',
     '/generate <prompt> — generate an image (Flux 1.1 via BFL) and reply with it',
-    '/dispatch <message> — run the message through the dispatch engine (shadow mode default; flip with /dispatch mode live)',
+    '/dispatch <message> — run one message through the dispatch engine (test). Flip auto-routing of ALL messages with /dispatch mode live (on) / shadow (off, default)',
     '/setfbtoken <page> <token> — paste a freshly-regenerated FB page token; Solomon validates + restarts',
     '/help — this list',
     '',
