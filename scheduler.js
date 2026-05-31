@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+const klein = require('./klein-newsletter-watcher');
 
 // ── DUAL-USE GUARD ──────────────────────────────────────────────────────────
 // scheduler.js is BOTH the solomon-scheduler PM2 process AND a library that
@@ -388,6 +389,9 @@ cron.schedule("*/5 * * * *", async () => {
     if (!result.new_emails || result.new_emails.length === 0) return;
     console.log(`[SCHEDULER] Email triage: ${result.new_emails.length} new email(s)`);
     for (const em of result.new_emails) {
+      // Klein newsletter auto-click (no-op for any non-klein email).
+      try { await klein.processKleinEmail(em, { db, mem, bot, OWNER_ID }); }
+      catch (e) { console.error('[SCHEDULER] klein watcher error:', e.message); }
       let classification = "normal";
       let summary = "";
       try {

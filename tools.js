@@ -2452,14 +2452,22 @@ Output format (JSON):
                 const env = msg.envelope || {};
                 const fromObj = (env.from && env.from[0]) || {};
                 let bodyText = '';
-                try { const parsed = await simpleParser(msg.source); bodyText = (parsed.text || parsed.subject || '').trim(); } catch (_) {}
+                let bodyHtml = '';
+                try {
+                  const parsed = await simpleParser(msg.source);
+                  bodyText = (parsed.text || parsed.subject || '').trim();
+                  bodyHtml = (parsed.html || '').toString();
+                } catch (_) {}
                 newEmails.push({
                   uid: msg.uid,
                   from_name: fromObj.name || fromObj.address || 'unknown',
                   from_email: fromObj.address || '',
                   subject: env.subject || '(no subject)',
                   date: env.date ? new Date(env.date).toISOString() : '',
-                  body_snippet: bodyText.slice(0, 1500)
+                  body_snippet: bodyText.slice(0, 1500),
+                  // Backward-compat additions for per-email handlers (klein-newsletter-watcher etc.)
+                  body_text_full: bodyText,
+                  body_html: bodyHtml
                 });
               }
               mem.set('system', 'inbox_last_uid', String(highestUid));
