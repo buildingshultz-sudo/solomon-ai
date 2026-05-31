@@ -110,126 +110,131 @@ cron.schedule('45 5 * * *', async () => {
 // Pulls live: YT subs+views, Gumroad 24h sales, Spreadshirt (note), campaign
 // engagement on most-recent post, budget vs hard stop, KDP yesterday royalty.
 // ══════════════════════════════════════════════════════════════════════════
+// Helper: fetch YT channel stats once, cache on mem for fallback reuse.
+async function _ytStats() {
+  const tok = await getYouTubeAccessToken();
+  if (!tok) return null;
+  try {
+    const r = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
+      params: { part: 'snippet,statistics', mine: true },
+      headers: { Authorization: `Bearer ${tok}` }, timeout: 12000
+    });
+    const ch = r.data?.items?.[0];
+    if (!ch) return null;
+    const subs = parseInt(ch.statistics?.subscriberCount || '0', 10);
+    const views = parseInt(ch.statistics?.viewCount || '0', 10);
+    const title = ch.snippet?.title || 'YouTube';
+    mem.set('business', 'youtube_subscribers', String(subs));
+    mem.set('business', 'youtube_views', String(views));
+    mem.set('business', 'youtube_channel_title', title);
+    return { subs, views, title };
+  } catch (_) { return null; }
+}
+
+// Helper: count + sum gumroad sales in last N hours from activity_log.
+function _gumroadWindow(hoursBack) {
+  try {
+    const rows = db.prepare(`SELECT summary FROM activity_log WHERE type = 'gumroad_sale' AND timestamp >= datetime('now','-' || ? || ' hours')`).all(hoursBack);
+    let total = 0;
+    for (const r of rows) {
+      const m = (r.summary || '').match(/\$\s*([\d.]+)/);
+      if (m) total += parseFloat(m[1]);
+    }
+    return { count: rows.length, total };
+  } catch (_) { return { count: 0, total: 0 }; }
+}
+
+// Helper: most-recent campaign post tag (returns "" if none today).
+function _campaignTag() {
+  try {
+    const recent = db.prepare(`SELECT key, value FROM memory WHERE category='social_log' AND key >= ? ORDER BY key DESC LIMIT 1`).get(new Date().toISOString().slice(0, 10));
+    if (!recent) return '';
+    const entry = JSON.parse(recent.value || '{}');
+    return entry.kind || 'post';
+  } catch (_) { return ''; }
+}
+
+// Helper: count "needs you" items — unread Nathan inbox + stale tasks.
+function _attentionCount() {
+  let total = 0;
+  try { total += nathanInbox.getUnread().length; } catch (_) {}
+  try { total += getStaleTaskCount(); } catch (_) {}
+  return total;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// MORNING SCORECARD — terse. 3-5 single-fact lines. No headers, no fluff.
+// Example: "YouTube 1,460 subs · 12,500 views | Gumroad $19 sale yest | …"
+// One line per fact. Markdown only for the variable being highlighted.
+// ══════════════════════════════════════════════════════════════════════════
 async function buildMorningScorecard() {
   const lines = [];
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'long', month: 'short', day: 'numeric' });
-  lines.push(`🌅 *Good Morning Jed — ${dateStr}*`);
-  lines.push('');
-
-  // ── YouTube (Building Shultz brand channel, live) ──────────────────────
-  let ytLine = '📺 *YouTube*: not connected';
-  const accessToken = await getYouTubeAccessToken();
-  if (accessToken) {
-    try {
-      const r = await axios.get('https://www.googleapis.com/youtube/v3/channels', {
-        params: { part: 'snippet,statistics', mine: true },
-        headers: { Authorization: `Bearer ${accessToken}` },
-        timeout: 12000
-      });
-      const ch = r.data?.items?.[0];
-      if (ch) {
-        const title = ch.snippet?.title || '(channel)';
-        const subs = ch.statistics?.subscriberCount || '?';
-        const views = ch.statistics?.viewCount || '?';
-        const videos = ch.statistics?.videoCount || '?';
-        ytLine = `📺 *YouTube* (${title}): *${Number(subs).toLocaleString()}* subs · ${Number(views).toLocaleString()} views · ${videos} videos`;
-        mem.set('business', 'youtube_subscribers', String(subs));
-        mem.set('business', 'youtube_views', String(views));
-        mem.set('business', 'youtube_channel_title', title);
-      }
-    } catch (e) {
-      ytLine = `📺 *YouTube*: fetch failed (${(e.response?.data?.error?.message || e.message).slice(0, 80)})`;
-    }
-  }
-  lines.push(ytLine);
-
-  // ── Gumroad (last 24h via activity_log entries written by the webhook) ─
-  let gumroadLine = '💰 *Gumroad*: no sales in 24h';
-  try {
-    const rows = db.prepare(`SELECT summary FROM activity_log WHERE type = 'gumroad_sale' AND timestamp >= datetime('now','-24 hours')`).all();
-    if (rows.length) {
-      // summaries look like "Product Name USD $9.99"
-      let total = 0, count = 0;
-      for (const r of rows) {
-        const m = (r.summary || '').match(/\$\s*([\d.]+)/);
-        if (m) { total += parseFloat(m[1]); count++; }
-      }
-      gumroadLine = `💰 *Gumroad* (24h): ${count} sale${count === 1 ? '' : 's'} · *$${total.toFixed(2)}*`;
-    }
-  } catch (e) { gumroadLine = `💰 *Gumroad*: query failed (${e.message.slice(0, 60)})`; }
-  lines.push(gumroadLine);
-
-  // ── Spreadshirt — no API on Jed's plan ─────────────────────────────────
-  lines.push('🧵 *Spreadshirt*: not connected (no API on current plan)');
-
-  // ── KDP — last scrape result (cron writes mem.kdp.last) ────────────────
-  let kdpLine = '📚 *KDP*: not connected — see /root/solomon-v4/PLAYWRIGHT_KDP_AUTH.md to enable';
-  try {
-    const raw = mem.get('kdp', 'last');
-    if (raw) {
-      const k = JSON.parse(raw);
-      if (k.auth_missing) {
-        kdpLine = '📚 *KDP*: auth setup pending (PLAYWRIGHT_KDP_AUTH.md)';
-      } else if (k.auth_expired) {
-        kdpLine = '📚 *KDP*: auth expired — redo PLAYWRIGHT_KDP_AUTH.md';
-      } else if (k.prior_day_royalty) {
-        kdpLine = `📚 *KDP* yesterday: *${k.prior_day_royalty}* (${k.currency || 'USD'}, last checked ${k.checked_at?.slice(11, 16) || 'recently'} UTC)`;
-      } else if (k.error) {
-        kdpLine = `📚 *KDP*: scrape error (${String(k.error).slice(0, 80)})`;
-      }
-    }
-  } catch (_) {}
-  lines.push(kdpLine);
-
-  // ── Campaign engagement (last post in social_log) ──────────────────────
-  let campaignLine = '📣 *Campaign*: idle';
-  try {
-    const recent = db.prepare(`SELECT key, value FROM memory WHERE category='social_log' ORDER BY key DESC LIMIT 1`).all();
-    if (recent.length) {
-      const entry = JSON.parse(recent[0].value || '{}');
-      const ts = recent[0].key;
-      const when = ts.slice(0, 10);
-      const kind = entry.kind || 'post';
-      // Try to pull engagement counts from the first FB post id we logged.
-      let engagementBits = '';
-      const firstFb = (entry.fb || []).find(s => /id (\d+)/.test(s));
-      if (firstFb && process.env.FB_BUILDING_SHULTZ_TOKEN && process.env.FB_BUILDING_SHULTZ_TOKEN !== 'PLACEHOLDER') {
-        const postId = firstFb.match(/id (\d+(_\d+)?)/)?.[1];
-        if (postId) {
-          try {
-            const er = await axios.get(`https://graph.facebook.com/v19.0/${postId}`, {
-              params: { fields: 'reactions.summary(true).limit(0),comments.summary(true).limit(0),shares', access_token: process.env.FB_BUILDING_SHULTZ_TOKEN },
-              timeout: 8000
-            });
-            const reactions = er.data?.reactions?.summary?.total_count ?? '?';
-            const comments = er.data?.comments?.summary?.total_count ?? '?';
-            const shares = er.data?.shares?.count ?? 0;
-            engagementBits = ` · 👍 ${reactions} · 💬 ${comments} · 🔁 ${shares}`;
-          } catch (_) { engagementBits = ' · engagement unavailable'; }
-        }
-      }
-      campaignLine = `📣 *Campaign* (${kind}, ${when})${engagementBits}`;
-    }
-  } catch (_) {}
-  lines.push(campaignLine);
-
-  // ── Budget vs $100 hard stop ───────────────────────────────────────────
+  // 1. YouTube
+  const yt = await _ytStats();
+  if (yt) lines.push(`YouTube *${yt.subs.toLocaleString()}* subs · ${yt.views.toLocaleString()} views.`);
+  else    lines.push(`YouTube not connected.`);
+  // 2. Revenue (Gumroad 24h + KDP yesterday)
+  const gum = _gumroadWindow(24);
+  let kdpBit = '';
+  try { const k = JSON.parse(mem.get('kdp', 'last') || '{}'); if (k.prior_day_royalty) kdpBit = `, KDP yesterday ${k.prior_day_royalty}`; } catch (_) {}
+  if (gum.count) lines.push(`Gumroad *${gum.count} sale${gum.count === 1 ? '' : 's'}* / $${gum.total.toFixed(2)} (24h)${kdpBit}.`);
+  else           lines.push(`Gumroad no sales in 24h${kdpBit}.`);
+  // 3. Campaign
+  const tag = _campaignTag();
+  if (tag) lines.push(`Campaign: ${tag}.`);
+  else     lines.push(`Campaign idle.`);
+  // 4. Budget
   const monthSpend = budget.getMonthTotal();
   const hardStop = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100');
   const pct = Math.min(100, Math.round((monthSpend / hardStop) * 100));
-  const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));
-  const budgetWarn = pct >= 80 ? '  ⚠️' : '';
-  lines.push(`💵 *Budget*: $${monthSpend.toFixed(2)} / $${hardStop.toFixed(0)} (${pct}%) ${bar}${budgetWarn}`);
-  lines.push('');
+  lines.push(`Budget $${monthSpend.toFixed(2)} / $${hardStop.toFixed(0)} (${pct}%)${pct >= 80 ? '  ⚠️' : ''}.`);
+  // 5. Attention (only if non-zero — keeps the brief at 4 lines on quiet days)
+  const att = _attentionCount();
+  if (att > 0) lines.push(`⚠️ *${att} item${att === 1 ? '' : 's'} needs you.*`);
+  return lines.join('\n');
+}
 
-  // ── What needs attention today ─────────────────────────────────────────
-  const pendingCount = tasks.getPending().length;
-  const stale = getStaleTaskCount();
-  const unreadInbox = nathanInbox.getUnread().length;
-  const queueCount = projectQueue.getQueued ? projectQueue.getQueued().length : 0;
-  lines.push(`📋 *Today*: ${pendingCount} pending task${pendingCount === 1 ? '' : 's'}${stale ? ` (${stale} stale)` : ''} · ${unreadInbox} unread inbox · ${queueCount} queued project${queueCount === 1 ? '' : 's'}`);
-
+// ══════════════════════════════════════════════════════════════════════════
+// EVENING SUMMARY — same shape, end-of-day variant. Fires 9 PM CT.
+// Focused on what changed TODAY (not all-time).
+// ══════════════════════════════════════════════════════════════════════════
+async function buildEveningSummary() {
+  const lines = [];
+  // 1. YouTube delta (today vs prior cached subs/views)
+  const yt = await _ytStats();
+  if (yt) {
+    const prevSubs  = parseInt(mem.get('business_prev_evening', 'youtube_subscribers') || '0', 10);
+    const prevViews = parseInt(mem.get('business_prev_evening', 'youtube_views') || '0', 10);
+    const dSubs  = prevSubs  ? yt.subs  - prevSubs  : 0;
+    const dViews = prevViews ? yt.views - prevViews : 0;
+    const subBit  = dSubs  ? ` (${dSubs  >= 0 ? '+' : ''}${dSubs} today)`  : '';
+    const viewBit = dViews ? ` (${dViews >= 0 ? '+' : ''}${dViews.toLocaleString()} today)` : '';
+    lines.push(`YouTube *${yt.subs.toLocaleString()}* subs${subBit} · ${yt.views.toLocaleString()} views${viewBit}.`);
+    // Snapshot today's values so tomorrow night's delta is correct.
+    mem.set('business_prev_evening', 'youtube_subscribers', String(yt.subs));
+    mem.set('business_prev_evening', 'youtube_views', String(yt.views));
+  } else {
+    lines.push(`YouTube not connected.`);
+  }
+  // 2. Today's revenue
+  const gum = _gumroadWindow(14);
+  lines.push(gum.count ? `Today: ${gum.count} Gumroad sale${gum.count === 1 ? '' : 's'} / $${gum.total.toFixed(2)}.` : `Today: 0 Gumroad sales.`);
+  // 3. Today's campaign posts (count from social_log)
+  let postsToday = 0;
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    postsToday = db.prepare(`SELECT COUNT(*) AS n FROM memory WHERE category='social_log' AND key >= ?`).get(today).n;
+  } catch (_) {}
+  lines.push(postsToday ? `Campaign: ${postsToday} post${postsToday === 1 ? '' : 's'} fired today.` : `Campaign: no posts today.`);
+  // 4. FB comments handled today (count from activity_log)
+  let fbToday = 0;
+  try {
+    fbToday = db.prepare(`SELECT COUNT(*) AS n FROM activity_log WHERE type IN ('fb_reply_posted','fb_comment_alert') AND timestamp >= datetime('now','-14 hours')`).get().n;
+  } catch (_) {}
+  if (fbToday) lines.push(`FB comments: ${fbToday} handled today.`);
+  // 5. Attention (urgency only)
+  const att = _attentionCount();
+  if (att > 0) lines.push(`⚠️ *${att} item${att === 1 ? '' : 's'} still needs you.*`);
   return lines.join('\n');
 }
 
@@ -1147,18 +1152,102 @@ async function runWeeklyRepurpose() {
 }
 cron.schedule('0 7 * * 1', runWeeklyRepurpose, { timezone: 'America/Chicago' });
 
+// ══════════════════════════════════════════════════════════════════════════
+// EVENING SUMMARY — 9:00 PM CT daily. Same terse shape as the morning brief.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('0 21 * * *', async () => {
+  try {
+    const summary = await buildEveningSummary();
+    await bot.sendMessage(OWNER_ID, summary, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, summary.replace(/[*_`]/g, '')));
+    console.log('[SCHEDULER] Evening summary sent');
+  } catch (err) {
+    console.error('[SCHEDULER] Evening summary failed:', err.message);
+    bot.sendMessage(OWNER_ID, `⚠️ Evening summary failed: ${err.message.slice(0, 200)}`).catch(() => {});
+  }
+}, { timezone: 'America/Chicago' });
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTONOMOUS PRIORITY QUEUE — every 30 min, check Solomon's idle time. If
+// idle >= 6h AND last autonomous fire was >24h ago, pick the next item from
+// the standing task list (master context sections 7 + 8) and inject it as
+// a Jed-style request via the existing /inject endpoint. Bot's auto-dispatch
+// (when live) routes it through templates -> Sam/Caleb/Nathan; conversational
+// mode falls back to askSolomon which will tool-use as needed. Either way
+// the reply lands in Jed's Telegram with clear "[AUTO-PRIORITY]" prefix.
+// Logged to activity_log type='autonomous_priority' so /stats sees it.
+// ══════════════════════════════════════════════════════════════════════════
+function loadStandingPriorities() {
+  let text;
+  try { text = fs.readFileSync(path.join(__dirname, 'shultz_master_context.md'), 'utf8'); }
+  catch (_) { return []; }
+  const items = [];
+  for (const sec of ['7', '8']) {
+    const re = new RegExp('##\\s*' + sec + '\\.\\s*[A-Z ]+QUEUE[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|\\n<!--\\s*LOG)', 'i');
+    const match = text.match(re);
+    if (!match) continue;
+    const body = match[1];
+    // Match "1. **Title** — detail" style bullets
+    const bullets = [...body.matchAll(/^\d+\.\s+\*\*([^*]+)\*\*([^\n]*)/gm)];
+    for (const b of bullets) {
+      const title = b[1].trim().replace(/\s+/g, ' ');
+      const detail = (b[2] || '').replace(/^[—\-\s]+/, '').trim();
+      // Skip items explicitly marked DONE
+      if (/✅|\bDONE\b/.test(title) || /✅|\bDONE\b/.test(detail.slice(0, 40))) continue;
+      items.push({ source_section: sec, title, detail });
+    }
+  }
+  return items;
+}
+
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    // 1. Idle check: time since last user-driven activity.
+    const last = db.prepare(`SELECT MAX(timestamp) AS t FROM activity_log WHERE type IN ('message_received','message_sent','tool_call')`).get();
+    const lastTs = (last && last.t) ? new Date(last.t).getTime() : 0;
+    const idleH = lastTs ? (Date.now() - lastTs) / 3_600_000 : 0;
+    if (idleH < 6) return;
+    // 2. Cooldown: don't fire more than once per 24h.
+    const lastFired = mem.get('autonomous_priority', 'last_fired_at');
+    if (lastFired && (Date.now() - new Date(lastFired).getTime()) < 24 * 3_600_000) return;
+    // 3. Priority list
+    const items = loadStandingPriorities();
+    if (!items.length) { console.log('[SCHEDULER] autonomous_priority: no items in master context §7/§8'); return; }
+    // 4. Round-robin position
+    const idx = parseInt(mem.get('autonomous_priority', 'current_index') || '0', 10);
+    const next = items[idx % items.length];
+    // 5. Synthesize a Jed-style request + POST to /inject.
+    const message = `[AUTO-PRIORITY ${idx + 1}/${items.length}] Solomon has been idle ${Math.round(idleH)}h. Picking up the next standing task from master context §${next.source_section}: "${next.title}"${next.detail ? ` — ${next.detail}` : ''}. Take it as far as you can without my input; escalate if you hit a financial/legal/irreversible step.`;
+    console.log(`[SCHEDULER] autonomous_priority firing: ${next.title.slice(0, 60)}`);
+    try {
+      await axios.post(`http://127.0.0.1:${process.env.PORT || 3000}/inject`, { text: message }, { timeout: 30000 });
+      mem.set('autonomous_priority', 'current_index', String((idx + 1) % items.length));
+      mem.set('autonomous_priority', 'last_fired_at', new Date().toISOString());
+      try {
+        db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('autonomous_priority', `${next.title.slice(0, 80)} (idx ${idx + 1}/${items.length}, idle ${Math.round(idleH)}h)`);
+      } catch (_) {}
+    } catch (e) {
+      console.error('[SCHEDULER] autonomous_priority inject failed:', e.message);
+    }
+  } catch (err) {
+    console.error('[SCHEDULER] autonomous_priority error:', err.message);
+  }
+});
+
 // ── EXPORTS (callable by bot.js / tools.js on demand) ──────────────────────
 // These were always declared above but never exported, so Solomon could not
 // invoke them on demand (e.g. for an on-demand brief or weekly repurpose).
 // Safe to export now thanks to the DUAL-USE GUARD at the top of this file.
 module.exports = {
   buildMorningScorecard,
+  buildEveningSummary,
   runWeeklyRepurpose,
   previewCampaignSlot,
   executeCampaignActionFromScheduler,
   getYouTubeAccessToken,
   loadCampaignDays,
-  getStaleTaskCount
+  getStaleTaskCount,
+  loadStandingPriorities
 };
 
 // Startup banner only fires when scheduler.js is the main module (PM2 process).
