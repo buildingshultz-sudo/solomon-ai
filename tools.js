@@ -340,15 +340,16 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'post_via_browser',
-    description: "Post on YouTube (community post) or Instagram (feed) by driving a real Chromium browser via Playwright — for platforms where the public API can't post. Requires a one-time saved auth state at /root/solomon-v4/.pw_state_<platform>.json (gitignored). If missing, returns a clear error telling Jed how to set it up. Use this after the regular social_post tool can't reach the target platform.",
+    description: "Post on YouTube Community or Instagram (feed) by driving a real Chromium browser via Playwright — for platforms where the public API can't post. Routes to /root/solomon-v4/browser-poster.js (headless, captured storageState, screenshots before+after submit, retry once on transient timeout/network). Requires a one-time captured auth state at /root/solomon-v4/.pw_state_<youtube|instagram>.json (gitignored). If missing, returns code AUTH_MISSING with the capture-script path. Other error codes: AUTH_EXPIRED, TIMEOUT, NETWORK, SELECTOR, UNKNOWN.",
     input_schema: {
       type: 'object',
       properties: {
-        platform: { type: 'string', enum: ['youtube', 'instagram'], description: 'Which platform to post to' },
-        content: { type: 'string', description: 'Post text (for Instagram, this is the caption).' },
-        image_url: { type: 'string', description: 'Optional image URL. Required for Instagram.' }
+        platform:    { type: 'string', enum: ['youtube_community', 'instagram'], description: "Which platform to post to. 'youtube_community' replaces the old 'youtube'; 'instagram' = IG feed post." },
+        text:        { type: 'string', description: 'YouTube Community post body (required when platform=youtube_community).' },
+        caption:     { type: 'string', description: 'Instagram caption (required when platform=instagram).' },
+        image_path:  { type: 'string', description: 'Absolute path to a local image file on the VPS (e.g. /tmp/generated_images/xyz.jpg). Required for Instagram; optional for YouTube. Use generate_image first if you need to render one.' }
       },
-      required: ['platform', 'content']
+      required: ['platform']
     }
   },
   {
@@ -2409,9 +2410,22 @@ Output format (JSON):
       case 'append_master_context': {
         return appendMasterContext(input && input.section, input && input.entry);
       }
-      // BROWSER POST (Playwright) — YouTube community / Instagram via real Chromium
+      // BROWSER POST (Playwright) — routes to /root/solomon-v4/browser-poster.js
+      // (the new module). Legacy postViaBrowser helper below kept in place as a
+      // fallback path; the new module is the primary route.
       case 'post_via_browser': {
-        return await postViaBrowser(input && input.platform, input && input.content, input && input.image_url);
+        const platform = input && input.platform;
+        if (!platform) return { ok: false, error: 'post_via_browser: platform required (youtube_community | instagram)' };
+        let browserPoster;
+        try { browserPoster = require('./browser-poster'); }
+        catch (e) { return { ok: false, error: 'browser-poster module not loadable: ' + e.message }; }
+        if (platform === 'youtube_community' || platform === 'youtube') {
+          return await browserPoster.postYouTubeCommunity({ text: input.text || input.content, image_path: input.image_path });
+        }
+        if (platform === 'instagram') {
+          return await browserPoster.postInstagram({ caption: input.caption || input.content, image_path: input.image_path });
+        }
+        return { ok: false, error: 'post_via_browser: unknown platform "' + platform + '" (expected youtube_community | instagram)' };
       }
       // WEEKLY REVENUE REPORT — Gumroad + Spreadshirt + Amazon Associates P&L
       case 'weekly_revenue_report': {
