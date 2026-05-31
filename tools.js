@@ -268,13 +268,17 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'send_email',
-    description: 'Send an email notification via Gmail API (HTTPS-based, no SMTP port needed).',
+    description: "Send an email from buildingshultz@gmail.com via the Gmail API (HTTPS, bypasses DigitalOcean SMTP block). Body is plain text — an HTML version is auto-rendered alongside it (paragraphs preserved, single newlines become <br>). Sensitive recipient domains (banks, .gov, attorneys, payment processors, healthcare) are refused unless acknowledge_sensitive:true is set — escalate to Jed for those.",
     input_schema: {
       type: 'object',
       properties: {
-        to: { type: 'string', description: 'Recipient email address' },
-        subject: { type: 'string' },
-        body: { type: 'string', description: 'Email body text (plain text or HTML)' }
+        to:        { type: 'string', description: 'Recipient email address (or comma-separated list)' },
+        subject:   { type: 'string', description: 'Email subject line' },
+        body:      { type: 'string', description: 'Plain-text body. HTML version is auto-generated from this — preserve paragraph breaks with blank lines.' },
+        cc:        { type: 'string', description: 'Optional CC recipients (comma-separated)' },
+        bcc:       { type: 'string', description: 'Optional BCC recipients (comma-separated)' },
+        reply_to:  { type: 'string', description: 'Optional Reply-To address' },
+        acknowledge_sensitive: { type: 'boolean', description: 'Set true ONLY when Jed has explicitly approved a send to a bank / legal / government / healthcare / payment-processor domain.' }
       },
       required: ['to', 'subject', 'body']
     }
@@ -2482,12 +2486,128 @@ Output format (JSON):
           return { ok: false, error: 'check_inbox failed: ' + imapErr.message };
         }
       }
-      // ITEM 31 - EMAIL via Gmail API (HTTPS - bypasses DigitalOcean SMTP block)
+      // ITEM 31 — EMAIL outbound. Primary path: nodemailer + Gmail SMTP submission
+      // (smtp.gmail.com:465 SSL) using SMTP_USER + SMTP_PASS (the same App Password
+      // the IMAP triage already uses — guaranteed present if check_inbox works).
+      // DigitalOcean blocks port 25 outbound but submission on 465/587 is open.
+      // Fallback: Gmail API via OAuth refresh token (HTTPS) — used only if SMTP
+      // throws a network error AND Gmail API has been enabled in Cloud Console.
+      // Sends multipart/alternative (plain text + auto-rendered HTML), supports
+      // cc/bcc/reply_to, enforces a sensitive-domain guard, logs every send.
       case 'send_email': {
+        if (!input.to || typeof input.to !== 'string' || !input.to.trim()) {
+          return { ok: false, error: 'send_email: to is required' };
+        }
+        if (!input.subject || typeof input.subject !== 'string') {
+          return { ok: false, error: 'send_email: subject is required' };
+        }
+        if (!input.body || typeof input.body !== 'string') {
+          return { ok: false, error: 'send_email: body is required' };
+        }
+        // Sensitive-domain guard. If ANY recipient domain matches a sensitive
+        // pattern, require acknowledge_sensitive:true. Caller (Solomon/Sam)
+        // should have escalated to Jed before flipping that flag.
+        const SENSITIVE_DOMAIN_RE = /(?:^|@|\.)((?:[\w-]+\.)?(?:gov|mil|bank|credit|loan|mortgage|attorney|attorneys|lawfirm|legal|courthouse|sheriff|police|hospital|medical|healthcare|chase\.com|wellsfargo\.com|citi\.com|capitalone\.com|americanexpress\.com|amex\.com|paypal\.com|stripe\.com|irs\.gov))(?:$|[,>\s])/i;
+        const allRecipients = [input.to, input.cc, input.bcc].filter(Boolean).join(',');
+        const sensitiveHit = allRecipients.match(SENSITIVE_DOMAIN_RE);
+        if (sensitiveHit && !input.acknowledge_sensitive) {
+          return {
+            ok: false,
+            sensitive_domain: sensitiveHit[1],
+            error: `Recipient on sensitive domain "${sensitiveHit[1]}" — escalate to Jed. Pass acknowledge_sensitive:true ONLY after Jed approves.`
+          };
+        }
+        // Build the auto-rendered HTML body once — used by both transports.
+        const htmlEscape = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const linkify = (s) => s.replace(/\bhttps?:\/\/[^\s<>"')\]]+/gi, (u) => `<a href="${u}">${u}</a>`);
+        const htmlBody = '<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;font-size:15px;line-height:1.55;color:#1F1A17;">' +
+          input.body.split(/\n{2,}/).map(p => '<p style="margin:0 0 12px;">' + linkify(htmlEscape(p)).replace(/\n/g, '<br>') + '</p>').join('') +
+          '</body></html>';
+        const from = process.env.SMTP_USER || 'buildingshultz@gmail.com';
+        const fromName = process.env.SMTP_FROM_NAME || 'Jedidiah Shultz';
+        const fromHeader = `${fromName} <${from}>`;
+
+        // ── PATH A — nodemailer + Gmail SMTP submission (primary) ──
+        const smtpUser = process.env.SMTP_USER;
+        const smtpPass = process.env.SMTP_PASS;
+        let smtpResult = null;
+        if (smtpUser && smtpPass && smtpPass !== 'PLACEHOLDER') {
+          try {
+            const nodemailer = require('nodemailer');
+            const transporter = nodemailer.createTransport({
+              host: 'smtp.gmail.com',
+              port: 465,
+              secure: true,
+              auth: { user: smtpUser, pass: smtpPass },
+              connectionTimeout: 12000,
+              greetingTimeout: 8000,
+              socketTimeout: 15000
+            });
+            const sendOpts = {
+              from: fromHeader,
+              to: input.to,
+              subject: input.subject,
+              text: input.body,
+              html: htmlBody
+            };
+            if (input.cc)       sendOpts.cc = input.cc;
+            if (input.bcc)      sendOpts.bcc = input.bcc;
+            if (input.reply_to) sendOpts.replyTo = input.reply_to;
+            smtpResult = await transporter.sendMail(sendOpts);
+            try {
+              db.prepare('INSERT INTO activity_log (type, summary) VALUES (?, ?)').run(
+                'email_sent',
+                JSON.stringify({
+                  to: input.to,
+                  cc: input.cc || null,
+                  subject: input.subject,
+                  body_first_100: input.body.slice(0, 100),
+                  message_id: smtpResult.messageId,
+                  transport: 'smtp'
+                }).slice(0, 800)
+              );
+            } catch (_) {}
+            return { ok: true, message_id: smtpResult.messageId, accepted: smtpResult.accepted, transport: 'smtp', to: input.to, subject: input.subject };
+          } catch (smtpErr) {
+            console.error('[send_email] SMTP path failed, trying Gmail API fallback:', smtpErr.message);
+          }
+        }
+
+        // ── PATH B — Gmail API via OAuth (fallback) ──
         const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
         if (!refreshToken || refreshToken === 'PLACEHOLDER') {
-          return { ok: false, error: 'Gmail API requires YOUTUBE_REFRESH_TOKEN. Authorize YouTube first.' };
+          return { ok: false, error: 'send_email failed: SMTP transport unavailable AND no YOUTUBE_REFRESH_TOKEN for Gmail API fallback.' };
         }
+        const boundary = '----solomon-mp-' + Date.now().toString(36);
+        const apiHeaders = [
+          'To: ' + input.to,
+          'From: ' + fromHeader,
+          input.cc ? 'Cc: ' + input.cc : null,
+          input.bcc ? 'Bcc: ' + input.bcc : null,
+          input.reply_to ? 'Reply-To: ' + input.reply_to : null,
+          'Subject: ' + input.subject,
+          'MIME-Version: 1.0',
+          'Content-Type: multipart/alternative; boundary="' + boundary + '"',
+          ''
+        ].filter(Boolean);
+        const apiBody = [
+          '--' + boundary,
+          'Content-Type: text/plain; charset=utf-8',
+          'Content-Transfer-Encoding: 7bit',
+          '',
+          input.body,
+          '',
+          '--' + boundary,
+          'Content-Type: text/html; charset=utf-8',
+          'Content-Transfer-Encoding: 7bit',
+          '',
+          htmlBody,
+          '',
+          '--' + boundary + '--'
+        ];
+        const rawEmail = apiHeaders.concat(apiBody).join('\r\n');
+        const encoded = Buffer.from(rawEmail).toString('base64')
+          .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
         try {
           const tokenResp = await axios.post('https://oauth2.googleapis.com/token', {
             client_id: process.env.YOUTUBE_CLIENT_ID,
@@ -2496,25 +2616,28 @@ Output format (JSON):
             grant_type: 'refresh_token'
           }, { timeout: 10000 });
           const accessToken = tokenResp.data.access_token;
-          const rawEmail = [
-            'To: ' + input.to,
-            'From: ' + (process.env.SMTP_USER || 'buildingshultz@gmail.com'),
-            'Subject: ' + input.subject,
-            'Content-Type: text/plain; charset=utf-8',
-            '',
-            input.body
-          ].join('\r\n');
-          const encoded = Buffer.from(rawEmail).toString('base64')
-            .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
           const gmailResp = await axios.post(
             'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
             { raw: encoded },
-            { headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, timeout: 15000 }
+            { headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' }, timeout: 20000 }
           );
-          return { ok: true, message_id: gmailResp.data.id, to: input.to, subject: input.subject };
+          try {
+            db.prepare('INSERT INTO activity_log (type, summary) VALUES (?, ?)').run(
+              'email_sent',
+              JSON.stringify({
+                to: input.to,
+                cc: input.cc || null,
+                subject: input.subject,
+                body_first_100: input.body.slice(0, 100),
+                message_id: gmailResp.data.id,
+                transport: 'gmail_api'
+              }).slice(0, 800)
+            );
+          } catch (_) {}
+          return { ok: true, message_id: gmailResp.data.id, thread_id: gmailResp.data.threadId, transport: 'gmail_api', to: input.to, subject: input.subject };
         } catch (emailErr) {
           const errMsg = (emailErr.response && emailErr.response.data && (emailErr.response.data.error_description || (emailErr.response.data.error && emailErr.response.data.error.message))) || emailErr.message;
-          return { ok: false, error: 'Gmail API send failed: ' + errMsg };
+          return { ok: false, error: 'Both SMTP and Gmail API failed. Gmail API error: ' + errMsg };
         }
       }
       // ITEM 32 — ELEVENLABS VOICE GENERATION

@@ -1,0 +1,30 @@
+{
+  "id": "solomon_send_email",
+  "name": "Send an email from buildingshultz@gmail.com",
+  "description": "Solomon sends an email via the Gmail API (HTTPS, bypasses SMTP block). Used for outreach, replies, contact-form responses, and any other outbound email. Plain-text + auto-rendered HTML multipart. Recipient on a sensitive domain (bank / .gov / attorney / payment processor / healthcare) is refused at the executor level unless Jed pre-approved via acknowledge_sensitive:true.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "send an email to john@example.com — subject Hello, body Quick note about the deck",
+    "email marketing@kleintools.com about the Crusaders program",
+    "reply to that contact-form message via email",
+    "shoot an email to my supplier asking about the cedar order"
+  ],
+  "prompt_template": "Call executeTool('send_email', { to: {{to}}, subject: {{subject}}, body: {{body}}, cc: {{cc}}, reply_to: {{reply_to}} }). Telegram-confirm to Jed with one line: ✉️ Sent to {{to}} — {{subject}}.",
+  "required_inputs": ["to", "subject", "body"],
+  "optional_inputs": ["cc", "bcc", "reply_to"],
+  "escalation_conditions": [
+    "Recipient address ends in .gov / .mil OR is on a known bank, attorney, payment processor, or healthcare domain → executor will refuse without acknowledge_sensitive; escalate to Jed before flipping that flag.",
+    "Email body promises money, makes a contractual commitment, accepts terms, or contains personal info about Tasia or the kids → escalate to Jed regardless of recipient.",
+    "Reply chain involves a complaint, refund request, legal letter, or upset customer → escalate so Jed reviews tone."
+  ],
+  "irreversible": false,
+  "confidence_default": 0.9,
+  "smoke_test": {
+    "trigger_message": "send an email to buildingshultz@gmail.com — subject Solomon dispatch smoke test, body Please ignore. Just verifying the dispatch template wires up.",
+    "expected_inputs_filled": ["to", "subject", "body"],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "The executor enforces a sensitive-domain guard regardless of dispatch confidence — that's the load-bearing safety, not the template categories. The 'public_brand' category was deliberately NOT added so routine emails don't pay the Nathan-consult tax; brand-risk judgment lives in the few-shot anchors of the classifier and in the human escalation conditions above."
+}
