@@ -82,13 +82,43 @@ async function classifyMessage(message, templates) {
 Respond ONLY in compact JSON, no preamble, no code fences:
 {"template_id": "<id_or_null>", "confidence": 0.0..1.0, "inputs": {"var": "value", ...}, "rationale": "one sentence"}
 
-Confidence guidance:
-- 0.90+  exact match, all required inputs extractable
-- 0.70   probable match, may need Nathan to confirm interpretation
-- 0.50   weak match, multiple plausible templates
-- <0.40  no template fits — return template_id null
+# Confidence rubric (be decisive — under-confidence wastes a Nathan API call)
 
-Templates catalogue:
+Score **0.90 or higher** when ALL of:
+- The intent is unambiguous (one template clearly matches, others are far weaker).
+- Every required input is extractable from the message — or the template has no required inputs.
+- The phrasing matches one of the template's trigger_examples in shape OR uses an obvious synonym ("get me X" ≈ "give me X" ≈ "send me X" ≈ "show me X").
+- Jed is the implied actor (he said "do X" / "run X" / "show me X") — not a hypothetical question about whether to do X.
+- No safety category is triggered by Jed's wording (no money, legal, irreversible, PII).
+
+Score **0.85–0.89** when the template match is clearly best, all required inputs are present, but the phrasing is novel enough that one human reviewer in ten might disagree.
+
+Score **0.60–0.84** when there's a probable match but: one required input is partly inferred, OR two templates could fit and you're picking the better one, OR the phrasing is genuinely ambiguous.
+
+Score **0.40–0.59** when the message could plausibly hit a template but is weak — pick the closest template_id anyway so Nathan can decide.
+
+Score **below 0.40** OR set template_id to null only when no template is a credible fit. Don't force a match into a template that doesn't actually serve the request.
+
+# Decisive tiebreakers (apply in order)
+
+1. If the message names a slash command equivalent ("status", "stats", "brief", "budget", "launch", "stop the campaign", "generate <prompt>", etc.) — match the corresponding template at 0.95+ confidence. These are deterministic.
+2. If the message explicitly addresses an agent by name ("sam: ...", "caleb: ...", "ask nathan ...") — that's strong signal for sam_*/caleb_*/nathan_* templates respectively. Bump by +0.10.
+3. If the message contains money amounts, legal verbs ("file", "sign", "transfer", "publish"), or anything irreversible — DO NOT inflate confidence; let the safety category gate handle it. Match to the appropriate jed_escalate_* template at high confidence.
+4. If two templates fit equally well, prefer the one whose required_inputs are 100% extractable from the message.
+
+# Few-shot anchors (match the shape, not just the exact wording)
+
+Jed: "what's my API budget at this month?"        → {"template_id":"solomon_check_budget","confidence":0.96,"inputs":{},"rationale":"explicit budget query, no inputs needed"}
+Jed: "send me the morning brief"                   → {"template_id":"solomon_send_morning_brief","confidence":0.96,"inputs":{},"rationale":"on-demand brief, no inputs"}
+Jed: "generate a moody jobsite at sunrise"         → {"template_id":"solomon_generate_image","confidence":0.95,"inputs":{"prompt":"moody jobsite at sunrise"},"rationale":"image gen request, prompt cleanly extractable"}
+Jed: "stop the campaign"                            → {"template_id":"solomon_campaign_stop","confidence":0.96,"inputs":{},"rationale":"verbatim campaign-stop"}
+Jed: "post this to all socials: <content>"          → {"template_id":"solomon_cross_post","confidence":0.93,"inputs":{"content":"<content>"},"rationale":"explicit cross-post phrasing; content trivially extracted"}
+Jed: "reply to FB comment 99 on building_shultz with: thanks brother" → {"template_id":"solomon_fb_reply","confidence":0.94,"inputs":{"page":"building_shultz","comment_id":"99","reply_text":"thanks brother"},"rationale":"all three inputs explicit"}
+Jed: "publish the kdp book"                         → {"template_id":"jed_escalate_kdp_publish","confidence":1.00,"inputs":{},"rationale":"irreversible — always Jed"}
+Jed: "should I elect s-corp yet?"                   → {"template_id":"future_solomon_s_corp_threshold","confidence":0.88,"inputs":{},"rationale":"financial/legal advisory — routes via Nathan to Jed"}
+Jed: "what's up?"                                   → {"template_id":null,"confidence":0.10,"inputs":{},"rationale":"conversational, no template"}
+
+# Templates catalogue
 ${JSON.stringify(catalogue, null, 2)}`;
 
   const resp = await anthropic.messages.create({

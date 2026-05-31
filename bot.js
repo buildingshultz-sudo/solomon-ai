@@ -607,8 +607,57 @@ function sanitizeMessages(msgs) {
   return out;
 }
 
+// ── REPLY CACHE (Step 5a) ────────────────────────────────────────────────
+// In-memory cache for repeated identical short queries. Keyed on a sha256 of
+// the normalized message; TTL ~1 hour; capped at 500 entries (oldest evicted).
+// Only caches "safe" queries — short, no slash command, no token/url/file paths,
+// no time-of-day-sensitive phrasing. Skips the full askSolomon round-trip
+// (including the budget log) on hit, so cache hits are essentially free.
+const _replyCache = new Map();
+const REPLY_CACHE_TTL_MS = 60 * 60 * 1000;
+const REPLY_CACHE_MAX = 500;
+let _replyCacheHits = 0;
+let _replyCacheMisses = 0;
+function _replyCacheKey(msg) {
+  return require('crypto').createHash('sha256')
+    .update(String(msg).trim().toLowerCase().replace(/\s+/g, ' '))
+    .digest('hex').slice(0, 32);
+}
+function _replyIsCacheable(msg) {
+  if (!msg || typeof msg !== 'string') return false;
+  if (msg.length < 4 || msg.length > 300) return false;
+  if (msg.trim().startsWith('/')) return false;
+  if (/(token|secret|password|http[s]?:\/\/|@|file:\/\/|\.env|sk-|api[_-]?key)/i.test(msg)) return false;
+  if (/(now|today|tonight|this morning|right now|just now|currently|latest|recent)/i.test(msg)) return false;
+  return true;
+}
+function _replyCacheTrim() {
+  if (_replyCache.size <= REPLY_CACHE_MAX) return;
+  const sorted = [..._replyCache.entries()].sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+  const toDrop = sorted.slice(0, Math.floor(REPLY_CACHE_MAX / 2));
+  toDrop.forEach(([k]) => _replyCache.delete(k));
+}
+
 // ── CORE LLM CALL ────────────────────────────────────────────────────────
 async function askSolomon(userMessage) {
+  // 0. Cache short-circuit (Step 5a).
+  let _cacheKey = null;
+  if (_replyIsCacheable(userMessage)) {
+    _cacheKey = _replyCacheKey(userMessage);
+    const hit = _replyCache.get(_cacheKey);
+    if (hit && hit.expiresAt > Date.now()) {
+      _replyCacheHits++;
+      log('INFO', 'CACHE', 'reply cache HIT', { key: _cacheKey.slice(0, 8), age_s: Math.round((Date.now() - hit.cachedAt) / 1000), preview: userMessage.slice(0, 40) });
+      // Mirror the same side effects a fresh reply would have so /status, /stats,
+      // and message history all stay coherent — except for the budget log.
+      messages.add('user', userMessage);
+      messages.add('assistant', hit.reply);
+      activityLogger.setStatus('IDLE', '[cache hit]');
+      return hit.reply;
+    }
+    _replyCacheMisses++;
+  }
+
   resetFileReadCache();
   activityLogger.setStatus('THINKING', userMessage.slice(0, 80));
   // 1. Budget check first
@@ -902,6 +951,12 @@ async function askSolomon(userMessage) {
   // 8. Save assistant response to history
   messages.add('assistant', finalText);
   activityLogger.setStatus('IDLE', '');
+
+  // 9. Cache the reply (Step 5a) if the query was cacheable.
+  if (_cacheKey) {
+    _replyCache.set(_cacheKey, { reply: finalText, cachedAt: Date.now(), expiresAt: Date.now() + REPLY_CACHE_TTL_MS });
+    _replyCacheTrim();
+  }
   return finalText;
 }
 
@@ -1617,12 +1672,52 @@ bot.onText(/^\/generate\b\s*(.*)$/i, async (msg, match) => {
   }
 });
 
+// /stats — today's message + tool-call volume, MTD budget, cache hit rate.
+// Reads activity_log for the rolling 24h window. Scorecard-style, scannable.
+bot.onText(/^\/stats/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  try {
+    const today = new Date().toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' });
+    // Activity counts last 24h
+    const rows = db.prepare("SELECT type, COUNT(*) AS n FROM activity_log WHERE timestamp >= datetime('now', '-24 hours') GROUP BY type").all();
+    const c = (t) => (rows.find(r => r.type === t) || { n: 0 }).n;
+    const msgsRecv = c('message_received');
+    const msgsSent = c('message_sent');
+    const toolCalls = c('tool_call');
+    const errs = c('error');
+    // Budget
+    const monthSpend = budget.getMonthTotal();
+    const hardStop = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100');
+    const pct = Math.min(100, Math.round((monthSpend / hardStop) * 100));
+    const bar = '█'.repeat(Math.floor(pct / 10)) + '░'.repeat(10 - Math.floor(pct / 10));
+    const warn = pct >= 80 ? '  ⚠️' : '';
+    // Cache stats (this process lifetime)
+    const cacheTotal = _replyCacheHits + _replyCacheMisses;
+    const hitRate = cacheTotal ? Math.round((_replyCacheHits / cacheTotal) * 100) : 0;
+    const lines = [
+      `📊 *Solomon stats — ${today}*`,
+      '',
+      `💬 Messages (24h): *${msgsRecv}* received · ${msgsSent} sent`,
+      `🛠️ Tool calls (24h): *${toolCalls}*${errs ? `  ⚠️ ${errs} errors` : ''}`,
+      `💵 Budget: $${monthSpend.toFixed(2)} / $${hardStop.toFixed(0)} (${pct}%) ${bar}${warn}`,
+      `⚡ Reply cache: ${_replyCacheHits} hit / ${_replyCacheMisses} miss (${hitRate}%) · ${_replyCache.size} entries`
+    ];
+    const out = lines.join('\n');
+    await bot.sendMessage(msg.chat.id, out, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(msg.chat.id, out.replace(/[*_`]/g, '')));
+  } catch (e) {
+    log('ERROR', 'STATS', 'stats failed', { error: e.message });
+    bot.sendMessage(msg.chat.id, `❌ /stats failed: ${e.message.slice(0, 200)}`).catch(() => {});
+  }
+});
+
 // /help — list available commands.
 bot.onText(/^\/help\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
   const help = [
     '*Solomon commands*',
     '/status — processes, uptime, recent posts, email triage stats',
+    '/stats — 24h message / tool / budget / cache scorecard',
     '/post <content> — rewrite + distribute to all socials',
     '/launch — start the 30-day book & merch campaign',
     '/brief — send the morning brief now',
