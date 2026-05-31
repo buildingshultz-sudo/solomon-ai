@@ -23,3 +23,4 @@ sam-queue/*.json
 !sam-queue/README.md
 sam-queue-done/*.json
 dispatch-live-smoke-results.json
+posts/
