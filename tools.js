@@ -1089,6 +1089,18 @@ const TOOL_DEFINITIONS = [
       }
     }
   }
+  ,{
+    name: "youtube_affiliate_audit_and_fill",
+    description: "Audit every video on the Building Shultz YouTube channel and append the affiliate-storefront CTA block to any description missing the Amazon affiliate tag 'buildingshu0e-20'. DEFAULTS TO DRY-RUN — call with {dry_run:false} to actually write the descriptions. Reports {videos_total, videos_missing, videos_have_tag, missing:[{video_id,title,published_at,description_length}], modifications:[...] (only when dry_run:false)}. Logs each write to activity_log as type='youtube_description_update'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        dry_run:         { type: "boolean", description: "If true (default), audit only — no writes. Set false to actually append the block." },
+        affiliate_block: { type: "string",  description: "Override the default affiliate-block text. Must contain 'buildingshu0e-20' or the tool will refuse. Default: a brief storefront CTA + FTC disclosure." },
+        limit:           { type: "integer", description: "Cap the number of videos audited (debug aid). Default no cap." }
+      }
+    }
+  }
 ];
 
 // ── LOCAL VPS FILE HELPER ────────────────────────────────────────────────
@@ -2326,6 +2338,217 @@ Output format (JSON):
           return result;
         } catch (e) {
           return { ok: false, error: 'employee_stack_audit failed: ' + (e.message || String(e)).slice(0, 240) };
+        }
+      }
+      case "youtube_affiliate_audit_and_fill": {
+        // Audit + optionally fill the Amazon-affiliate CTA across all Building Shultz
+        // videos. Dry-run by default -- only `dry_run:false` actually writes via
+        // videos.update. Requires the youtube scope (NOT just youtube.readonly).
+        const AFFILIATE_TAG = 'buildingshu0e-20';
+        const DEFAULT_BLOCK = [
+          '—',
+          'Shop the tools I actually use in the shop:',
+          'https://www.amazon.com/shop/' + AFFILIATE_TAG,
+          '',
+          '(Amazon affiliate — I earn a small commission on qualifying purchases. Costs you nothing extra. Helps keep the shop open.)'
+        ].join('\n');
+
+        const dryRun = input.dry_run !== false; // default TRUE -- explicit opt-in to write
+        const affiliateBlock = (typeof input.affiliate_block === 'string' && input.affiliate_block.trim())
+          ? input.affiliate_block.trim()
+          : DEFAULT_BLOCK;
+        const cap = Number.isInteger(input.limit) && input.limit > 0 ? input.limit : null;
+
+        if (!affiliateBlock.toLowerCase().includes(AFFILIATE_TAG.toLowerCase())) {
+          return { ok: false, error: `affiliate_block override must contain the tag '${AFFILIATE_TAG}'` };
+        }
+
+        const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+        if (!refreshToken || refreshToken === 'PLACEHOLDER') {
+          return { ok: false, error: 'YouTube not authorized -- visit http://167.99.237.26:3000/oauth/start to grant access.' };
+        }
+
+        let accessToken, grantedScope;
+        try {
+          const tokenResp = await axios.post('https://oauth2.googleapis.com/token', {
+            client_id: process.env.YOUTUBE_CLIENT_ID,
+            client_secret: process.env.YOUTUBE_CLIENT_SECRET,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token'
+          });
+          accessToken = tokenResp.data.access_token;
+          grantedScope = tokenResp.data.scope || '';
+        } catch (e) {
+          return { ok: false, error: 'YouTube token refresh failed: ' + (e.response?.data?.error_description || e.message) };
+        }
+
+        // Write requires either youtube or youtube.force-ssl. youtube.readonly + youtube.upload alone won't cut it.
+        const hasWriteScope = /\byoutube\b/.test(grantedScope) || /\byoutube\.force-ssl\b/.test(grantedScope);
+        if (!dryRun && !hasWriteScope) {
+          return {
+            ok: false,
+            error: 'YouTube refresh token lacks write scope -- need youtube or youtube.force-ssl. Granted: ' + grantedScope,
+            action_needed: 'Re-OAuth with the full youtube scope at http://167.99.237.26:3000/oauth/start'
+          };
+        }
+
+        const ytGet = (path, params) => axios.get('https://www.googleapis.com/youtube/v3/' + path, {
+          headers: { Authorization: 'Bearer ' + accessToken },
+          params,
+          timeout: 15000
+        });
+        const ytPut = (path, params, body) => axios.put('https://www.googleapis.com/youtube/v3/' + path, body, {
+          headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+          params,
+          timeout: 15000
+        });
+
+        try {
+          // 1. channel -> uploads playlist id
+          const chResp = await ytGet('channels', { part: 'contentDetails,snippet', mine: 'true' });
+          const ch = chResp.data.items && chResp.data.items[0];
+          if (!ch) return { ok: false, error: 'No channel found for the authorized user.' };
+          const uploadsPlaylistId = ch.contentDetails.relatedPlaylists.uploads;
+          const channelTitle = ch.snippet.title;
+
+          // 2. enumerate all uploads (paginated). YouTube's playlistItems endpoint
+          // can repeat items across pages (observed empirically on the BS uploads
+          // playlist), so dedupe on the fly via a Set.
+          const seenIds = new Set();
+          const videoIds = [];
+          let pageToken = undefined;
+          let pages = 0;
+          do {
+            pages++;
+            const pr = await ytGet('playlistItems', {
+              part: 'contentDetails',
+              playlistId: uploadsPlaylistId,
+              maxResults: 50,
+              pageToken
+            });
+            for (const it of pr.data.items || []) {
+              const id = it.contentDetails?.videoId;
+              if (id && !seenIds.has(id)) {
+                seenIds.add(id);
+                videoIds.push(id);
+              }
+              if (cap && videoIds.length >= cap) break;
+            }
+            pageToken = pr.data.nextPageToken;
+            if (cap && videoIds.length >= cap) break;
+            // Safety: a playlist with >50 pages would mean >2500 videos, well beyond any plausible BS state.
+            if (pages > 50) break;
+          } while (pageToken);
+
+          // 3. videos.list in batches of 50 to get snippets
+          const videos = [];
+          for (let i = 0; i < videoIds.length; i += 50) {
+            const batch = videoIds.slice(i, i + 50);
+            const vr = await ytGet('videos', { part: 'snippet', id: batch.join(',') });
+            for (const v of vr.data.items || []) videos.push(v);
+          }
+
+          // 4. classify
+          const tagLower = AFFILIATE_TAG.toLowerCase();
+          const missing = [];
+          const haveTag = [];
+          for (const v of videos) {
+            const desc = v.snippet?.description || '';
+            const has = desc.toLowerCase().includes(tagLower);
+            const summary = {
+              video_id: v.id,
+              title: (v.snippet?.title || '').slice(0, 120),
+              published_at: v.snippet?.publishedAt || null,
+              description_length: desc.length,
+              category_id: v.snippet?.categoryId || null,
+              default_language: v.snippet?.defaultLanguage || null,
+              default_audio_language: v.snippet?.defaultAudioLanguage || null,
+              tags: v.snippet?.tags || []
+            };
+            if (has) haveTag.push(summary);
+            else missing.push({ ...summary, current_description_preview: desc.slice(0, 200) });
+          }
+
+          // 5. dry-run path -- audit only, no writes
+          if (dryRun) {
+            return {
+              ok: true,
+              dry_run: true,
+              channel: channelTitle,
+              uploads_playlist: uploadsPlaylistId,
+              affiliate_tag: AFFILIATE_TAG,
+              affiliate_block_preview: affiliateBlock,
+              videos_total: videos.length,
+              videos_have_tag: haveTag.length,
+              videos_missing: missing.length,
+              missing,
+              note: 'No writes performed. Re-invoke with {dry_run:false} to append the affiliate block to every missing description.'
+            };
+          }
+
+          // 6. live path -- update each missing description
+          const modifications = [];
+          for (const v of missing) {
+            const beforeDesc = videos.find(x => x.id === v.video_id)?.snippet?.description || '';
+            const sep = beforeDesc.endsWith('\n') ? '\n' : '\n\n';
+            const afterDesc = beforeDesc + sep + affiliateBlock;
+
+            const updateBody = {
+              id: v.video_id,
+              snippet: {
+                title: v.title.length ? v.title : '(untitled)',
+                description: afterDesc,
+                categoryId: v.category_id || '26' // 26 = Howto & Style (sane default)
+              }
+            };
+            if (v.tags && v.tags.length) updateBody.snippet.tags = v.tags;
+            if (v.default_language) updateBody.snippet.defaultLanguage = v.default_language;
+            if (v.default_audio_language) updateBody.snippet.defaultAudioLanguage = v.default_audio_language;
+
+            try {
+              await ytPut('videos', { part: 'snippet' }, updateBody);
+              const mod = {
+                video_id: v.video_id,
+                title: v.title,
+                before_length: beforeDesc.length,
+                after_length: afterDesc.length,
+                added_block: true
+              };
+              modifications.push(mod);
+              try {
+                db.prepare('INSERT INTO activity_log (type, summary) VALUES (?, ?)').run(
+                  'youtube_description_update',
+                  JSON.stringify(mod)
+                );
+              } catch (_) {}
+            } catch (e) {
+              modifications.push({
+                video_id: v.video_id,
+                title: v.title,
+                added_block: false,
+                error: e.response?.data?.error?.message || e.message
+              });
+            }
+          }
+
+          return {
+            ok: true,
+            dry_run: false,
+            channel: channelTitle,
+            videos_total: videos.length,
+            videos_have_tag: haveTag.length,
+            videos_missing_before: missing.length,
+            modifications_attempted: modifications.length,
+            modifications_succeeded: modifications.filter(m => m.added_block).length,
+            modifications_failed: modifications.filter(m => !m.added_block).length,
+            modifications
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: 'youtube_affiliate_audit_and_fill failed: ' + (e.response?.data?.error?.message || e.message || String(e)).slice(0, 240),
+            scope: grantedScope
+          };
         }
       }
       case "kdp_check_royalties": {
