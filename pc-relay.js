@@ -145,6 +145,144 @@ app.get('/screenshot', (req, res) => {
   });
 });
 
+// ── FILE BRIDGE (D:\ drive read) ─────────────────────────────────────────
+// Solomon (VPS-side) can fetch PC-local files over the relay so the VPS can
+// process raw footage stills, PDFs in D:\Solomon\reports\, etc., without
+// having to mirror everything via scp first.
+//
+// Allowlist defaults to D:\Solomon\ + D:\B ROLL FOOTAGE\ (matches the docs).
+// Override via PC_RELAY_FILE_ALLOWLIST (comma-separated absolute prefixes).
+// Allowlist values are case-insensitively prefix-matched against the resolved
+// canonical path AFTER fs.realpathSync, so symlink escapes don't help.
+
+const FILE_DEFAULT_ALLOWLIST = ['D:\\Solomon\\', 'D:\\B ROLL FOOTAGE\\'];
+const FILE_ALLOWLIST = (process.env.PC_RELAY_FILE_ALLOWLIST
+  ? process.env.PC_RELAY_FILE_ALLOWLIST.split(',').map(s => s.trim()).filter(Boolean)
+  : FILE_DEFAULT_ALLOWLIST
+).map(p => p.endsWith('\\') || p.endsWith('/') ? p : p + '\\');
+const FILE_MAX_BYTES = parseInt(process.env.PC_RELAY_FILE_MAX_BYTES || (500 * 1024 * 1024)); // 500 MB
+console.log('[PC RELAY] /file allowlist:', FILE_ALLOWLIST.join(' | '));
+console.log('[PC RELAY] /file max bytes:', FILE_MAX_BYTES);
+
+const MIME_BY_EXT = {
+  '.pdf': 'application/pdf',
+  '.txt': 'text/plain; charset=utf-8',
+  '.md':  'text/markdown; charset=utf-8',
+  '.json':'application/json; charset=utf-8',
+  '.csv': 'text/csv; charset=utf-8',
+  '.html':'text/html; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.webp':'image/webp', '.gif': 'image/gif', '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4', '.mov': 'video/quicktime', '.webm': 'video/webm',
+  '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+  '.zip': 'application/zip',
+};
+function mimeFor(p) {
+  const ext = path.extname(p).toLowerCase();
+  return MIME_BY_EXT[ext] || 'application/octet-stream';
+}
+
+// Resolve + validate a user-supplied path. Returns { ok, abs, reason? }.
+// Rejects: missing param, non-absolute, traversal attempt (..), off-allowlist,
+// non-existent, symlink that escapes the allowlist (via realpathSync).
+function resolveAndCheck(rawPath) {
+  if (!rawPath || typeof rawPath !== 'string') return { ok: false, code: 400, reason: 'path query parameter required' };
+  // Reject obvious traversal markers BEFORE normalization.
+  if (rawPath.includes('..')) return { ok: false, code: 400, reason: 'path contains "..": traversal rejected' };
+  if (!path.isAbsolute(rawPath)) return { ok: false, code: 400, reason: 'path must be absolute' };
+
+  let resolved;
+  try {
+    // realpath collapses any "..", resolves symlinks, normalizes case.
+    resolved = fs.realpathSync.native(rawPath);
+  } catch (e) {
+    if (e.code === 'ENOENT') return { ok: false, code: 404, reason: 'path does not exist' };
+    return { ok: false, code: 500, reason: 'realpath failed: ' + e.message };
+  }
+
+  // Allowlist check: resolved must startWith one of the prefixes (case-insensitive on Windows).
+  const lowered = resolved.toLowerCase();
+  const allowed = FILE_ALLOWLIST.some(prefix => lowered.startsWith(prefix.toLowerCase()));
+  if (!allowed) return { ok: false, code: 403, reason: 'path outside allowlist: ' + FILE_ALLOWLIST.join(', ') };
+
+  return { ok: true, abs: resolved };
+}
+
+// GET /file?path=<absolute-path>
+// Streams the file as binary with Content-Type, Content-Length, Content-Disposition.
+app.get('/file', (req, res) => {
+  const rawPath = req.query.path;
+  const check = resolveAndCheck(rawPath);
+  if (!check.ok) {
+    console.log('[RELAY] /file REJECT', check.code, check.reason, '|', rawPath);
+    return res.status(check.code).json({ ok: false, error: check.reason });
+  }
+  let st;
+  try {
+    st = fs.statSync(check.abs);
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'stat failed: ' + e.message });
+  }
+  if (st.isDirectory()) return res.status(400).json({ ok: false, error: 'path is a directory; use /file/list instead' });
+  if (st.size > FILE_MAX_BYTES) {
+    console.log('[RELAY] /file TOO LARGE', st.size, '>', FILE_MAX_BYTES, '|', check.abs);
+    return res.status(413).json({ ok: false, error: 'file exceeds size cap', size: st.size, cap: FILE_MAX_BYTES });
+  }
+
+  const filename = path.basename(check.abs);
+  // Quote-safe filename for Content-Disposition (RFC 6266 fallback).
+  const filenameAttr = filename.replace(/["\\]/g, '_');
+  res.set('Content-Type', mimeFor(check.abs));
+  res.set('Content-Length', String(st.size));
+  res.set('Content-Disposition', `attachment; filename="${filenameAttr}"`);
+  res.set('X-File-Path', check.abs);
+  res.set('X-File-Bytes', String(st.size));
+  console.log(`[RELAY] /file SERVE ${check.abs} (${st.size}B, ${mimeFor(check.abs)})`);
+  const stream = fs.createReadStream(check.abs);
+  stream.on('error', (e) => {
+    console.error('[RELAY] /file stream error:', e.message);
+    if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
+    else res.destroy(e);
+  });
+  stream.pipe(res);
+});
+
+// GET /file/list?dir=<absolute-dir>
+// Returns { ok, dir, count, entries:[{name,size,mtime,is_dir}] }.
+app.get('/file/list', (req, res) => {
+  const rawDir = req.query.dir;
+  const check = resolveAndCheck(rawDir);
+  if (!check.ok) {
+    return res.status(check.code).json({ ok: false, error: check.reason });
+  }
+  let st;
+  try { st = fs.statSync(check.abs); }
+  catch (e) { return res.status(500).json({ ok: false, error: 'stat failed: ' + e.message }); }
+  if (!st.isDirectory()) return res.status(400).json({ ok: false, error: 'path is not a directory' });
+
+  let names;
+  try { names = fs.readdirSync(check.abs); }
+  catch (e) { return res.status(500).json({ ok: false, error: 'readdir failed: ' + e.message }); }
+
+  const entries = [];
+  for (const name of names) {
+    try {
+      const full = path.join(check.abs, name);
+      const s = fs.lstatSync(full);
+      entries.push({
+        name,
+        size: s.size,
+        mtime: s.mtime.toISOString(),
+        is_dir: s.isDirectory()
+      });
+    } catch (_) {
+      // Skip entries that can't be stat'd (permission denied, etc.).
+    }
+  }
+  res.json({ ok: true, dir: check.abs, count: entries.length, entries });
+});
+
 // ── START ────────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[PC RELAY] Running on port ${PORT}`);
