@@ -1,0 +1,35 @@
+{
+  "id": "solomon_simple_query",
+  "name": "Simple informational lookup / reference question",
+  "description": "Solomon answers a read-only informational, lookup, or reference request — 'what is X', 'when did Y', 'show me Z', 'can you find W', 'resend the URL', 'what's the status of', 'how many', 'remind me what'. INTENT is to RETRIEVE existing information, NOT to build/post/send/change anything. Solomon answers from master context / mem / activity_log / db / dispatch logs / consult-log / earlier conversation — choosing the right read-only tool based on what's being asked.",
+  "handler": "solomon",
+  "categories": [],
+  "trigger_examples": [
+    "what is the current Anthropic budget",
+    "resend the YouTube OAuth URL",
+    "when did we last post on Facebook",
+    "can you find that quote about the deck job from last week",
+    "what's the status of the Klein outreach",
+    "how many active loads are in RuralRoute right now",
+    "remind me what the LLC confirmation number is",
+    "show me the last 10 things you did",
+    "what's my YouTube subscriber count",
+    "give me Caleb's last result"
+  ],
+  "prompt_template": "Solomon: answer Jed's lookup question: {{question}}. Pick the cleanest read-only tool to source the answer — master context for biographical / business / config facts, mem for live counters (YT subs / KDP / campaign state), activity_log for recent events, dispatch-shadow-log or nathan-consult-log for past routing decisions, social_log for posts, conversation history for things he said recently. Reply tersely and DO NOT take any action beyond reading. If the answer requires multiple tool reads, do them, then collapse into one short answer.",
+  "required_inputs": ["question"],
+  "optional_inputs": [],
+  "escalation_conditions": [
+    "Question is actually a build / post / send / change request that's just phrased politely (e.g. 'could you send X' — that's solomon_send_email, not simple_query)",
+    "Answer would require revealing a credential, token, or password — escalate before exposing"
+  ],
+  "irreversible": false,
+  "confidence_default": 0.92,
+  "smoke_test": {
+    "trigger_message": "what is the LLC confirmation number for Shultz Enterprises",
+    "expected_inputs_filled": ["question"],
+    "expected_handler": "solomon",
+    "expected_escalation": false
+  },
+  "notes": "Load-bearing distinction: 'send me X as a PDF' is generate_pdf_report (build/produce), NOT simple_query. 'What does my budget look like' is solomon_check_budget (specific dedicated template), NOT simple_query — simple_query is the FALLBACK for lookups that DON'T have a dedicated template. The classifier rubric in dispatch.js routes specific lookup templates first (check_budget, status_check, send_morning_brief, etc.) and falls back to simple_query for everything else lookup-shaped."
+}

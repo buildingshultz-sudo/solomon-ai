@@ -82,7 +82,41 @@ async function classifyMessage(message, templates) {
 Respond ONLY in compact JSON, no preamble, no code fences:
 {"template_id": "<id_or_null>", "confidence": 0.0..1.0, "inputs": {"var": "value", ...}, "rationale": "one sentence"}
 
-# Confidence rubric (be decisive — under-confidence wastes a Nathan API call)
+# Step 1 — INTENT classification (BEFORE matching keywords)
+
+Classify Jed's INTENT first, then match. Keywords overlap heavily between lookup / build / action templates — use the rubric below, not keyword matching.
+
+**LOOKUP intent** — Jed wants to RETRIEVE existing information from somewhere Solomon already knows. Verbs: "what is", "show me", "give me", "find", "where is", "when did", "how many", "remind me", "resend", "what's the status of", "look up", "check", "tell me". Result is read-only — no new state, no posts, no sends. Examples:
+- "what is the LLC confirmation number"        -> simple_query (or check_budget / status_check if dedicated)
+- "resend the YouTube OAuth URL"                -> simple_query
+- "when did we last post on Facebook"           -> simple_query
+- "show me my open tasks"                       -> simple_query (or /tasks slash command if dedicated)
+- "what's my YouTube subscriber count"          -> simple_query (or send_morning_brief if dedicated)
+
+**BUILD intent** — Jed wants Sam (Claude Code, that's me) to write/ship/fix CODE or a feature. Verbs: "build me", "add", "create a tool", "wire up", "implement", "fix the bug", "make it so", "ship", "scaffold". Result modifies code on the VPS. Examples:
+- "build me a /reminders slash command"         -> sam_build_feature
+- "add a Stripe audit tool"                     -> sam_build_feature
+
+**ACTION intent** — Jed wants Solomon to DO something with a side effect (post, send, reply, launch, generate). Verbs: "post", "send", "reply", "launch", "stop", "generate", "draft and send". Result is a Telegram / FB / email / image / etc. with a real-world effect. Examples:
+- "send an email to john@..."                   -> solomon_send_email
+- "post this to all socials: ..."               -> solomon_cross_post
+- "generate a book cover image"                 -> solomon_generate_image
+
+**Tiebreaker when intent is ambiguous**: prefer LOOKUP over BUILD or ACTION (cheapest fallback if you're unsure). Choosing lookup when Jed wanted build = he says "no, build it" — cheap recovery. Choosing build when he wanted lookup = unnecessary code change. So when in doubt, lookup.
+
+**Trap to avoid**: keyword overlap. "Can you find me a Stripe audit" is a LOOKUP ("find me" = retrieve), even though "Stripe audit" matches sam_stripe_audit's trigger. Look at the VERB, not the noun. "FIND the Stripe audit" = look it up; "RUN the Stripe audit" = action.
+
+# Step 2 — Pick the right LOOKUP template
+
+If the lookup hits a DEDICATED template, use it (more specific):
+- "budget" / "API spend" / "how close to hard stop" → solomon_check_budget
+- "status" / "are you up" / "system check" → solomon_status_check
+- "brief" / "scorecard" / "morning rundown" → solomon_send_morning_brief
+- "tasks" / "my open tasks" / "what's on my list" → (slash command /tasks handles this; if dispatched as natural language, falls into simple_query)
+
+Otherwise the catch-all is **simple_query** — for everything lookup-shaped that doesn't have a dedicated template. Extract Jed's question verbatim into the "question" input field.
+
+# Step 3 — Confidence rubric (be decisive — under-confidence wastes a Nathan API call)
 
 Score **0.90 or higher** when ALL of:
 - The intent is unambiguous (one template clearly matches, others are far weaker).
