@@ -10,7 +10,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons } = require('./memory');
+const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
 const { execSync } = require('child_process');
 const activityLogger = require("./activity-logger");
@@ -1071,6 +1071,70 @@ async function generateBrief(chatId) {
   await bot.sendMessage(chatId, brief, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(chatId, brief.replace(/[*_`]/g, '')));
 }
 
+// ══ JED-TASK DONE DETECTION ═══════════════════════════════════════════════
+// When Jed says "done with the IRS call" / "finished the KDP upload" / "mark
+// the FB tokens done" we fuzzy-match against open jed_tasks (via Claude, low
+// temp, structured JSON) and update status. Pattern-gated first so the regex
+// cost stays cheap on the 99% of messages that aren't completion markers.
+const _doneRegex = /(?:^|\s)(?:done\s+with|finished|completed?|wrapped\s+up|mark\b[^,.]*\bdone|knocked\s+out|crossed\s+off|that.{0,5}done)\b/i;
+async function _maybeHandleDoneMarker(chatId, text) {
+  const open = jedTasks.getOpen();
+  if (!open.length) return false; // nothing to mark — fall through
+  // Cheap-side: if the message is very long, it probably wasn't a completion
+  // signal even though it contains "done" somewhere. Cap to 280 chars.
+  if (text.length > 280) return false;
+  const catalogue = open.map(t => ({ id: t.id, priority: t.priority, task: t.task, category: t.category }));
+  let resp;
+  try {
+    resp = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 200,
+      system:
+`You match Jed's completion message to ONE open jed_task row. Respond ONLY in compact JSON:
+{"matched_id": <integer or null>, "confidence": "high"|"medium"|"low", "rationale": "one short sentence"}
+
+Pick "high" only when one task is clearly THE one (verb + noun match the task description). Pick "medium" when probable but two open tasks could fit. Pick "low" when nothing fits well — set matched_id to null. NEVER guess.`,
+      messages: [{ role: 'user', content: `Jed message: ${JSON.stringify(text)}\n\nOpen tasks:\n${JSON.stringify(catalogue, null, 2)}` }]
+    });
+  } catch (e) {
+    log('ERROR', 'JEDTASKS', 'fuzzy-match Claude call failed', { error: e.message });
+    return false;
+  }
+  budget.log({ inputTokens: resp.usage && resp.usage.input_tokens, outputTokens: resp.usage && resp.usage.output_tokens, model: MODEL });
+  const txt = (resp.content.find(b => b.type === 'text') || {}).text || '';
+  const m = txt.match(/\{[\s\S]*\}/);
+  if (!m) return false;
+  let parsed; try { parsed = JSON.parse(m[0]); } catch (_) { parsed = null; }
+  if (!parsed) return false;
+
+  // No confident match → fall through to normal handling (don't claim to mark anything).
+  if (!parsed.matched_id || parsed.confidence === 'low') return false;
+
+  // Ambiguous → ask Jed which one, don't auto-pick.
+  if (parsed.confidence === 'medium') {
+    const list = open.map(t => `  #${t.id}  ${t.task.slice(0, 90)}`).join('\n');
+    await bot.sendMessage(chatId,
+      `✋ Couldn't tell which one you meant. Reply with the task number (e.g. "mark #${open[0].id} done"):\n${list}`
+    ).catch(() => {});
+    return true; // we handled it (by asking), don't fall through
+  }
+
+  // High confidence → mark done.
+  const row = jedTasks.getById(parsed.matched_id);
+  if (!row || row.status !== 'open') {
+    await bot.sendMessage(chatId, `Hmm — task #${parsed.matched_id} not open or not found.`).catch(() => {});
+    return true;
+  }
+  jedTasks.markDone(row.id);
+  const remaining = jedTasks.getOpen().length;
+  await bot.sendMessage(chatId,
+    `✅ Marked done: #${row.id} ${row.task}\n${remaining === 0 ? '🎉 All tasks done.' : `${remaining} task${remaining === 1 ? '' : 's'} still open.`}`,
+    { parse_mode: 'Markdown' }
+  ).catch(() => bot.sendMessage(chatId, `Marked done: #${row.id} ${row.task}`).catch(() => {}));
+  activityLogger.logActivity('jed_task_done', { summary: `#${row.id} ${row.task.slice(0, 80)}` });
+  return true;
+}
+
 // ══ INLINE-BUTTON APPROVAL FLOWS ════════════════════════════════════════
 // Two flows share this plumbing:
 //   • FB comment auto-reply       (✅ Post It / ✍️ Edit)
@@ -1238,6 +1302,18 @@ bot.on('message', async (msg) => {
   // also run them through the LLM (prevents double-processing of /post, /status, etc.).
   if (text.startsWith('/')) return;
 
+  // ── DONE-DETECT INTERCEPT: Jed marking a jed_task complete ─────────────
+  // Pattern-gated first (cheap regex), then Claude fuzzy-match against the
+  // open task list (precise, single-task confirmation). Single task at a time:
+  // if ambiguous, ask which one. Routes through async helper so the rest of
+  // the message handler doesn't pay the cost on every message.
+  if (text && _doneRegex.test(text)) {
+    try {
+      const handled = await _maybeHandleDoneMarker(msg.chat.id, text);
+      if (handled) return;
+    } catch (e) { log('ERROR', 'JEDTASKS', 'done-detect failed', { error: e.message }); }
+  }
+
   // ── CROSS-POST INTERCEPT: "post this to all socials" ──────────────────
   if (/post this to all socials/i.test(text)) {
     const content = text.replace(/post this to all socials/i, '').replace(/^[\s:,\-–—]+|[\s:,\-–—]+$/g, '').trim();
@@ -1339,12 +1415,18 @@ bot.on('message', async (msg) => {
 });
 
 // ── COMMANDS ─────────────────────────────────────────────────────────────
-bot.onText(/^\/tasks/, async (msg) => {
+// /tasks -- Jed's open action items, grouped by priority. Earlier /tasks showed
+// the internal Sam build queue, which Jed never asked about; this now surfaces
+// the jed_tasks table which is what Jed actually wants when he types /tasks.
+bot.onText(/^\/tasks\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
-  const all = tasks.getAll();
-  if (!all.length) { bot.sendMessage(msg.chat.id, 'No tasks yet.'); return; }
-  const text = all.map(t => `#${t.id} [${t.status}] ${t.title}`).join('\n');
-  bot.sendMessage(msg.chat.id, `*Task Queue:*\n${text}`, { parse_mode: 'Markdown' });
+  try {
+    const out = jedTasks.forTasksCommand();
+    bot.sendMessage(msg.chat.id, out, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(msg.chat.id, out.replace(/[*_`]/g, '')));
+  } catch (e) {
+    bot.sendMessage(msg.chat.id, `❌ /tasks failed: ${e.message.slice(0, 200)}`).catch(() => {});
+  }
 });
 
 bot.onText(/^\/budget/, async (msg) => {

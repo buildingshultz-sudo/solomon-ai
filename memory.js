@@ -164,7 +164,42 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     posted_at DATETIME
   );
+  CREATE TABLE IF NOT EXISTS jed_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task TEXT NOT NULL,
+    category TEXT,
+    priority TEXT CHECK(priority IN ('high','medium','low')),
+    status TEXT CHECK(status IN ('open','done','cancelled')) DEFAULT 'open',
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    date_done TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS jed_tasks_status_idx     ON jed_tasks (status);
+  CREATE INDEX IF NOT EXISTS jed_tasks_priority_idx   ON jed_tasks (priority);
+  CREATE INDEX IF NOT EXISTS jed_tasks_date_added_idx ON jed_tasks (date_added);
 `);
+// ── jed_tasks SEED (idempotent: only inserts if table is empty) ────────────
+// Initial open-task list captured from the Jed-action items that have been
+// accumulating across sessions. Runs exactly once: count > 0 means a prior
+// instance already seeded (or Jed added rows manually), and we leave it alone.
+{
+  const existing = db.prepare('SELECT COUNT(*) AS n FROM jed_tasks').get().n;
+  if (existing === 0) {
+    const ins = db.prepare('INSERT INTO jed_tasks (task, category, priority, status, date_done) VALUES (?, ?, ?, ?, ?)');
+    const seed = [
+      ['Call IRS 800-829-4933 for 147C letter for Mercury bank', 'finance',     'high',   'open',      null],
+      ['Complete KDP Kindle manuscript re-upload',                'publishing',  'high',   'open',      null],
+      ['Generate proper Facebook Page tokens for both pages via Graph Explorer and send /setfbtoken to Solomon', 'integration', 'high', 'open', null],
+      ["Enable Gmail API at console.developers.google.com (msg 2227) then text Solomon 'gmail enabled'",         'integration', 'medium', 'open', null],
+      ['Run YouTube OAuth reauth at 167.99.237.26:3000/oauth/start', 'integration', 'medium', 'open',   null],
+      ['Run YouTube Playwright capture setup-yt-pw.ps1 in elevated PowerShell',                                  'integration', 'medium', 'open', null],
+      ['Run Instagram Playwright capture setup-ig-pw.ps1 in elevated PowerShell (after Chrome auto-kill fix lands)', 'integration', 'medium', 'open', null],
+      ['Sign up at kleintradesmanclub.com',                       'outreach',    'low',    'done',      new Date().toISOString()]
+    ];
+    const tx = db.transaction((rows) => { for (const r of rows) ins.run(...r); });
+    tx(seed);
+    console.log('[memory] seeded jed_tasks with ' + seed.length + ' initial rows (' + seed.filter(r => r[3] === 'open').length + ' open)');
+  }
+}
 // ── MESSAGES ────────────────────────────────────────────────────────────
 const messages = {
   add(role, content) {
@@ -537,4 +572,59 @@ const scheduledPosts = {
   }
 };
 
-module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db };
+// ── jed_tasks MODULE — Jed-action items (the things only Jed can do) ──────
+// Used by the morning brief, /tasks slash command, and the add_jed_task tool
+// that dispatch templates with handler 'jed-escalate' can call to drop the
+// thing into the queue automatically. Done-detection (bot.js) calls markDone
+// after Claude fuzzy-matches Jed's reply ("done with the IRS call") to a row.
+const PRIORITY_ORDER_SQL = "CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END";
+const jedTasks = {
+  add({ task, category, priority } = {}) {
+    if (!task || typeof task !== 'string' || !task.trim()) throw new Error('jedTasks.add: task (non-empty string) is required');
+    const pri = (priority === 'high' || priority === 'medium' || priority === 'low') ? priority : 'medium';
+    const info = db.prepare('INSERT INTO jed_tasks (task, category, priority) VALUES (?, ?, ?)').run(task.trim(), category || null, pri);
+    return db.prepare('SELECT * FROM jed_tasks WHERE id = ?').get(info.lastInsertRowid);
+  },
+  getById(id) {
+    return db.prepare('SELECT * FROM jed_tasks WHERE id = ?').get(id);
+  },
+  getOpen() {
+    return db.prepare(`SELECT * FROM jed_tasks WHERE status = 'open' ORDER BY ${PRIORITY_ORDER_SQL}, date_added ASC`).all();
+  },
+  getAll(limit = 100) {
+    return db.prepare(`SELECT * FROM jed_tasks ORDER BY ${PRIORITY_ORDER_SQL}, date_added ASC LIMIT ?`).all(limit);
+  },
+  markDone(id) {
+    db.prepare("UPDATE jed_tasks SET status = 'done', date_done = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'").run(id);
+    return jedTasks.getById(id);
+  },
+  markCancelled(id) {
+    db.prepare("UPDATE jed_tasks SET status = 'cancelled', date_done = CURRENT_TIMESTAMP WHERE id = ? AND status = 'open'").run(id);
+    return jedTasks.getById(id);
+  },
+  // Format the open-task section for the morning brief. 0 open → "All tasks
+  // done." 1-10 open → show all. >10 open → show top 5 + tail summary.
+  forBrief() {
+    const open = jedTasks.getOpen();
+    if (open.length === 0) return '📋 All tasks done.';
+    const tag = (p) => p === 'high' ? '[H]' : p === 'low' ? '[L]' : '[M]';
+    const show = open.length > 10 ? open.slice(0, 5) : open;
+    const lines = show.map(t => `${tag(t.priority)} ${t.task}`);
+    if (open.length > 10) lines.push(`...and ${open.length - 5} more (/tasks for full)`);
+    return `📋 OPEN TASKS (${open.length}):\n` + lines.join('\n');
+  },
+  // Format the full open list for the /tasks slash command, grouped by priority.
+  forTasksCommand() {
+    const open = jedTasks.getOpen();
+    if (open.length === 0) return '📋 *All tasks done.*';
+    const buckets = { high: [], medium: [], low: [] };
+    for (const t of open) (buckets[t.priority] || buckets.medium).push(t);
+    const out = [`📋 *${open.length} open task${open.length === 1 ? '' : 's'}*`];
+    if (buckets.high.length)   { out.push(''); out.push('*HIGH*');   for (const t of buckets.high)   out.push(`#${t.id} · ${t.task}${t.category ? `  _(${t.category})_` : ''}`); }
+    if (buckets.medium.length) { out.push(''); out.push('*MEDIUM*'); for (const t of buckets.medium) out.push(`#${t.id} · ${t.task}${t.category ? `  _(${t.category})_` : ''}`); }
+    if (buckets.low.length)    { out.push(''); out.push('*LOW*');    for (const t of buckets.low)    out.push(`#${t.id} · ${t.task}${t.category ? `  _(${t.category})_` : ''}`); }
+    return out.join('\n');
+  }
+};
+
+module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks };

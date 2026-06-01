@@ -4,7 +4,7 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
-const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts } = require('./memory');
+const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
@@ -170,6 +170,12 @@ function _attentionCount() {
 // ══════════════════════════════════════════════════════════════════════════
 async function buildMorningScorecard() {
   const lines = [];
+  // 0. Open Jed-action tasks (FIRST section per spec — always at the top).
+  try {
+    const tasksBlock = jedTasks.forBrief();
+    lines.push(tasksBlock);
+    lines.push('');
+  } catch (e) { console.error('[brief] jedTasks.forBrief failed:', e.message); }
   // 1. YouTube
   const yt = await _ytStats();
   if (yt) lines.push(`YouTube *${yt.subs.toLocaleString()}* subs · ${yt.views.toLocaleString()} views.`);

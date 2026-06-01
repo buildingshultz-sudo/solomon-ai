@@ -646,6 +646,19 @@ const TOOL_DEFINITIONS = [
   },
   // ── PHASE 8B TOOLS ──────────────────────────────────────────────────────
   {
+    name: 'add_jed_task',
+    description: "Append a Jed-only action item to the jed_tasks queue (shown in the morning brief, /tasks command). Use when a dispatch template needs to escalate something only Jed can do (legal/financial/in-person/credential-rotation) -- this surfaces it to Jed without missing it in the conversation. The task lives in solomon.db until Jed marks it done by replying 'done with <X>' or similar.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        task:     { type: 'string', description: 'Short imperative description of what Jed needs to do.' },
+        category: { type: 'string', description: 'Optional category bucket (e.g. finance, publishing, integration, outreach).' },
+        priority: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Default medium. high = blocks something else / time-sensitive, low = whenever.' }
+      },
+      required: ['task']
+    }
+  },
+  {
     name: 'log_feature_request',
     description: 'Log something Solomon needs but cannot currently do. Creates a feature request for Nathan/Manus to review.',
     input_schema: {
@@ -2688,6 +2701,16 @@ Output format (JSON):
       }
 
       // ── PHASE 8B TOOL EXECUTORS ─────────────────────────────────────────────
+      case 'add_jed_task': {
+        try {
+          const { jedTasks } = require('./memory');
+          if (!input || !input.task || typeof input.task !== 'string') return { ok: false, error: 'task required (non-empty string)' };
+          const row = jedTasks.add({ task: input.task, category: input.category || null, priority: input.priority || 'medium' });
+          return { ok: true, id: row.id, task: row.task, category: row.category, priority: row.priority, status: row.status };
+        } catch (e) {
+          return { ok: false, error: 'add_jed_task failed: ' + (e.message || String(e)).slice(0, 240) };
+        }
+      }
       case 'log_feature_request': {
         const result = featureRequests.add(input.description, input.priority || 'medium');
         return { ok: true, ...result, message: `Feature request #${result.id} logged: ${input.description.slice(0, 80)}` };
