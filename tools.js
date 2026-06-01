@@ -1101,6 +1101,18 @@ const TOOL_DEFINITIONS = [
       }
     }
   }
+  ,{
+    name: "pc_fetch_file",
+    description: "Pull a file from Jed's Windows PC (D:\\ drive bridge) to a temp file on the VPS, then return the VPS-local path. Use this when Solomon needs to read or process a PC-local file (raw footage stills, PDFs in D:\\Solomon\\reports\\, etc.) without Jed manually scp'ing it. The PC relay allowlist defaults to D:\\Solomon\\ + D:\\B ROLL FOOTAGE\\. Returns {ok, local_path, bytes, content_type, source_path}. Refuses paths outside the allowlist, paths containing '..', or files exceeding the relay's size cap.",
+    input_schema: {
+      type: "object",
+      properties: {
+        path:      { type: "string",  description: "Absolute Windows path on Jed's PC, e.g. 'D:\\Solomon\\reports\\foo.pdf'. Forward slashes accepted too." },
+        max_bytes: { type: "integer", description: "Reject the download if the file exceeds this many bytes (default 500MB)." }
+      },
+      required: ["path"]
+    }
+  }
 ];
 
 // ── LOCAL VPS FILE HELPER ────────────────────────────────────────────────
@@ -2613,6 +2625,91 @@ Output format (JSON):
             error: 'youtube_affiliate_audit_and_fill failed: ' + (e.response?.data?.error?.message || e.message || String(e)).slice(0, 240),
             scope: grantedScope
           };
+        }
+      }
+      case "pc_fetch_file": {
+        // Pull a Windows-side file from Jed's PC over the relay's GET /file route.
+        // Streams to a temp file on the VPS, returns the local path so other tools
+        // (post_via_browser, briefToPdf, etc.) can consume it without scp.
+        const relayUrl = process.env.PC_RELAY_URL;
+        const relaySecret = process.env.PC_RELAY_SECRET;
+        if (!relayUrl)    return { ok: false, error: 'PC_RELAY_URL not set in /root/solomon-v4/.env' };
+        if (!relaySecret) return { ok: false, error: 'PC_RELAY_SECRET not set' };
+        if (!input.path || typeof input.path !== 'string') {
+          return { ok: false, error: 'path required (absolute Windows path)' };
+        }
+        const maxBytes = Number.isInteger(input.max_bytes) && input.max_bytes > 0
+          ? input.max_bytes
+          : 500 * 1024 * 1024;
+        try {
+          const stream = require('stream');
+          const url = relayUrl.replace(/\/$/, '') + '/file?path=' + encodeURIComponent(input.path);
+          const resp = await axios.get(url, {
+            headers: { 'X-Secret': relaySecret },
+            responseType: 'stream',
+            timeout: 60000,
+            maxContentLength: maxBytes + 1024,
+            maxBodyLength: maxBytes + 1024,
+            validateStatus: () => true
+          });
+          if (resp.status !== 200) {
+            // Drain the stream so the socket releases.
+            let bodyText = '';
+            await new Promise((r) => {
+              resp.data.on('data', (c) => { bodyText += c.toString('utf8'); if (bodyText.length > 2000) bodyText = bodyText.slice(0,2000); });
+              resp.data.on('end', r);
+              resp.data.on('error', r);
+            });
+            let parsed = null;
+            try { parsed = JSON.parse(bodyText); } catch (_) {}
+            return {
+              ok: false,
+              http_status: resp.status,
+              error: parsed?.error || bodyText || `pc-relay returned HTTP ${resp.status}`,
+              source_path: input.path
+            };
+          }
+          const declaredLen = parseInt(resp.headers['content-length'] || resp.headers['x-file-bytes'] || '0');
+          if (declaredLen && declaredLen > maxBytes) {
+            resp.data.destroy();
+            return { ok: false, error: 'file exceeds max_bytes', declared_bytes: declaredLen, max_bytes: maxBytes };
+          }
+          const tmpDir = '/tmp/pc-fetch';
+          if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+          const basename = path.basename(input.path.replace(/\\/g, '/')) || 'file';
+          const safeBase = basename.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+          const localPath = path.join(tmpDir, Date.now() + '_' + safeBase);
+          const out = fs.createWriteStream(localPath);
+          let written = 0;
+          let oversize = false;
+          await new Promise((resolve, reject) => {
+            resp.data.on('data', (chunk) => {
+              written += chunk.length;
+              if (written > maxBytes) {
+                oversize = true;
+                resp.data.destroy();
+                out.destroy();
+              }
+            });
+            resp.data.on('end', resolve);
+            resp.data.on('error', reject);
+            out.on('error', reject);
+            resp.data.pipe(out);
+          });
+          if (oversize) {
+            try { fs.unlinkSync(localPath); } catch (_) {}
+            return { ok: false, error: 'file exceeded max_bytes mid-stream', bytes_written_before_abort: written, max_bytes: maxBytes };
+          }
+          return {
+            ok: true,
+            local_path: localPath,
+            bytes: written,
+            content_type: resp.headers['content-type'] || 'application/octet-stream',
+            source_path: input.path,
+            pc_canonical_path: resp.headers['x-file-path'] || null
+          };
+        } catch (e) {
+          return { ok: false, error: 'pc_fetch_file failed: ' + (e.message || String(e)).slice(0, 240) };
         }
       }
       case "kdp_check_royalties": {
