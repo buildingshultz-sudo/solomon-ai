@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget } = require('./memory');
+const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget, db } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -2440,34 +2440,77 @@ Output format (JSON):
             if (pages > 50) break;
           } while (pageToken);
 
-          // 3. videos.list in batches of 50 to get snippets
+          // 3. videos.list in batches of 50 to get snippets + durations
           const videos = [];
           for (let i = 0; i < videoIds.length; i += 50) {
             const batch = videoIds.slice(i, i + 50);
-            const vr = await ytGet('videos', { part: 'snippet', id: batch.join(',') });
+            const vr = await ytGet('videos', { part: 'snippet,contentDetails', id: batch.join(',') });
             for (const v of vr.data.items || []) videos.push(v);
           }
 
+          // Parse ISO 8601 PT#H#M#S duration -> seconds. YouTube empirically reports
+          // many Shorts as 61s (their duration accumulates fractional milliseconds and
+          // rounds up the truncated ISO output), so we use <= 61s as the duration
+          // threshold. We also check for the '#shorts' hashtag in the title since BS
+          // shorts uniformly include it -- a belt-and-suspenders classifier.
+          const parseIsoDuration = (iso) => {
+            if (!iso || typeof iso !== 'string') return null;
+            const m = iso.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+            if (!m) return null;
+            return (parseInt(m[1]||0)*3600) + (parseInt(m[2]||0)*60) + parseInt(m[3]||0);
+          };
+          const isShortVideo = (v, durSec) => {
+            if (durSec !== null && durSec <= 61) return true;
+            const title = v.snippet?.title || '';
+            if (/#shorts\b/i.test(title)) return true;
+            return false;
+          };
+          const skipShorts = input.skip_shorts !== false; // default TRUE
+
           // 4. classify
           const tagLower = AFFILIATE_TAG.toLowerCase();
-          const missing = [];
+          const missing = [];      // long-form, missing the tag (eligible for write)
+          const missingShorts = [];// shorts missing the tag (skipped unless skip_shorts=false)
           const haveTag = [];
+          let durationUnknownCount = 0;
           for (const v of videos) {
             const desc = v.snippet?.description || '';
             const has = desc.toLowerCase().includes(tagLower);
+            const durSec = parseIsoDuration(v.contentDetails?.duration);
+            if (durSec === null) durationUnknownCount++;
+            const isShort = isShortVideo(v, durSec);
             const summary = {
               video_id: v.id,
               title: (v.snippet?.title || '').slice(0, 120),
               published_at: v.snippet?.publishedAt || null,
+              duration_seconds: durSec,
+              is_short: isShort,
               description_length: desc.length,
               category_id: v.snippet?.categoryId || null,
               default_language: v.snippet?.defaultLanguage || null,
               default_audio_language: v.snippet?.defaultAudioLanguage || null,
               tags: v.snippet?.tags || []
             };
-            if (has) haveTag.push(summary);
-            else missing.push({ ...summary, current_description_preview: desc.slice(0, 200) });
+            if (has) {
+              haveTag.push(summary);
+            } else if (isShort && skipShorts) {
+              missingShorts.push(summary);
+            } else {
+              missing.push({ ...summary, current_description_preview: desc.slice(0, 200) });
+            }
           }
+
+          // YouTube Data API write cost: 50 units per videos.update call.
+          const QUOTA_PER_WRITE = 50;
+          const QUOTA_DAILY_DEFAULT = 10000;
+          const projectedQuota = missing.length * QUOTA_PER_WRITE;
+          const quotaSummary = {
+            writes_planned: missing.length,
+            quota_per_write: QUOTA_PER_WRITE,
+            projected_quota: projectedQuota,
+            daily_limit_default: QUOTA_DAILY_DEFAULT,
+            within_safe_buffer: projectedQuota < 8000
+          };
 
           // 5. dry-run path -- audit only, no writes
           if (dryRun) {
@@ -2478,11 +2521,27 @@ Output format (JSON):
               uploads_playlist: uploadsPlaylistId,
               affiliate_tag: AFFILIATE_TAG,
               affiliate_block_preview: affiliateBlock,
+              skip_shorts: skipShorts,
               videos_total: videos.length,
+              videos_duration_unknown: durationUnknownCount,
               videos_have_tag: haveTag.length,
-              videos_missing: missing.length,
+              videos_missing_long_form: missing.length,
+              videos_missing_shorts_skipped: missingShorts.length,
+              quota: quotaSummary,
               missing,
-              note: 'No writes performed. Re-invoke with {dry_run:false} to append the affiliate block to every missing description.'
+              missing_shorts_sample: missingShorts.slice(0, 10),
+              note: skipShorts
+                ? 'skip_shorts=true (default): shorts >= 60s are NOT eligible for writes. Re-invoke with {dry_run:false} to write to the long-form set.'
+                : 'skip_shorts=false: shorts ARE included in the write set. Re-invoke with {dry_run:false} to commit.'
+            };
+          }
+
+          // Safety gate: refuse the live write if projected quota would burn through the daily allowance.
+          if (!quotaSummary.within_safe_buffer) {
+            return {
+              ok: false,
+              error: `Projected YT API quota (${projectedQuota} units) is too close to the 10,000/day limit. Refusing to auto-execute. Use {limit: N} to chunk the writes across days, or set skip_shorts=true to narrow the set.`,
+              quota: quotaSummary
             };
           }
 
@@ -2531,16 +2590,21 @@ Output format (JSON):
             }
           }
 
+          const succeeded = modifications.filter(m => m.added_block).length;
+          const failed = modifications.filter(m => !m.added_block).length;
           return {
             ok: true,
             dry_run: false,
             channel: channelTitle,
+            skip_shorts: skipShorts,
             videos_total: videos.length,
             videos_have_tag: haveTag.length,
-            videos_missing_before: missing.length,
+            videos_missing_long_form_before: missing.length,
+            videos_shorts_skipped: missingShorts.length,
             modifications_attempted: modifications.length,
-            modifications_succeeded: modifications.filter(m => m.added_block).length,
-            modifications_failed: modifications.filter(m => !m.added_block).length,
+            modifications_succeeded: succeeded,
+            modifications_failed: failed,
+            quota_units_used: succeeded * 50,
             modifications
           };
         } catch (e) {
