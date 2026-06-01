@@ -291,6 +291,8 @@ function buildServer() {
 const app = express();
 app.set('trust proxy', true);
 app.use(express.json({ limit: '256kb' }));
+// Form-encoded bodies for OAuth /token (Claude UI may POST application/x-www-form-urlencoded)
+app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
 // /health -- public, no auth (so monitors + curl from anywhere can probe)
 app.get('/health', (req, res) => {
@@ -304,6 +306,186 @@ app.get('/health', (req, res) => {
     auth: 'bearer'
   });
 });
+
+// ── OAUTH 2.0 WRAPPER FOR CLAUDE CONNECTOR HANDSHAKE ──────────────────────
+// claude.ai's custom-connector UI expects a real OAuth authorization_code flow
+// before it will mark the connector "connected". We don't actually authenticate
+// anyone here -- this is a single-tenant wrapper that always issues the existing
+// MCP_SERVER_SECRET back to the client after the round-trip. The real auth on
+// /mcp is still the bearer check via _auth(). The OAuth endpoints themselves
+// must NOT require auth -- they ARE the handshake that produces the bearer.
+//
+// Security: the only meaningful guard is that redirect_uri must be claude.ai /
+// claude.com. Without it, anyone could initiate /authorize and trick our
+// redirect into leaking the code to an attacker's domain.
+
+const OAUTH_ISSUER = process.env.MCP_OAUTH_ISSUER || 'https://mcp.buildingshultz.com';
+const OAUTH_REDIRECT_RE = /^https:\/\/([a-z0-9-]+\.)*claude\.(ai|com)(\/|$|\?)/i;
+const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
+const oauthCodes = new Map();
+
+function _oauthNewCode() { return crypto.randomBytes(16).toString('hex'); }
+function _oauthGc() {
+  const now = Date.now();
+  for (const [k, v] of oauthCodes) if (v.expires_at <= now) oauthCodes.delete(k);
+}
+setInterval(_oauthGc, 60 * 1000).unref();
+
+function _oauthCors(req, res) {
+  const origin = req.headers.origin || '';
+  // Echo claude.* origins so credentialed requests work; fallback to * for others.
+  res.set('Access-Control-Allow-Origin', OAUTH_REDIRECT_RE.test(origin + '/') ? origin : '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.set('Access-Control-Max-Age', '600');
+}
+
+function _htmlEscape(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[ch]));
+}
+
+function _oauthErrorHtml(title, detail) {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>${_htmlEscape(title)}</title>
+<style>body{background:#1a1a1a;color:#f3ede1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem}.c{max-width:30rem;text-align:center}h1{color:#E25822;margin:0 0 .5rem;font-size:1.4rem}p{color:#b5ad9d;line-height:1.5}</style>
+</head><body><div class="c"><h1>${_htmlEscape(title)}</h1><p>${_htmlEscape(detail)}</p></div></body></html>`;
+}
+
+// Discovery: RFC 8414 (authorization server metadata)
+app.get('/.well-known/oauth-authorization-server', (req, res) => {
+  _oauthCors(req, res);
+  res.json({
+    issuer: OAUTH_ISSUER,
+    authorization_endpoint: OAUTH_ISSUER + '/authorize',
+    token_endpoint: OAUTH_ISSUER + '/token',
+    scopes_supported: ['mcp'],
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code'],
+    code_challenge_methods_supported: ['S256'],
+    token_endpoint_auth_methods_supported: ['none']
+  });
+});
+
+// Discovery: draft MCP protected-resource metadata (newer spec Claude uses)
+app.get('/.well-known/oauth-protected-resource', (req, res) => {
+  _oauthCors(req, res);
+  res.json({
+    resource: OAUTH_ISSUER + '/mcp',
+    authorization_servers: [OAUTH_ISSUER],
+    scopes_supported: ['mcp'],
+    bearer_methods_supported: ['header']
+  });
+});
+
+// CORS preflight for /token
+app.options('/token', (req, res) => { _oauthCors(req, res); res.status(204).end(); });
+
+// /authorize -- generate a short-lived code, redirect to Claude's callback
+app.get('/authorize', (req, res) => {
+  const { client_id, redirect_uri, response_type, scope, state } = req.query || {};
+
+  if (!redirect_uri || typeof redirect_uri !== 'string') {
+    return res.status(400).type('html').send(_oauthErrorHtml('Missing redirect_uri', 'The OAuth request was malformed -- no redirect_uri parameter was provided.'));
+  }
+  if (!OAUTH_REDIRECT_RE.test(redirect_uri)) {
+    console.warn(`[${APP_NAME}] /authorize REJECTED redirect_uri (not claude.ai/claude.com): ${redirect_uri.slice(0, 120)}`);
+    return res.status(400).type('html').send(_oauthErrorHtml('Invalid redirect_uri', 'Only claude.ai and claude.com redirect URIs are accepted by this connector.'));
+  }
+  if (response_type && response_type !== 'code') {
+    return res.status(400).type('html').send(_oauthErrorHtml('Unsupported response_type', 'Only response_type=code is supported.'));
+  }
+
+  const code = _oauthNewCode();
+  oauthCodes.set(code, {
+    expires_at: Date.now() + OAUTH_CODE_TTL_MS,
+    redirect_uri,
+    state: typeof state === 'string' ? state : null,
+    client_id: typeof client_id === 'string' ? client_id : null,
+    scope: typeof scope === 'string' ? scope : null
+  });
+
+  // Compose target URL preserving any existing query string in redirect_uri.
+  const sep = redirect_uri.includes('?') ? '&' : '?';
+  const stateParam = state ? '&state=' + encodeURIComponent(state) : '';
+  const target = redirect_uri + sep + 'code=' + encodeURIComponent(code) + stateParam;
+  const targetAttr = _htmlEscape(target);
+
+  console.log(`[${APP_NAME}] /authorize -> code issued (client_id=${client_id || '<none>'}, redirect=${redirect_uri.slice(0, 60)})`);
+
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.status(200).send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Solomon MCP Authorized</title>
+  <meta http-equiv="refresh" content="0;url=${targetAttr}" />
+  <meta name="robots" content="noindex" />
+  <style>
+    body { margin: 0; min-height: 100vh; background: #1a1a1a; color: #f3ede1;
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .card { max-width: 28rem; text-align: center; }
+    h1 { color: #f3ede1; font-size: 1.6rem; margin: 0 0 0.75rem; letter-spacing: -0.01em; }
+    h1 span { color: #E25822; }
+    p { color: #b5ad9d; margin: 0.5rem 0; font-size: 0.98rem; line-height: 1.5; }
+    a.btn { display: inline-block; margin-top: 1.25rem; padding: 0.7rem 1.25rem;
+            background: #E25822; color: #fff; text-decoration: none;
+            border-radius: 4px; font-weight: 600; letter-spacing: 0.02em; }
+    a.btn:hover { background: #c44a1a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Solomon MCP <span>·</span> Authorized</h1>
+    <p>Authorization successful — redirecting back to Claude...</p>
+    <p style="font-size: 0.85rem;">If you are not redirected automatically:</p>
+    <a class="btn" href="${targetAttr}">Continue to Claude</a>
+  </div>
+</body>
+</html>
+`);
+});
+
+// /token -- exchange the code for the bearer (returns the MCP_SERVER_SECRET)
+function _oauthTokenHandler(req, res) {
+  _oauthCors(req, res);
+  // Body for POST (json or form-urlencoded) -- query for GET fallback.
+  const src = req.method === 'GET' ? (req.query || {}) : (req.body || {});
+  const grant_type = src.grant_type;
+  const code = src.code;
+  const redirect_uri = src.redirect_uri;
+
+  if (grant_type !== 'authorization_code') {
+    return res.status(400).json({ error: 'unsupported_grant_type', error_description: 'grant_type must be authorization_code' });
+  }
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'invalid_grant', error_description: 'Missing code parameter' });
+  }
+  const rec = oauthCodes.get(code);
+  if (!rec) {
+    return res.status(400).json({ error: 'invalid_grant', error_description: 'Unknown or already-used code' });
+  }
+  if (rec.expires_at <= Date.now()) {
+    oauthCodes.delete(code);
+    return res.status(400).json({ error: 'invalid_grant', error_description: 'Code has expired' });
+  }
+  if (redirect_uri && rec.redirect_uri !== redirect_uri) {
+    return res.status(400).json({ error: 'invalid_grant', error_description: 'redirect_uri does not match the one used to obtain the code' });
+  }
+
+  // Single-use: delete the code immediately so it can't be replayed.
+  oauthCodes.delete(code);
+
+  console.log(`[${APP_NAME}] /token -> bearer issued (code consumed, ${oauthCodes.size} codes remaining)`);
+  res.json({
+    access_token: BEARER_TOKEN,
+    token_type: 'Bearer',
+    expires_in: 31536000, // 1 year -- single-tenant wrapper, no real session
+    scope: 'mcp'
+  });
+}
+app.post('/token', _oauthTokenHandler);
+app.get('/token', _oauthTokenHandler);
 
 // /mcp -- bearer-authed JSON-RPC over HTTP
 function _auth(req, res, next) {
