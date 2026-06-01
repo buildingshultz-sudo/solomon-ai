@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const klein = require('./klein-newsletter-watcher');
+const { consultNathan } = require('./nathan-bridge');
 
 // ── DUAL-USE GUARD ──────────────────────────────────────────────────────────
 // scheduler.js is BOTH the solomon-scheduler PM2 process AND a library that
@@ -207,6 +208,27 @@ async function buildMorningScorecard() {
 // ══════════════════════════════════════════════════════════════════════════
 async function buildEveningSummary() {
   const lines = [];
+  // 0. Autonomous-priority v2 activity in last 12h (terse, top 3 sorted by recency).
+  // Above the 4-5 fact lines so Jed sees what Solomon shipped before the metrics.
+  try {
+    const autoRows = db.prepare(`SELECT timestamp, summary FROM activity_log
+      WHERE type = 'autonomous_priority_v2'
+        AND timestamp >= datetime('now','-12 hours')
+      ORDER BY id DESC LIMIT 3`).all();
+    if (autoRows.length === 0) {
+      lines.push('🤖 No auto-actions today.');
+    } else {
+      const bits = autoRows.map(r => {
+        let s = {}; try { s = JSON.parse(r.summary || '{}'); } catch (_) {}
+        const conf = typeof s.confidence === 'number' ? s.confidence.toFixed(2) : '?';
+        const act = (s.action || '(unknown action)').slice(0, 60);
+        return `· [${conf}] ${act}`;
+      });
+      lines.push(`🤖 AUTO-ACTIONS (${autoRows.length} today):`);
+      bits.forEach(b => lines.push(b));
+    }
+  } catch (_) { /* silent — never let evening summary fail on this */ }
+
   // 1. YouTube delta (today vs prior cached subs/views)
   const yt = await _ytStats();
   if (yt) {
@@ -1178,15 +1200,20 @@ cron.schedule('0 21 * * *', async () => {
 }, { timezone: 'America/Chicago' });
 
 // ══════════════════════════════════════════════════════════════════════════
-// AUTONOMOUS PRIORITY QUEUE — every 30 min, check Solomon's idle time. If
-// idle >= 6h AND last autonomous fire was >24h ago, pick the next item from
-// the standing task list (master context sections 7 + 8) and inject it as
-// a Jed-style request via the existing /inject endpoint. Bot's auto-dispatch
-// (when live) routes it through templates -> Sam/Caleb/Nathan; conversational
-// mode falls back to askSolomon which will tool-use as needed. Either way
-// the reply lands in Jed's Telegram with clear "[AUTO-PRIORITY]" prefix.
-// Logged to activity_log type='autonomous_priority' so /stats sees it.
+// AUTONOMOUS PRIORITY QUEUE V2 — every 30 min, check Solomon's idle time.
+// If idle >= 6h AND last autonomous fire was >24h ago: ask Claude (sonnet-4.6)
+// to pick the single highest-value next action given the full 12-app roadmap,
+// open jed_tasks, recent activity, and the IronEdit-V1 gate. Route the pick
+// down a confidence ladder:
+//   conf >= 0.85 → self-assign to sam-queue
+//   0.60-0.85   → consult Nathan via nathan-bridge, re-evaluate on his input
+//   conf < 0.60 OR irreversible → escalate to Jed (Telegram)
+// Logged to activity_log type='autonomous_priority_v2' (legacy v1 type kept
+// out of the new log so /stats can distinguish round-robin v1 from Claude v2).
+// V1's loadStandingPriorities is kept exported below — bot.js may still call it.
 // ══════════════════════════════════════════════════════════════════════════
+
+// kept for backwards-compat: bot.js + /stats may still import this
 function loadStandingPriorities() {
   let text;
   try { text = fs.readFileSync(path.join(__dirname, 'shultz_master_context.md'), 'utf8'); }
@@ -1197,12 +1224,10 @@ function loadStandingPriorities() {
     const match = text.match(re);
     if (!match) continue;
     const body = match[1];
-    // Match "1. **Title** — detail" style bullets
     const bullets = [...body.matchAll(/^\d+\.\s+\*\*([^*]+)\*\*([^\n]*)/gm)];
     for (const b of bullets) {
       const title = b[1].trim().replace(/\s+/g, ' ');
       const detail = (b[2] || '').replace(/^[—\-\s]+/, '').trim();
-      // Skip items explicitly marked DONE
       if (/✅|\bDONE\b/.test(title) || /✅|\bDONE\b/.test(detail.slice(0, 40))) continue;
       items.push({ source_section: sec, title, detail });
     }
@@ -1210,37 +1235,299 @@ function loadStandingPriorities() {
   return items;
 }
 
+// V2 helpers ─────────────────────────────────────────────────────────────
+const PRIORITY_V2_MODEL = process.env.PRIORITY_V2_MODEL || 'claude-sonnet-4-6';
+// Hard-gated categories until IronEdit hits ≥1 paying customer.
+const APP2PLUS_CATEGORY_PREFIXES = [
+  'tradequote_', 'imminav_', 'ruralroute_',
+  'app2_', 'app3_', 'app4_', 'app5_', 'app6_', 'app7_', 'app8_', 'app9_', 'app10_', 'app11_', 'app12_'
+];
+
+function _ironEditPayingCustomers() {
+  try {
+    const r = db.prepare(`SELECT COUNT(*) AS n FROM activity_log WHERE type = 'ironedit_paying_customer'`).get();
+    return r ? r.n : 0;
+  } catch (_) { return 0; }
+}
+
+function _loadRoadmap12() {
+  try {
+    const text = fs.readFileSync(path.join(__dirname, 'shultz_master_context.md'), 'utf8');
+    const m = text.match(/##\s*10\.\s*THE 12-APP ROADMAP[^\n]*\n([\s\S]*?)(?=\n##\s|\n<!--\s*LOG|$)/i);
+    return m ? m[1].trim() : '';
+  } catch (_) { return ''; }
+}
+
+function _openJedTasksSummary() {
+  try {
+    const rows = jedTasks.getOpen();
+    if (!rows.length) return '(no open jed_tasks)';
+    return rows.map(t => `[${t.priority}] ${(t.task || '').slice(0, 140)}`).join('\n');
+  } catch (_) { return '(unavailable)'; }
+}
+
+function _recentActivitySummary(limit) {
+  try {
+    const rows = db.prepare(`SELECT timestamp, type, summary FROM activity_log ORDER BY id DESC LIMIT ?`).all(limit || 50);
+    return rows.map(r => `${(r.timestamp||'').slice(0,16)} ${r.type}: ${(r.summary||'').slice(0,100)}`).join('\n');
+  } catch (_) { return '(unavailable)'; }
+}
+
+function _recentCommits() {
+  try {
+    return execSync('cd /root/solomon-v4 && git log --oneline -20', { encoding: 'utf8', timeout: 5000, stdio: ['ignore','pipe','ignore'] });
+  } catch (_) { return '(git log unavailable)'; }
+}
+
+function _violatesIronEditGate(category) {
+  if (!category || typeof category !== 'string') return false;
+  const cat = category.toLowerCase();
+  return APP2PLUS_CATEGORY_PREFIXES.some(p => cat.startsWith(p));
+}
+
+async function _callClaudeForPick(extraDirective) {
+  const payingCustomers = _ironEditPayingCustomers();
+  const ironEditGateActive = payingCustomers === 0;
+  const constraintBlock = ironEditGateActive
+    ? `HARD CONSTRAINT — ACTIVE (IronEdit has 0 paying customers):
+DO NOT propose any action whose category starts with any of: ${APP2PLUS_CATEGORY_PREFIXES.join(', ')}.
+App #2 and beyond are FROZEN until IronEdit V1.0 ships with ≥1 paying customer.
+Allowed categories: ironedit_dev, solomon_ops, current_app_maint, marketing, jed_task_admin.${extraDirective ? '\n\n' + extraDirective : ''}`
+    : `IronEdit gate: cleared (${payingCustomers} paying customers logged). App #2 (TradeQuote) work is unlocked.`;
+
+  const systemPrompt = `You are picking the single highest-value next action for Solomon to take on behalf of Shultz Enterprises LLC.
+
+OUTPUT ONLY ONE JSON OBJECT — NO PREAMBLE, NO MARKDOWN, NO BACKTICKS. SCHEMA:
+{
+  "action": "<one-sentence imperative — what Solomon should do right now>",
+  "rationale": "<2-3 sentences why this is the highest-value next step>",
+  "confidence": <number 0.0-1.0>,
+  "handler": "sam" | "caleb" | "solomon" | "jed-escalate",
+  "required_inputs": { "<key>": "<value>", ... },
+  "irreversible": true | false,
+  "category": "<short tag, e.g. ironedit_dev | solomon_ops | marketing | jed_task_admin | current_app_maint>"
+}
+
+${constraintBlock}
+
+CONTEXT — 12-app roadmap (master context §10, build order non-negotiable):
+${_loadRoadmap12().slice(0, 3500)}
+
+CONTEXT — open jed_tasks (priority-grouped):
+${_openJedTasksSummary().slice(0, 2500)}
+
+CONTEXT — last 50 activity_log entries (newest first):
+${_recentActivitySummary(50).slice(0, 4000)}
+
+CONTEXT — recent commits:
+${_recentCommits().slice(0, 1500)}
+
+DECISION RULES (caller uses these — return the truthful confidence, don't game it):
+- conf >= 0.85 → Solomon self-assigns via sam-queue (no human in the loop)
+- 0.60 <= conf < 0.85 → consult Nathan
+- conf < 0.60 OR irreversible:true → escalate to Jed
+Prefer actions that (in order): move IronEdit V1 forward → keep Solomon ops healthy → market existing shipped products (YouTube/KDP/Gumroad) → process open jed_tasks.`;
+
+  const resp = await axios.post('https://api.anthropic.com/v1/messages', {
+    model: PRIORITY_V2_MODEL,
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: 'Pick the single highest-value next action right now. Return only the JSON object.' }]
+  }, {
+    headers: {
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json'
+    },
+    timeout: 30000
+  });
+  try { budget.log({ inputTokens: resp.data.usage.input_tokens, outputTokens: resp.data.usage.output_tokens, model: PRIORITY_V2_MODEL }); } catch (_) {}
+  const text = (resp.data.content?.[0]?.text || '').trim();
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Claude returned no JSON object. raw: ' + text.slice(0, 200));
+  let pick;
+  try { pick = JSON.parse(jsonMatch[0]); }
+  catch (e) { throw new Error('JSON parse failed: ' + e.message + ' | raw: ' + jsonMatch[0].slice(0, 200)); }
+  pick._iron_edit_gate_active = ironEditGateActive;
+  pick._iron_edit_paying_customers = payingCustomers;
+  return pick;
+}
+
+async function pickPriorityActionV2() {
+  let pick = await _callClaudeForPick(null);
+  if (pick._iron_edit_gate_active && _violatesIronEditGate(pick.category)) {
+    // Post-call safety: re-prompt once with a stronger directive.
+    console.warn(`[SCHEDULER] autonomous_priority_v2: Claude proposed gated category '${pick.category}' — re-prompting`);
+    pick = await _callClaudeForPick(`PREVIOUS ATTEMPT VIOLATED THE GATE by returning category='${pick.category}'. This is REJECTED. Return an action in one of the allowed categories ONLY.`);
+    if (_violatesIronEditGate(pick.category)) {
+      throw new Error(`IronEdit-gate violation: Claude returned banned category '${pick.category}' on retry. Refusing to act.`);
+    }
+  }
+  return pick;
+}
+
+function _writeSamJob(pick, sourceMeta) {
+  const SAM_QUEUE_DIR = '/root/solomon-v4/sam-queue';
+  if (!fs.existsSync(SAM_QUEUE_DIR)) fs.mkdirSync(SAM_QUEUE_DIR, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const slug = (pick.action || 'auto').slice(0, 40).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filename = `${ts}-autoprio-${slug}.json`;
+  const filepath = path.join(SAM_QUEUE_DIR, filename);
+  const job = {
+    source: 'autonomous_priority_v2',
+    queued_at: new Date().toISOString(),
+    task: pick.action,
+    rationale: pick.rationale,
+    confidence: pick.confidence,
+    handler: pick.handler,
+    inputs: pick.required_inputs || {},
+    category: pick.category,
+    irreversible: !!pick.irreversible,
+    meta: sourceMeta || {}
+  };
+  fs.writeFileSync(filepath, JSON.stringify(job, null, 2), 'utf8');
+  return filename;
+}
+
+async function _tg(text) {
+  await bot.sendMessage(OWNER_ID, text, { parse_mode: 'Markdown' })
+    .catch(() => bot.sendMessage(OWNER_ID, text.replace(/[*_`]/g, '')).catch(() => {}));
+}
+
+async function routePriorityActionV2(pick, idleH) {
+  let route, samJobId = null, nathanInput = null;
+  const confStr = (typeof pick.confidence === 'number' ? pick.confidence : 0).toFixed(2);
+  const irreversible = pick.irreversible === true;
+
+  if (irreversible || pick.handler === 'jed-escalate' || (typeof pick.confidence === 'number' && pick.confidence < 0.60)) {
+    // ESCALATE TO JED
+    route = 'jed-escalate';
+    await _tg(
+      `🤖 *Auto-priority: needs you*\n\n` +
+      `*Action:* ${pick.action}\n` +
+      `*Confidence:* ${confStr}\n` +
+      `*Handler:* ${pick.handler}${irreversible ? ' (irreversible)' : ''}\n` +
+      `*Why:* ${pick.rationale}\n\n` +
+      `*Ask Nathan:* "Should Solomon proceed with: ${pick.action}? Conf ${confStr}."`
+    );
+  } else if (pick.confidence >= 0.85) {
+    // SELF-ASSIGN
+    route = 'self-assigned';
+    samJobId = _writeSamJob(pick, { idle_hours: Math.round(idleH) });
+    await _tg(
+      `🤖 *Auto-priority: Sam queued* \`${(pick.action || '').slice(0, 80)}\` (conf ${confStr})\n` +
+      `*Job:* \`${samJobId}\`\n` +
+      `*Why:* ${(pick.rationale || '').slice(0, 220)}`
+    );
+  } else {
+    // NATHAN CONSULT (0.60 <= conf < 0.85)
+    route = 'nathan-consult';
+    try {
+      const verdict = await consultNathan({
+        task: pick.action,
+        confidence: pick.confidence,
+        context: pick.rationale,
+        proposed_action: pick.action,
+        question: 'Solomon picked this as the single highest-value next action. Should we proceed?',
+        categories: [pick.category || 'solomon_ops']
+      });
+      nathanInput = verdict;
+      if (verdict.recommendation === 'proceed') {
+        samJobId = _writeSamJob(pick, { idle_hours: Math.round(idleH), nathan_agreement: verdict.agreement });
+        await _tg(`🤖 *Auto-priority: Nathan greenlit* \`${(pick.action||'').slice(0,80)}\` → Sam queued (\`${samJobId}\`). Conf ${confStr}, Nathan agreement ${verdict.agreement.toFixed(2)}.`);
+      } else if (verdict.recommendation === 'modify' && verdict.modified_action) {
+        // Re-run confidence ladder on the modified action (blend Solomon's conf with Nathan's agreement)
+        const modifiedPick = {
+          ...pick,
+          action: verdict.modified_action,
+          confidence: Math.min(0.95, (pick.confidence + verdict.agreement) / 2)
+        };
+        if (modifiedPick.confidence >= 0.85) {
+          samJobId = _writeSamJob(modifiedPick, { idle_hours: Math.round(idleH), nathan_agreement: verdict.agreement, nathan_modified: true });
+          await _tg(`🤖 *Auto-priority: Nathan modified* — Sam queued modified action: \`${verdict.modified_action.slice(0,80)}\` (conf bumped to ${modifiedPick.confidence.toFixed(2)}, job \`${samJobId}\`).`);
+        } else {
+          route = 'jed-escalate';
+          await _tg(
+            `🤖 *Auto-priority: Nathan modified but confidence still low*\n` +
+            `*Orig:* ${pick.action}\n` +
+            `*Modified:* ${verdict.modified_action}\n` +
+            `*Concerns:* ${(verdict.concerns||[]).slice(0,3).join('; ')}`
+          );
+        }
+      } else {
+        route = 'jed-escalate';
+        await _tg(
+          `🤖 *Auto-priority: Nathan said ${verdict.recommendation}*\n` +
+          `*Action:* ${pick.action}\n` +
+          `*Concerns:* ${(verdict.concerns||[]).slice(0,3).join('; ')}\n` +
+          `*Reasoning:* ${(verdict.reasoning||'').slice(0,200)}`
+        );
+      }
+    } catch (e) {
+      console.error('[SCHEDULER] autonomous_priority_v2 nathan consult failed:', e.message);
+      route = 'jed-escalate';
+      await _tg(
+        `🤖 *Auto-priority: Nathan consult failed* — escalating.\n` +
+        `*Action:* ${pick.action}\n` +
+        `*Conf:* ${confStr}\n` +
+        `*Error:* ${e.message.slice(0, 150)}`
+      );
+    }
+  }
+
+  // Log the full decision row to activity_log
+  try {
+    db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run(
+      'autonomous_priority_v2',
+      JSON.stringify({
+        action: pick.action,
+        rationale: pick.rationale,
+        confidence: pick.confidence,
+        handler: pick.handler,
+        route_taken: route,
+        nathan_input: nathanInput,
+        sam_job_id: samJobId,
+        irreversible,
+        category: pick.category,
+        idle_hours: Math.round(idleH),
+        iron_edit_gate_active: pick._iron_edit_gate_active,
+        iron_edit_paying_customers: pick._iron_edit_paying_customers
+      })
+    );
+  } catch (e) {
+    console.error('[SCHEDULER] autonomous_priority_v2 activity_log insert failed:', e.message);
+  }
+}
+
 cron.schedule('*/30 * * * *', async () => {
   try {
-    // 1. Idle check: time since last user-driven activity.
+    // 1. Idle check (unchanged from v1)
     const last = db.prepare(`SELECT MAX(timestamp) AS t FROM activity_log WHERE type IN ('message_received','message_sent','tool_call')`).get();
     const lastTs = (last && last.t) ? new Date(last.t).getTime() : 0;
     const idleH = lastTs ? (Date.now() - lastTs) / 3_600_000 : 0;
     if (idleH < 6) return;
-    // 2. Cooldown: don't fire more than once per 24h.
+    // 2. 24h cooldown (shared with v1 last_fired_at so we don't double-fire if both somehow ran)
     const lastFired = mem.get('autonomous_priority', 'last_fired_at');
     if (lastFired && (Date.now() - new Date(lastFired).getTime()) < 24 * 3_600_000) return;
-    // 3. Priority list
-    const items = loadStandingPriorities();
-    if (!items.length) { console.log('[SCHEDULER] autonomous_priority: no items in master context §7/§8'); return; }
-    // 4. Round-robin position
-    const idx = parseInt(mem.get('autonomous_priority', 'current_index') || '0', 10);
-    const next = items[idx % items.length];
-    // 5. Synthesize a Jed-style request + POST to /inject.
-    const message = `[AUTO-PRIORITY ${idx + 1}/${items.length}] Solomon has been idle ${Math.round(idleH)}h. Picking up the next standing task from master context §${next.source_section}: "${next.title}"${next.detail ? ` — ${next.detail}` : ''}. Take it as far as you can without my input; escalate if you hit a financial/legal/irreversible step.`;
-    console.log(`[SCHEDULER] autonomous_priority firing: ${next.title.slice(0, 60)}`);
-    try {
-      await axios.post(`http://127.0.0.1:${process.env.PORT || 3000}/inject`, { text: message }, { timeout: 30000 });
-      mem.set('autonomous_priority', 'current_index', String((idx + 1) % items.length));
-      mem.set('autonomous_priority', 'last_fired_at', new Date().toISOString());
-      try {
-        db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('autonomous_priority', `${next.title.slice(0, 80)} (idx ${idx + 1}/${items.length}, idle ${Math.round(idleH)}h)`);
-      } catch (_) {}
-    } catch (e) {
-      console.error('[SCHEDULER] autonomous_priority inject failed:', e.message);
+
+    // 3. V2: Claude picks the action.
+    console.log(`[SCHEDULER] autonomous_priority_v2 firing (idle ${Math.round(idleH)}h) — calling ${PRIORITY_V2_MODEL}...`);
+    let pick;
+    try { pick = await pickPriorityActionV2(); }
+    catch (e) {
+      console.error('[SCHEDULER] autonomous_priority_v2 pick failed:', e.message);
+      await _tg(`⚠️ Auto-priority v2 pick failed: ${e.message.slice(0, 200)}`);
+      return;
     }
+    console.log(`[SCHEDULER] autonomous_priority_v2 pick: "${(pick.action||'').slice(0,80)}" conf=${pick.confidence} category=${pick.category}`);
+
+    // 4. Route through confidence ladder.
+    await routePriorityActionV2(pick, idleH);
+
+    // 5. Update cooldown.
+    mem.set('autonomous_priority', 'last_fired_at', new Date().toISOString());
   } catch (err) {
-    console.error('[SCHEDULER] autonomous_priority error:', err.message);
+    console.error('[SCHEDULER] autonomous_priority_v2 error:', err.message);
   }
 });
 
