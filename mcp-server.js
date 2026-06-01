@@ -343,7 +343,11 @@ app.get('/mcp', _auth, (req, res) => {
   res.status(405).json({ jsonrpc: '2.0', error: { code: -32000, message: 'GET /mcp not supported in stateless mode -- use POST with JSON-RPC body' } });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// Bind to 127.0.0.1 only -- nginx (running on the same host) reverse-proxies
+// public HTTPS traffic through to this loopback port. Direct external access
+// to port 3002 is intentionally blocked so the bearer-token auth is enforced
+// through exactly one ingress (nginx). Override via MCP_BIND env if needed.
+app.listen(PORT, process.env.MCP_BIND || '127.0.0.1', () => {
   console.log(`[${APP_NAME}] v${VERSION} listening on 0.0.0.0:${PORT}`);
   console.log(`[${APP_NAME}] health:  http://0.0.0.0:${PORT}/health`);
   console.log(`[${APP_NAME}] mcp:     http://0.0.0.0:${PORT}/mcp  (bearer required)`);
