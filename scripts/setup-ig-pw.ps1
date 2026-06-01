@@ -54,32 +54,29 @@ if (-not (Test-Path $userDataDir)) {
 }
 Write-Host "Chrome profile dir found: $userDataDir"
 
-# Step 3 - Chrome cannot be running while we use its profile. Detect + offer to close.
+# Step 3 - Chrome cannot be running while we use its profile. Auto-kill any
+# running Chrome processes without prompting (Ctrl+Shift+T in the new Chrome
+# restores last-closed tabs after the capture finishes). Three-tier fallback:
+#   1. Stop-Process -Force (handles same-user processes)
+#   2. taskkill /F /T /IM chrome.exe (covers process trees, can win on more)
+#   3. Bail with elevation guidance for ACL-protected sandbox helpers
 $running = Get-Process -Name 'chrome' -ErrorAction SilentlyContinue
 if ($running) {
-    Write-Host ''
-    Write-Host "[NOTICE] Google Chrome is currently running ($($running.Count) process(es))." -ForegroundColor Yellow
-    Write-Host '         Playwright needs the profile unlocked. Save any open tabs (Ctrl+Shift+T can'
-    Write-Host '         restore them later), then choose:'
-    Write-Host ''
-    Write-Host '         [Y] Close Chrome for me and continue'
-    Write-Host '         [N] Exit so I can close Chrome manually'
-    Write-Host ''
-    $answer = Read-Host 'Close Chrome now? (Y/N)'
-    if ($answer -notmatch '^(y|yes)$') {
-        Write-Host 'Exit. Close all Chrome windows manually (check the system tray too) and re-run.' -ForegroundColor Yellow
-        exit 0
-    }
-    Write-Host 'Closing Chrome...' -ForegroundColor Cyan
-    try {
-        Stop-Process -Name 'chrome' -Force -ErrorAction Stop
-    } catch {
-        Write-Host "[ERROR] Could not close Chrome: $_" -ForegroundColor Red
-        exit 1
-    }
+    Write-Host "[INFO] Closing Chrome ($($running.Count) process(es)) -- auto-kill, no prompt." -ForegroundColor Cyan
+    Stop-Process -Name 'chrome' -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
-    if (Get-Process -Name 'chrome' -ErrorAction SilentlyContinue) {
-        Write-Host '[ERROR] Chrome still running after Stop-Process. Close it manually and re-run.' -ForegroundColor Red
+    $stillRunning = (Get-Process -Name 'chrome' -ErrorAction SilentlyContinue).Count
+    if ($stillRunning -gt 0) {
+        Write-Warning "$stillRunning Chrome process(es) survived Stop-Process; trying taskkill /F /T fallback."
+        & taskkill /F /T /IM chrome.exe 2>$null | Out-Null
+        Start-Sleep -Seconds 2
+        $stillRunning = (Get-Process -Name 'chrome' -ErrorAction SilentlyContinue).Count
+    }
+    if ($stillRunning -gt 0) {
+        Write-Host "[ERROR] $stillRunning Chrome process(es) refuse to die (ACL-protected sandbox helpers)." -ForegroundColor Red
+        Write-Host '        Open an elevated PowerShell (Run as Administrator) and run:' -ForegroundColor Yellow
+        Write-Host '            Stop-Process -Name chrome -Force' -ForegroundColor Yellow
+        Write-Host '        then re-run this script.' -ForegroundColor Yellow
         exit 1
     }
     Write-Host 'Chrome closed.' -ForegroundColor Green

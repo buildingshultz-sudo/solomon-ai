@@ -23,7 +23,7 @@ scp -i C:\Users\Ashle\.ssh\hostinger_solomon root@167.99.237.26:/root/solomon-v4
 ```
 
 Then:
-1. The script checks Node + Chrome + your Chrome profile dir, and offers to close any running Chrome (it needs the profile unlocked).
+1. The script checks Node + Chrome + your Chrome profile dir, then **auto-closes any running Chrome** (no prompt — Ctrl+Shift+T in the new Chrome restores last-closed tabs after the capture finishes). If sandbox-helper Chrome processes survive (ACL-protected), it bails with a clear elevation hint.
 2. Wait a moment — the first run installs the Playwright npm package (no big browser download; we use your real Chrome).
 3. **Your Google Chrome will open** and go to instagram.com.
 4. If IG loads with your feed → you're good (you're already signed in).

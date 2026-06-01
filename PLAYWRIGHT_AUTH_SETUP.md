@@ -4,11 +4,13 @@ This is a **one-time** setup. Once done, Solomon can post to the Building Shultz
 
 You only have to do this **once per Google account**. You only have to redo it if Google logs you out (rare — usually months apart).
 
+> **Updated 2026-05-30:** The setup now drives your **real installed Google Chrome** instead of a bundled Chromium browser. This fixes the Google error *"Couldn't sign you in — this browser or app may not be secure."* There is **no longer a ~250MB browser download** — it reuses the Chrome already on your PC.
+
 ---
 
 ## What you're doing in one sentence
 
-You're logging into YouTube **once** in a special browser on your PC, then sending the saved login session file to the VPS. After that, Solomon uses your saved session to post on your behalf.
+You're logging into YouTube **once** in your real Chrome (driven by the script) on your PC, then sending the saved login session file to the VPS. After that, Solomon uses your saved session to post on your behalf.
 
 ---
 
@@ -23,14 +25,15 @@ scp -i C:\Users\Ashle\.ssh\hostinger_solomon root@167.99.237.26:/root/solomon-v4
 ```
 
 Then:
-1. Wait a moment — the first run installs Playwright + Chromium (~250MB, only happens once).
-2. A **Chromium browser window will open** and go to YouTube.
-3. **Sign in as the Google account that owns the Building Shultz brand channel** (NOT your personal account if they're different).
-4. If YouTube asks "Which channel?", pick **Building Shultz**.
-5. Once you see the YouTube home page logged in as Building Shultz, **return to the PowerShell window and press Enter**.
-6. The script saves your login session and **automatically uploads it to the VPS**. Done.
+1. The script **auto-closes any running Chrome** (no prompt — Ctrl+Shift+T in the new Chrome restores last-closed tabs after the capture finishes). If sandbox-helper Chrome processes survive (ACL-protected), it bails with a clear elevation hint.
+2. Wait a moment — the first run installs the Playwright npm package only (small, ~30s). **No big browser download** — it uses your existing Google Chrome.
+3. **Your Google Chrome will open** and go to YouTube Studio.
+4. **Sign in as the Google account that owns the Building Shultz brand channel** (NOT your personal account if they're different).
+5. If YouTube asks "Which channel?", pick **Building Shultz**.
+6. Once you see YouTube Studio logged in as Building Shultz, **return to the PowerShell window and press Enter**.
+7. The script saves your login session and **automatically uploads it to the VPS**. Done.
 
-When it's done you'll see: `✅ Uploaded .pw_state_youtube.json to VPS — Solomon can now post to YouTube community.`
+When it's done you'll see: `Done. Solomon can now post to YouTube community.`
 
 If anything fails, send me the last few lines of the PowerShell output and I'll fix it.
 
@@ -43,13 +46,12 @@ If anything fails, send me the last few lines of the PowerShell output and I'll 
    scp -i C:\Users\Ashle\.ssh\hostinger_solomon root@167.99.237.26:/root/solomon-v4/scripts/capture_yt_pw_auth.js C:\Users\Ashle\Desktop\capture_yt_pw_auth.js
    ```
 
-2. **In a new folder, install Playwright** (~250MB, one-time):
+2. **In a new folder, install Playwright** (small, one-time — no browser download):
    ```powershell
    cd C:\Users\Ashle\Desktop
    mkdir solomon-pw-auth -Force; cd solomon-pw-auth
    npm init -y
    npm install playwright
-   npx playwright install chromium
    ```
 
 3. **Move the script and run it:**
@@ -58,7 +60,7 @@ If anything fails, send me the last few lines of the PowerShell output and I'll 
    node capture_yt_pw_auth.js
    ```
 
-4. **Browser opens** → sign in to YouTube as the Building Shultz account → pick the Building Shultz channel if asked → return to PowerShell and press Enter.
+4. **Your Chrome opens** → sign in to YouTube as the Building Shultz account → pick the Building Shultz channel if asked → return to PowerShell and press Enter.
 
 5. **Upload the saved file to the VPS:**
    ```powershell
@@ -66,6 +68,15 @@ If anything fails, send me the last few lines of the PowerShell output and I'll 
    ```
 
 Done.
+
+---
+
+## If Google still says "this browser may not be secure"
+
+Rare now, but if it happens:
+1. Make sure **Google Chrome is installed** (not just Edge): https://www.google.com/chrome/
+2. In the Chrome window the script opened, try signing in again — the persistent profile means the second attempt is usually trusted.
+3. If it still blocks you, sign into YouTube in your **normal** Chrome first (so the account is "known" on this PC), then re-run Path A.
 
 ---
 
