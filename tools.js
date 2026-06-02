@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget, db } = require('./memory');
+const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget, db, jedDebts, localIntel, emailTriageDrafts } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -1111,6 +1111,16 @@ const TOOL_DEFINITIONS = [
         max_bytes: { type: "integer", description: "Reject the download if the file exceeds this many bytes (default 500MB)." }
       },
       required: ["path"]
+    }
+  }
+  ,{
+    name: "financial_snapshot",
+    description: "T0-D financial aggregator: gross-revenue snapshot for the current calendar month across all configured revenue streams (Gumroad sales from activity_log, Spreadshirt API if wired, Amazon Associates if wired) and the API cost (Anthropic usage if ADMIN key set, else activity_log token estimate). Subtracts fixed expenses and returns gross/expenses/net + 30% debt-snowball allocation directed at the current target debt. Pure read tool — does NOT mutate jed_debts (the Monday cron does that).",
+    input_schema: {
+      type: "object",
+      properties: {
+        fixed_expenses: { type: "number", description: "Override the fixed monthly expense baseline (default 3337 USD via FIXED_EXPENSES_USD env)." }
+      }
     }
   }
 ];
@@ -2711,6 +2721,87 @@ Output format (JSON):
         } catch (e) {
           return { ok: false, error: 'pc_fetch_file failed: ' + (e.message || String(e)).slice(0, 240) };
         }
+      }
+      case "financial_snapshot": {
+        // T0-D financial aggregator: gross-revenue snapshot for the current month.
+        const fixedExpenses = (typeof input.fixed_expenses === 'number' && input.fixed_expenses >= 0)
+          ? input.fixed_expenses
+          : parseFloat(process.env.FIXED_EXPENSES_USD || '3337');
+        const startOfMonth = new Date();
+        startOfMonth.setUTCDate(1); startOfMonth.setUTCHours(0,0,0,0);
+        const startIso = startOfMonth.toISOString();
+
+        // Gumroad: sum sale amounts from activity_log this month.
+        let gumroad = { sales: 0, gross_usd: 0 };
+        try {
+          const rows = db.prepare("SELECT summary FROM activity_log WHERE type='gumroad_sale' AND timestamp >= ?").all(startIso);
+          let total = 0;
+          for (const r of rows) {
+            const m = (r.summary || '').match(/\$\s*([\d.]+)/);
+            if (m) total += parseFloat(m[1]);
+          }
+          gumroad = { sales: rows.length, gross_usd: Number(total.toFixed(2)) };
+        } catch (e) { gumroad = { error: e.message }; }
+
+        // Spreadshirt: no API on Jed's plan per master context.
+        const spreadshirt = (process.env.SPREADSHIRT_API_KEY && process.env.SPREADSHIRT_API_KEY !== 'PLACEHOLDER')
+          ? { status: 'configured_but_not_wired', note: 'SPREADSHIRT_API_KEY set; no live integration in this build.' }
+          : { status: 'not_connected', note: 'No Spreadshirt API on current plan.' };
+
+        // Amazon Associates: not OAuth-wired; surface as flag-for-OAuth.
+        const amazonAssociates = (process.env.AMAZON_ASSOCIATES_TAG)
+          ? { status: 'tag_set', tag: process.env.AMAZON_ASSOCIATES_TAG, note: 'Tag known; no live earnings API. Manual check at affiliate-program.amazon.com.' }
+          : { status: 'not_connected', note: 'Flag for OAuth: needs Amazon Associates report scrape or affiliate API key.' };
+
+        // Anthropic usage: try ADMIN key, fall back to activity_log token estimate.
+        let anthropic = { source: 'budget_table' };
+        try {
+          if (process.env.ANTHROPIC_ADMIN_KEY) {
+            // Best-effort: Anthropic exposes /v1/organizations/usage_report — skip if endpoint shifts.
+            anthropic = { source: 'admin_api', note: 'ANTHROPIC_ADMIN_KEY set; live cost endpoint TBD per their API churn. Falling back to budget table for now.' };
+          }
+          const monthSpend = budget.getMonthTotal();
+          anthropic.month_spend_usd = Number(monthSpend.toFixed(2));
+        } catch (e) { anthropic.error = e.message; }
+
+        // Totals
+        const gross = (gumroad.gross_usd || 0); // Spreadshirt + Amazon return 0 contribution today
+        const expenses = fixedExpenses + (anthropic.month_spend_usd || 0);
+        const net = gross - expenses;
+        const debtAllocation = net > 0 ? Math.round(net * 0.30 * 100) / 100 : 0;
+
+        // Current snowball target
+        let currentDebt = null;
+        try { currentDebt = jedDebts.getCurrentTarget(); } catch (_) {}
+        const monthsToPayoff = (currentDebt && debtAllocation > 0)
+          ? Math.ceil(currentDebt.current_balance / debtAllocation)
+          : null;
+        const projectedDebtFreeMonths = (() => {
+          if (!debtAllocation) return null;
+          try {
+            const all = jedDebts.getActive();
+            const totalRemaining = all.reduce((s, d) => s + d.current_balance, 0);
+            return Math.ceil(totalRemaining / debtAllocation);
+          } catch (_) { return null; }
+        })();
+
+        return {
+          ok: true,
+          window: { from: startIso, to: new Date().toISOString() },
+          revenue: { gumroad, spreadshirt, amazon_associates: amazonAssociates },
+          costs: { fixed_expenses_usd: fixedExpenses, anthropic_usage: anthropic },
+          totals: {
+            gross_usd: Number(gross.toFixed(2)),
+            expenses_usd: Number(expenses.toFixed(2)),
+            net_usd: Number(net.toFixed(2)),
+            debt_allocation_usd: debtAllocation
+          },
+          snowball: {
+            current_target: currentDebt ? { name: currentDebt.name, balance: currentDebt.current_balance } : null,
+            months_to_payoff_current: monthsToPayoff,
+            projected_debt_free_months: projectedDebtFreeMonths
+          }
+        };
       }
       case "kdp_check_royalties": {
         // KDP has no real-time API on the free tier — Playwright is the substitute.

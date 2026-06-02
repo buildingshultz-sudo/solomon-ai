@@ -1677,6 +1677,63 @@ async function runPostPurchaseDrip() {
   return { ok: true, processed: due.length, sent, previewed, completed, failed };
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// T0-D MONDAY DEBT SNOWBALL — Monday 6:05 AM CT (5 min after morning brief).
+// Calls financial_snapshot to get net + 30% allocation, applies the allocation
+// to the current snowball target, celebrates payoffs, sends the 5-line brief.
+// ══════════════════════════════════════════════════════════════════════════
+async function runMondayDebtSnowball() {
+  const snap = await executeTool('financial_snapshot', {});
+  if (!snap || !snap.ok) {
+    console.error('[SCHEDULER] T0-D snapshot failed:', snap && snap.error);
+    return { ok: false, error: snap && snap.error };
+  }
+  const allocation = snap.totals.debt_allocation_usd || 0;
+  const target = snap.snowball && snap.snowball.current_target;
+
+  let paidOff = false, advancedTo = null;
+  if (target && allocation > 0) {
+    const t = jedDebts.getActive().find(d => d.name === target.name);
+    if (t) {
+      const result = jedDebts.applyPayment(t.id, allocation);
+      if (result && result.paid_off) {
+        paidOff = true;
+        const next = jedDebts.getCurrentTarget();
+        advancedTo = next ? { name: next.name, balance: next.current_balance } : null;
+        const msg = `🎉 *DEBT DESTROYED: ${t.name}!* ${advancedTo ? `Rolling to next: ${advancedTo.name} ($${advancedTo.balance.toLocaleString()}).` : 'All snowball debts paid off!!'}`;
+        await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+          .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')).catch(() => {}));
+        try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('debt_paid_off', JSON.stringify({ name: t.name, original: t.original_balance, advanced_to: advancedTo })); } catch (_) {}
+      }
+    }
+  }
+
+  // Re-fetch snapshot after the payment to surface fresh numbers.
+  const after = await executeTool('financial_snapshot', {});
+  const a = after && after.ok ? after : snap;
+  const tgt = a.snowball && a.snowball.current_target;
+  const fmt = n => n == null ? '?' : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  const monthsTotal = a.snowball && a.snowball.projected_debt_free_months;
+  const projectedDate = monthsTotal ? new Date(Date.now() + monthsTotal * 30 * 86400000).toISOString().slice(0, 10) : '?';
+  const brief = [
+    `💵 *Monday financial brief*`,
+    `Gross ${fmt(a.totals.gross_usd)} · Expenses ${fmt(a.totals.expenses_usd)} · Net ${fmt(a.totals.net_usd)}`,
+    `Debt allocation ${fmt(a.totals.debt_allocation_usd)} → ${tgt ? `${tgt.name} (${fmt(tgt.balance)} left, ~${a.snowball.months_to_payoff_current ?? '?'} months)` : 'all debts paid off 🎉'}`,
+    `Debt-free ~${projectedDate}${paidOff ? ' · ✅ payoff this cycle' : ''}`
+  ].join('\n');
+  await bot.sendMessage(OWNER_ID, brief, { parse_mode: 'Markdown' })
+    .catch(() => bot.sendMessage(OWNER_ID, brief.replace(/[*_`]/g, '')).catch(() => {}));
+
+  try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('debt_snowball_weekly', JSON.stringify({ allocation, paid_off: paidOff, advanced_to: advancedTo, projected_months: monthsTotal })); } catch (_) {}
+  return { ok: true, allocation, paid_off: paidOff, advanced_to: advancedTo };
+}
+
+cron.schedule('5 6 * * 1', async () => {
+  console.log('[SCHEDULER] T0-D Monday debt snowball running...');
+  try { await runMondayDebtSnowball(); }
+  catch (e) { console.error('[SCHEDULER] T0-D snowball cron failed:', e.message); }
+}, { timezone: 'America/Chicago' });
+
 cron.schedule('0 * * * *', async () => {
   try {
     const r = await runPostPurchaseDrip();
