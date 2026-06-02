@@ -176,6 +176,71 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS jed_tasks_status_idx     ON jed_tasks (status);
   CREATE INDEX IF NOT EXISTS jed_tasks_priority_idx   ON jed_tasks (priority);
   CREATE INDEX IF NOT EXISTS jed_tasks_date_added_idx ON jed_tasks (date_added);
+  -- T0-B Pattern Logger: learn from Jed's responses to dispatch suggestions.
+  CREATE TABLE IF NOT EXISTS jed_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    dispatch_template TEXT,
+    confidence_score REAL,
+    jed_response TEXT CHECK(jed_response IN ('approved','rejected','modified')),
+    modification_summary TEXT,
+    raw_response_text TEXT
+  );
+  CREATE INDEX IF NOT EXISTS jed_patterns_template_idx ON jed_patterns (dispatch_template);
+  CREATE INDEX IF NOT EXISTS jed_patterns_response_idx ON jed_patterns (jed_response);
+  CREATE INDEX IF NOT EXISTS jed_patterns_ts_idx       ON jed_patterns (timestamp);
+  -- T0-B per-template auto-tuned threshold override. Bounded [0.50, 0.95].
+  CREATE TABLE IF NOT EXISTS dispatch_thresholds (
+    template_id TEXT PRIMARY KEY,
+    current_threshold REAL NOT NULL,
+    last_adjusted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    sample_count INTEGER DEFAULT 0,
+    approval_rate REAL DEFAULT NULL
+  );
+  -- T0-C post-purchase email drip sequence state.
+  CREATE TABLE IF NOT EXISTS purchase_sequences (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    buyer_email TEXT NOT NULL,
+    buyer_name TEXT,
+    product_slug TEXT NOT NULL,
+    sale_amount REAL,
+    sale_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    current_step INTEGER DEFAULT 0,
+    next_send_date DATETIME,
+    status TEXT CHECK(status IN ('active','complete','unsubscribed')) DEFAULT 'active'
+  );
+  CREATE INDEX IF NOT EXISTS purchase_seq_next_idx   ON purchase_sequences (next_send_date, status);
+  CREATE INDEX IF NOT EXISTS purchase_seq_email_idx  ON purchase_sequences (buyer_email);
+  -- T0-D debt snowball state (priority-ordered, lowest first).
+  CREATE TABLE IF NOT EXISTS jed_debts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    original_balance REAL NOT NULL,
+    current_balance REAL NOT NULL,
+    priority_order INTEGER NOT NULL,
+    paid_off_at DATETIME
+  );
+  CREATE INDEX IF NOT EXISTS jed_debts_order_idx ON jed_debts (priority_order);
+  -- T0-E Local Community Intelligence raw search log (90-day TTL).
+  CREATE TABLE IF NOT EXISTS local_intel_raw (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    query TEXT NOT NULL,
+    results_json TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS local_intel_ts_idx ON local_intel_raw (timestamp);
+  -- T0-F email triage draft store (when EMAIL_TRIAGE_AUTORESPOND=false).
+  CREATE TABLE IF NOT EXISTS email_triage_drafts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    from_addr TEXT,
+    subject TEXT,
+    intent TEXT CHECK(intent IN ('ROUTINE','MEDIUM','HIGH')),
+    template_id TEXT,
+    draft_body TEXT,
+    status TEXT CHECK(status IN ('pending','sent','skipped','escalated')) DEFAULT 'pending'
+  );
+  CREATE INDEX IF NOT EXISTS email_drafts_status_idx ON email_triage_drafts (status);
 `);
 // ── jed_tasks SEED (idempotent: only inserts if table is empty) ────────────
 // Initial open-task list captured from the Jed-action items that have been
@@ -627,4 +692,141 @@ const jedTasks = {
   }
 };
 
-module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks };
+// ── T0-B: jed_patterns + dispatch_thresholds modules ────────────────────────
+const jedPatterns = {
+  log({ dispatch_template, confidence_score, jed_response, modification_summary, raw_response_text }) {
+    if (!['approved','rejected','modified'].includes(jed_response)) {
+      throw new Error('jed_response must be approved|rejected|modified');
+    }
+    const info = db.prepare(`INSERT INTO jed_patterns (dispatch_template, confidence_score, jed_response, modification_summary, raw_response_text) VALUES (?, ?, ?, ?, ?)`)
+      .run(dispatch_template || null, typeof confidence_score === 'number' ? confidence_score : null, jed_response, modification_summary || null, raw_response_text || null);
+    return info.lastInsertRowid;
+  },
+  recent(limit = 50) {
+    return db.prepare(`SELECT * FROM jed_patterns ORDER BY id DESC LIMIT ?`).all(limit);
+  },
+  // Approval rate per template over the last N days.
+  approvalRateByTemplate(daysBack = 7) {
+    return db.prepare(`
+      SELECT dispatch_template,
+             COUNT(*) AS n,
+             SUM(CASE WHEN jed_response='approved' THEN 1 ELSE 0 END) AS approved,
+             SUM(CASE WHEN jed_response='rejected' THEN 1 ELSE 0 END) AS rejected,
+             SUM(CASE WHEN jed_response='modified' THEN 1 ELSE 0 END) AS modified
+      FROM jed_patterns
+      WHERE timestamp >= datetime('now','-' || ? || ' days')
+        AND dispatch_template IS NOT NULL
+      GROUP BY dispatch_template
+    `).all(daysBack);
+  }
+};
+const DISPATCH_THRESHOLD_MIN = 0.50;
+const DISPATCH_THRESHOLD_MAX = 0.95;
+const DISPATCH_THRESHOLD_DEFAULT = parseFloat(process.env.DISPATCH_EXECUTE_THRESHOLD || '0.85');
+const dispatchThresholds = {
+  get(template_id) {
+    if (!template_id) return DISPATCH_THRESHOLD_DEFAULT;
+    const row = db.prepare(`SELECT current_threshold FROM dispatch_thresholds WHERE template_id = ?`).get(template_id);
+    return row ? row.current_threshold : DISPATCH_THRESHOLD_DEFAULT;
+  },
+  set(template_id, threshold, sampleCount, approvalRate) {
+    const t = Math.max(DISPATCH_THRESHOLD_MIN, Math.min(DISPATCH_THRESHOLD_MAX, threshold));
+    db.prepare(`INSERT INTO dispatch_thresholds (template_id, current_threshold, sample_count, approval_rate, last_adjusted_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(template_id) DO UPDATE SET current_threshold=excluded.current_threshold, sample_count=excluded.sample_count, approval_rate=excluded.approval_rate, last_adjusted_at=CURRENT_TIMESTAMP`)
+      .run(template_id, t, sampleCount || 0, typeof approvalRate === 'number' ? approvalRate : null);
+    return t;
+  },
+  all() { return db.prepare(`SELECT * FROM dispatch_thresholds ORDER BY template_id`).all(); },
+  bounds: { min: DISPATCH_THRESHOLD_MIN, max: DISPATCH_THRESHOLD_MAX, default: DISPATCH_THRESHOLD_DEFAULT }
+};
+
+// ── T0-C: purchase_sequences module ─────────────────────────────────────────
+const purchaseSequences = {
+  enrol({ buyer_email, buyer_name, product_slug, sale_amount }) {
+    if (!buyer_email || !product_slug) throw new Error('buyer_email + product_slug required');
+    // Day 0 send is immediate (next_send_date = now).
+    const info = db.prepare(`INSERT INTO purchase_sequences (buyer_email, buyer_name, product_slug, sale_amount, current_step, next_send_date, status)
+      VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP, 'active')`)
+      .run(buyer_email, buyer_name || null, product_slug, typeof sale_amount === 'number' ? sale_amount : null);
+    return info.lastInsertRowid;
+  },
+  dueNow() {
+    return db.prepare(`SELECT * FROM purchase_sequences WHERE status='active' AND next_send_date <= CURRENT_TIMESTAMP ORDER BY next_send_date ASC LIMIT 50`).all();
+  },
+  advance(id, daysUntilNext) {
+    if (daysUntilNext == null) {
+      db.prepare(`UPDATE purchase_sequences SET status='complete', current_step=current_step+1 WHERE id=?`).run(id);
+    } else {
+      db.prepare(`UPDATE purchase_sequences SET current_step=current_step+1, next_send_date=datetime('now','+' || ? || ' days') WHERE id=?`).run(daysUntilNext, id);
+    }
+  },
+  unsubscribe(buyer_email) {
+    db.prepare(`UPDATE purchase_sequences SET status='unsubscribed' WHERE buyer_email=? AND status='active'`).run(buyer_email);
+  },
+  byEmail(buyer_email, limit = 10) {
+    return db.prepare(`SELECT * FROM purchase_sequences WHERE buyer_email=? ORDER BY id DESC LIMIT ?`).all(buyer_email, limit);
+  }
+};
+
+// ── T0-D: jed_debts module ──────────────────────────────────────────────────
+const jedDebts = {
+  getAll() { return db.prepare(`SELECT * FROM jed_debts ORDER BY priority_order ASC`).all(); },
+  getActive() { return db.prepare(`SELECT * FROM jed_debts WHERE current_balance > 0 ORDER BY priority_order ASC`).all(); },
+  getCurrentTarget() { return db.prepare(`SELECT * FROM jed_debts WHERE current_balance > 0 ORDER BY priority_order ASC LIMIT 1`).get(); },
+  applyPayment(id, amount) {
+    const row = db.prepare(`SELECT * FROM jed_debts WHERE id=?`).get(id);
+    if (!row) return null;
+    const newBalance = Math.max(0, row.current_balance - amount);
+    if (newBalance === 0 && row.current_balance > 0) {
+      db.prepare(`UPDATE jed_debts SET current_balance=0, paid_off_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+    } else {
+      db.prepare(`UPDATE jed_debts SET current_balance=? WHERE id=?`).run(newBalance, id);
+    }
+    return { ...row, current_balance: newBalance, paid_off: newBalance === 0 };
+  }
+};
+// Seed jed_debts once (idempotent): the five known balances in snowball order.
+{
+  const n = db.prepare('SELECT COUNT(*) AS n FROM jed_debts').get().n;
+  if (n === 0) {
+    const ins = db.prepare(`INSERT INTO jed_debts (name, original_balance, current_balance, priority_order) VALUES (?, ?, ?, ?)`);
+    const seed = [
+      ['Comenity',         650,   650,   1],
+      ['Citi',             900,   900,   2],
+      ['Sheffield',        14372, 14372, 3],
+      ['Discover',         17001, 17001, 4],
+      ['Chase Suburban',   35341, 35341, 5]
+    ];
+    const tx = db.transaction(rows => rows.forEach(r => ins.run(...r)));
+    tx(seed);
+  }
+}
+
+// ── T0-E: local_intel_raw module ────────────────────────────────────────────
+const localIntel = {
+  saveRaw(query, results) {
+    db.prepare(`INSERT INTO local_intel_raw (query, results_json) VALUES (?, ?)`).run(query, JSON.stringify(results));
+  },
+  pruneOlderThanDays(days = 90) {
+    const info = db.prepare(`DELETE FROM local_intel_raw WHERE timestamp < datetime('now','-' || ? || ' days')`).run(days);
+    return info.changes;
+  },
+  recent(limit = 25) { return db.prepare(`SELECT id, timestamp, query FROM local_intel_raw ORDER BY id DESC LIMIT ?`).all(limit); }
+};
+
+// ── T0-F: email_triage_drafts module ────────────────────────────────────────
+const emailTriageDrafts = {
+  save({ from_addr, subject, intent, template_id, draft_body }) {
+    const info = db.prepare(`INSERT INTO email_triage_drafts (from_addr, subject, intent, template_id, draft_body) VALUES (?, ?, ?, ?, ?)`)
+      .run(from_addr || null, subject || null, intent, template_id || null, draft_body || null);
+    return info.lastInsertRowid;
+  },
+  markStatus(id, status) {
+    if (!['pending','sent','skipped','escalated'].includes(status)) throw new Error('bad status');
+    db.prepare(`UPDATE email_triage_drafts SET status=? WHERE id=?`).run(status, id);
+  },
+  pending() { return db.prepare(`SELECT * FROM email_triage_drafts WHERE status='pending' ORDER BY id DESC LIMIT 50`).all(); }
+};
+
+module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts };

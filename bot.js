@@ -10,7 +10,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks } = require('./memory');
+const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks, jedPatterns } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
 const { execSync } = require('child_process');
 const activityLogger = require("./activity-logger");
@@ -1195,6 +1195,8 @@ bot.on('callback_query', async (cq) => {
 
     if (verb === 'skip') {
       _setActionStatus(actionId, 'skipped');
+      // T0-B: log rejection pattern (⏭️ Skip).
+      try { jedPatterns.log({ dispatch_template: action.type || action.template_id || null, confidence_score: typeof action.confidence === 'number' ? action.confidence : null, jed_response: 'rejected', raw_response_text: '⏭️ skip' }); } catch (_) {}
       await bot.sendMessage(cq.message.chat.id, `⏭️ Skipped: ${action.payload?.label || action.type}.`).catch(() => {});
       return;
     }
@@ -1212,6 +1214,8 @@ bot.on('callback_query', async (cq) => {
 
     // verb === 'post' — fire immediately with the original content.
     _setActionStatus(actionId, 'posting');
+    // T0-B: log approval pattern (✅ Post / ✅ Post Now).
+    try { jedPatterns.log({ dispatch_template: action.type || action.template_id || null, confidence_score: typeof action.confidence === 'number' ? action.confidence : null, jed_response: 'approved', raw_response_text: '✅ post' }); } catch (_) {}
     let resultMsg;
     if (action.type === 'fb_reply') {
       resultMsg = await _executeFbReply(action, action.payload.suggestion);
@@ -1262,6 +1266,12 @@ bot.on('message', async (msg) => {
           let action; try { action = JSON.parse(raw); } catch (_) {}
           if (action) {
             _setActionStatus(ed.actionId, 'posting');
+            // T0-B: log modified pattern (✍️ Edit + replacement text).
+            try {
+              const orig = action.payload?.suggestion || action.payload?.body || action.payload?.text || '';
+              const modSummary = orig ? `was: "${String(orig).slice(0,80)}" → now: "${String(text).slice(0,80)}"` : `replacement: "${String(text).slice(0,160)}"`;
+              jedPatterns.log({ dispatch_template: action.type || action.template_id || null, confidence_score: typeof action.confidence === 'number' ? action.confidence : null, jed_response: 'modified', modification_summary: modSummary, raw_response_text: String(text).slice(0, 800) });
+            } catch (_) {}
             let resultMsg;
             try {
               if (action.type === 'fb_reply') resultMsg = await _executeFbReply(action, text);

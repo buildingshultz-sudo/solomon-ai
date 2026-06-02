@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { consultNathan, IRREVERSIBLE_CATEGORIES, CAUTIOUS_CATEGORIES } = require('./nathan-bridge');
+const { dispatchThresholds } = require('./memory');
 
 const TEMPLATES_DIR = path.join(__dirname, 'dispatch-templates');
 const SAM_QUEUE_DIR = path.join(__dirname, 'sam-queue');
@@ -25,8 +26,14 @@ const SHADOW_LOG_PATH = path.join(__dirname, 'dispatch-shadow-log.json');
 const MODEL = process.env.MODEL || 'claude-sonnet-4-6';
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// T0-B: per-template threshold overrides (auto-tuned weekly from jed_patterns).
+// EXECUTE_THRESHOLD is the global default; getExecuteThreshold(template_id)
+// returns the per-template override if one exists in dispatch_thresholds.
 const EXECUTE_THRESHOLD = 0.85;
 const CONSULT_THRESHOLD = 0.60;
+function getExecuteThreshold(template_id) {
+  try { return dispatchThresholds.get(template_id); } catch (_) { return EXECUTE_THRESHOLD; }
+}
 
 // ── TEMPLATE LOADING ──────────────────────────────────────────────────────
 let _templateCache = null;
@@ -278,12 +285,14 @@ async function classifyAndRoute(message, opts = {}) {
   } else if (template.handler === 'nathan-consult') {
     decision = 'consult_nathan';
     reason = `Template '${template.id}' explicitly requires Nathan consultation`;
-  } else if (classification.confidence >= EXECUTE_THRESHOLD) {
+  } else if (classification.confidence >= getExecuteThreshold(template.id)) {
+    const thr = getExecuteThreshold(template.id);
     decision = 'execute_direct';
-    reason = `Confidence ${classification.confidence.toFixed(2)} ≥ ${EXECUTE_THRESHOLD}`;
+    reason = `Confidence ${classification.confidence.toFixed(2)} ≥ ${thr.toFixed(2)} (template-specific)`;
   } else if (classification.confidence >= CONSULT_THRESHOLD) {
+    const thr = getExecuteThreshold(template.id);
     decision = 'consult_nathan';
-    reason = `Confidence ${classification.confidence.toFixed(2)} in ${CONSULT_THRESHOLD}..${EXECUTE_THRESHOLD} band`;
+    reason = `Confidence ${classification.confidence.toFixed(2)} in ${CONSULT_THRESHOLD}..${thr.toFixed(2)} band`;
   } else {
     decision = 'escalate_jed';
     reason = `Confidence ${classification.confidence.toFixed(2)} below ${CONSULT_THRESHOLD}`;

@@ -4,7 +4,7 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
-const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks } = require('./memory');
+const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
@@ -1411,14 +1411,28 @@ async function routePriorityActionV2(pick, idleH) {
       `*Ask Nathan:* "Should Solomon proceed with: ${pick.action}? Conf ${confStr}."`
     );
   } else if (pick.confidence >= 0.85) {
-    // SELF-ASSIGN
-    route = 'self-assigned';
-    samJobId = _writeSamJob(pick, { idle_hours: Math.round(idleH) });
-    await _tg(
-      `🤖 *Auto-priority: Sam queued* \`${(pick.action || '').slice(0, 80)}\` (conf ${confStr})\n` +
-      `*Job:* \`${samJobId}\`\n` +
-      `*Why:* ${(pick.rationale || '').slice(0, 220)}`
-    );
+    // SELF-ASSIGN (gated on AUTO_APPROVE_PRIORITY env)
+    const autoApprove = String(process.env.AUTO_APPROVE_PRIORITY || 'false').toLowerCase() === 'true';
+    if (autoApprove) {
+      route = 'self-assigned';
+      samJobId = _writeSamJob(pick, { idle_hours: Math.round(idleH) });
+      await _tg(
+        `🤖 *Auto-priority: Sam queued* \`${(pick.action || '').slice(0, 80)}\` (conf ${confStr})\n` +
+        `*Job:* \`${samJobId}\`\n` +
+        `*Why:* ${(pick.rationale || '').slice(0, 220)}\n` +
+        `_AUTO_APPROVE_PRIORITY=true — post-hoc notice only._`
+      );
+    } else {
+      // Default: surface to Jed for approval rather than auto-queuing.
+      route = 'jed-escalate';
+      await _tg(
+        `🤖 *Auto-priority: high-confidence pick — needs your ok*\n\n` +
+        `*Action:* ${pick.action}\n` +
+        `*Confidence:* ${confStr}\n` +
+        `*Why:* ${pick.rationale}\n\n` +
+        `Set \`AUTO_APPROVE_PRIORITY=true\` in /root/solomon-v4/.env to let me auto-queue ≥0.85 picks without asking.`
+      );
+    }
   } else {
     // NATHAN CONSULT (0.60 <= conf < 0.85)
     route = 'nathan-consult';
@@ -1531,6 +1545,95 @@ cron.schedule('*/30 * * * *', async () => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// T0-B WEEKLY PATTERN DIGEST — Sunday 8 PM CT.
+// Aggregates jed_patterns from the last 7 days, picks top approved/rejected
+// categories, recommends per-template threshold adjustments (+/- 0.05 step,
+// bounded [0.50, 0.95] in the memory module), appends a digest paragraph to
+// shultz_master_context.md under section AUTONOMY_LEARNINGS (creates section
+// header on first run). Auto-applies threshold adjustments to dispatch_thresholds.
+// ══════════════════════════════════════════════════════════════════════════
+async function generateWeeklyPatternDigest() {
+  const rows = jedPatterns.approvalRateByTemplate(7);
+  if (!rows.length) return { ok: true, note: 'No jed_patterns in last 7 days; skipping digest.' };
+
+  const sorted = rows.map(r => ({
+    template: r.dispatch_template,
+    n: r.n,
+    approved: r.approved,
+    rejected: r.rejected,
+    modified: r.modified,
+    approval_rate: r.n ? (r.approved + 0.5 * r.modified) / r.n : 0
+  }));
+
+  const topApproved = [...sorted].filter(r => r.n >= 2).sort((a, b) => b.approval_rate - a.approval_rate).slice(0, 3);
+  const topRejected = [...sorted].filter(r => r.n >= 2).sort((a, b) => a.approval_rate - b.approval_rate).slice(0, 2);
+
+  const adjustments = [];
+  for (const r of sorted) {
+    if (r.n < 3) continue; // need a few samples to move the needle
+    const cur = dispatchThresholds.get(r.template);
+    let delta = 0;
+    if (r.approval_rate >= 0.85) delta = -0.05; // Jed loves this template -> lower bar, auto-execute more
+    else if (r.approval_rate <= 0.4) delta = +0.05; // Jed rejects -> raise bar, ask more often
+    if (delta !== 0) {
+      const next = dispatchThresholds.set(r.template, cur + delta, r.n, r.approval_rate);
+      adjustments.push({ template: r.template, from: cur, to: next, samples: r.n, approval: r.approval_rate.toFixed(2) });
+    }
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  const lines = [`### ${date} — Weekly Pattern Digest (7-day window)`];
+  if (topApproved.length) lines.push(`**Top approved:** ${topApproved.map(r => `${r.template} (${r.approved}/${r.n})`).join(', ')}`);
+  if (topRejected.length) lines.push(`**Top rejected:** ${topRejected.map(r => `${r.template} (${r.rejected}/${r.n})`).join(', ')}`);
+  if (adjustments.length) {
+    lines.push(`**Threshold adjustments (${adjustments.length}):**`);
+    for (const a of adjustments) lines.push(`- ${a.template}: ${a.from.toFixed(2)} → ${a.to.toFixed(2)} (n=${a.samples}, approval=${a.approval})`);
+  } else {
+    lines.push(`**Threshold adjustments:** none — every template within the [0.40, 0.85] approval band or below 3 samples.`);
+  }
+  const digest = lines.join('\n') + '\n';
+
+  const masterPath = path.join(__dirname, 'shultz_master_context.md');
+  try {
+    let body = fs.readFileSync(masterPath, 'utf8');
+    if (!/^##\s*AUTONOMY_LEARNINGS\b/m.test(body)) {
+      // create section at end
+      body = body.trimEnd() + '\n\n## AUTONOMY_LEARNINGS\n<!-- Solomon writes here weekly via generateWeeklyPatternDigest. Append-only. -->\n';
+    }
+    body = body.trimEnd() + '\n\n' + digest;
+    fs.writeFileSync(masterPath, body, 'utf8');
+  } catch (e) {
+    console.error('[SCHEDULER] pattern digest master-context write failed:', e.message);
+  }
+
+  try {
+    db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('autonomy_learning_digest', JSON.stringify({
+      window_days: 7,
+      template_count: sorted.length,
+      adjustments_count: adjustments.length,
+      top_approved: topApproved.map(r => r.template),
+      top_rejected: topRejected.map(r => r.template)
+    }));
+  } catch (_) {}
+
+  return { ok: true, samples: sorted.length, adjustments, top_approved: topApproved, top_rejected: topRejected, digest };
+}
+
+cron.schedule('0 20 * * 0', async () => {
+  console.log('[SCHEDULER] T0-B weekly pattern digest running...');
+  try {
+    const r = await generateWeeklyPatternDigest();
+    const msg = r.note
+      ? `📊 *Weekly Pattern Digest:* ${r.note}`
+      : `📊 *Weekly Pattern Digest (7d)*\nTemplates seen: ${r.samples}\nThreshold adjustments: ${r.adjustments.length}\nTop approved: ${(r.top_approved||[]).map(x=>x.template).join(', ') || '(none)'}\nTop rejected: ${(r.top_rejected||[]).map(x=>x.template).join(', ') || '(none)'}\nFull digest appended to shultz_master_context.md → AUTONOMY_LEARNINGS.`;
+    await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')).catch(() => {}));
+  } catch (err) {
+    console.error('[SCHEDULER] pattern digest failed:', err.message);
+  }
+}, { timezone: 'America/Chicago' });
+
 // ── EXPORTS (callable by bot.js / tools.js on demand) ──────────────────────
 // These were always declared above but never exported, so Solomon could not
 // invoke them on demand (e.g. for an on-demand brief or weekly repurpose).
@@ -1544,7 +1647,8 @@ module.exports = {
   getYouTubeAccessToken,
   loadCampaignDays,
   getStaleTaskCount,
-  loadStandingPriorities
+  loadStandingPriorities,
+  generateWeeklyPatternDigest
 };
 
 // Startup banner only fires when scheduler.js is the main module (PM2 process).
