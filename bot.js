@@ -10,7 +10,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks, jedPatterns } = require('./memory');
+const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks, jedPatterns, purchaseSequences } = require('./memory');
 const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
 const { execSync } = require('child_process');
 const activityLogger = require("./activity-logger");
@@ -2164,6 +2164,21 @@ app.post('/webhooks/gumroad/:secret', express.urlencoded({ extended: true }), as
     .catch(() => bot.sendMessage(OWNER_ID, message.replace(/[*_`]/g, '')));
   log('INFO', 'GUMROAD', 'Sale celebrated', { product, amount, currency, test, refunded });
   activityLogger.logActivity('gumroad_sale', { summary: `${product} ${currency} $${amount}` });
+  // T0-C: enrol buyer in post-purchase email drip (skip refunds + test pings).
+  if (!refunded && !test && b.email) {
+    try {
+      const slug = (b.permalink || b.product_permalink || (product || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-')).slice(0, 80);
+      const seqId = purchaseSequences.enrol({
+        buyer_email: b.email,
+        buyer_name: b.full_name || null,
+        product_slug: slug,
+        sale_amount: isNaN(priceCents) ? null : priceCents / 100
+      });
+      log('INFO', 'GUMROAD', 'Enroled in email sequence', { sequence_id: seqId, buyer: b.email, product: slug });
+    } catch (e) {
+      log('ERROR', 'GUMROAD', 'Email sequence enrol failed', { error: e.message });
+    }
+  }
   res.status(200).send('ok');
 });
 

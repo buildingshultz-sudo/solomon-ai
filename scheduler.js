@@ -1620,6 +1620,72 @@ async function generateWeeklyPatternDigest() {
   return { ok: true, samples: sorted.length, adjustments, top_approved: topApproved, top_rejected: topRejected, digest };
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// T0-C POST-PURCHASE EMAIL DRIP — hourly. Picks up purchase_sequences rows
+// whose next_send_date <= now, renders the Day 0/3/7/14 template, sends via
+// the send_email tool when EMAIL_SEQUENCE_ACTIVE=true; otherwise Telegrams a
+// preview to Jed and logs the would-send. Advances current_step + sets the
+// next_send_date according to STEP_OFFSETS from email-sequences.js.
+// ══════════════════════════════════════════════════════════════════════════
+const _emailSeq = require('./email-sequences');
+
+async function runPostPurchaseDrip() {
+  const due = purchaseSequences.dueNow();
+  if (!due.length) return { ok: true, processed: 0 };
+  const active = String(process.env.EMAIL_SEQUENCE_ACTIVE || 'false').toLowerCase() === 'true';
+  let sent = 0, previewed = 0, completed = 0, failed = 0;
+
+  for (const row of due) {
+    const rendered = _emailSeq.renderEmail(row);
+    if (!rendered) {
+      // Out-of-bounds step (shouldn't happen) — mark complete and move on.
+      purchaseSequences.advance(row.id, null);
+      completed++;
+      continue;
+    }
+
+    if (active) {
+      try {
+        await executeTool('send_email', {
+          to: row.buyer_email,
+          subject: rendered.subject,
+          body: rendered.body
+        });
+        try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('email_sequence_sent', JSON.stringify({ sequence_id: row.id, step: row.current_step, to: row.buyer_email, subject: rendered.subject })); } catch (_) {}
+        sent++;
+      } catch (e) {
+        failed++;
+        console.error('[SCHEDULER] email_sequence send failed:', e.message);
+        try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('email_sequence_failed', JSON.stringify({ sequence_id: row.id, step: row.current_step, error: e.message.slice(0, 200) })); } catch (_) {}
+        continue; // do NOT advance step on failure so it retries next hour
+      }
+    } else {
+      // Preview mode: Telegram Jed the would-send + log it.
+      try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('email_sequence_preview', JSON.stringify({ sequence_id: row.id, step: row.current_step, to: row.buyer_email, subject: rendered.subject })); } catch (_) {}
+      const tg = `📧 *[PREVIEW]* Post-purchase email ready (EMAIL_SEQUENCE_ACTIVE=false)\n*To:* ${row.buyer_email}\n*Product:* ${row.product_slug}\n*Step:* Day ${[0,3,7,14][row.current_step] ?? row.current_step}\n*Subject:* ${rendered.subject}\n\n${rendered.body.slice(0, 800)}${rendered.body.length > 800 ? '\n…' : ''}`;
+      await bot.sendMessage(OWNER_ID, tg, { parse_mode: 'Markdown' })
+        .catch(() => bot.sendMessage(OWNER_ID, tg.replace(/[*_`]/g, '')).catch(() => {}));
+      previewed++;
+    }
+
+    // Advance step regardless of send/preview path (preview counts as "delivered" for sequencing).
+    const offset = _emailSeq.STEP_OFFSETS[row.current_step];
+    purchaseSequences.advance(row.id, offset);
+    if (offset === null) completed++;
+  }
+
+  return { ok: true, processed: due.length, sent, previewed, completed, failed };
+}
+
+cron.schedule('0 * * * *', async () => {
+  try {
+    const r = await runPostPurchaseDrip();
+    if (r.processed) console.log(`[SCHEDULER] T0-C email drip: ${r.processed} due — sent=${r.sent||0} preview=${r.previewed||0} complete=${r.completed||0} fail=${r.failed||0}`);
+  } catch (e) {
+    console.error('[SCHEDULER] T0-C email drip error:', e.message);
+  }
+});
+
 cron.schedule('0 20 * * 0', async () => {
   console.log('[SCHEDULER] T0-B weekly pattern digest running...');
   try {
