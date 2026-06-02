@@ -1734,6 +1734,92 @@ cron.schedule('5 6 * * 1', async () => {
   catch (e) { console.error('[SCHEDULER] T0-D snowball cron failed:', e.message); }
 }, { timezone: 'America/Chicago' });
 
+// ══════════════════════════════════════════════════════════════════════════
+// T0-E LOCAL COMMUNITY INTELLIGENCE — Sunday 7 PM CT.
+// 5 Serper searches across Valparaiso / Porter County trades + AI signals.
+// Filter ad/franchise noise. Claude (sonnet-4.6) summarizes top 3 with
+// opportunity + why-it-matters + recommended-next-action. Raw results stored
+// in local_intel_raw with 90-day TTL (daily pruner runs at 4 AM CT below).
+// ══════════════════════════════════════════════════════════════════════════
+const LOCAL_INTEL_QUERIES = [
+  'contractor Valparaiso Indiana',
+  'construction permits Porter County Indiana',
+  'trades business Valparaiso 2026',
+  'pipefitter OR plumber OR electrician Valparaiso hiring',
+  'AI tools contractors Indiana'
+];
+
+async function runLocalIntel() {
+  if (!process.env.SERPER_API_KEY || process.env.SERPER_API_KEY === 'PLACEHOLDER') {
+    return { ok: false, error: 'SERPER_API_KEY not configured' };
+  }
+  const allResults = [];
+  for (const q of LOCAL_INTEL_QUERIES) {
+    try {
+      const sr = await axios.post('https://google.serper.dev/search', { q, num: 10 }, {
+        headers: { 'X-API-KEY': process.env.SERPER_API_KEY, 'Content-Type': 'application/json' },
+        timeout: 15000
+      });
+      const organic = (sr.data && sr.data.organic) || [];
+      // Drop obvious ad / franchise / aggregator domains
+      const noise = /(yelp|angi|homeadvisor|thumbtack|bbb\.org|yellowpages|facebook\.com\/pages|linkedin\.com\/company|indeed\.com)/i;
+      const filtered = organic.filter(o => o.link && !noise.test(o.link)).slice(0, 6);
+      try { localIntel.saveRaw(q, filtered); } catch (_) {}
+      allResults.push({ query: q, count: filtered.length, results: filtered });
+    } catch (e) {
+      allResults.push({ query: q, error: (e.response?.data?.message || e.message).slice(0, 200) });
+    }
+  }
+  const totalHits = allResults.reduce((s, r) => s + (r.count || 0), 0);
+  if (totalHits === 0) {
+    return { ok: true, hits: 0, summary: 'No fresh local signals this week.' };
+  }
+
+  // Claude summary
+  const corpus = allResults.map(r => {
+    if (r.error) return `[${r.query}] ERROR: ${r.error}`;
+    const items = (r.results || []).map(o => `- ${o.title}\n  ${o.link}\n  ${(o.snippet || '').slice(0, 200)}`).join('\n');
+    return `## ${r.query}\n${items || '(no kept results)'}`;
+  }).join('\n\n').slice(0, 8000);
+
+  let summary = '(Claude summary unavailable)';
+  try {
+    const resp = await axios.post('https://api.anthropic.com/v1/messages', {
+      model: process.env.PRIORITY_V2_MODEL || 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      system: `You are filtering local-community search results for Jedidiah Shultz (Building Shultz, Valparaiso Indiana — tradesman, AI-for-trades focus). Output exactly the top 3 opportunities in plain English. NO preamble, NO markdown headers. Each opportunity as:\n\n*<one-line opportunity>*\nWhy it matters to Jed: <one sentence>\nNext action: <one imperative>\n\n(blank line between each of the 3)\n\nIgnore generic franchise/ad listings. Prefer: new openings, large permits, expansions, anyone publicly asking about AI/software tools, hiring shifts that signal a labor crunch you could help fix with software.`,
+      messages: [{ role: 'user', content: 'Top 3 actionable opportunities from this week\\u2019s local search results:\n\n' + corpus }]
+    }, {
+      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      timeout: 30000
+    });
+    try { budget.log({ inputTokens: resp.data.usage.input_tokens, outputTokens: resp.data.usage.output_tokens, model: 'claude-sonnet-4-6' }); } catch (_) {}
+    summary = (resp.data.content?.[0]?.text || '').trim() || summary;
+  } catch (e) {
+    console.error('[SCHEDULER] T0-E Claude summarize failed:', e.message);
+  }
+  return { ok: true, hits: totalHits, summary, queries: allResults.length };
+}
+
+cron.schedule('0 19 * * 0', async () => {
+  console.log('[SCHEDULER] T0-E local-intel running...');
+  try {
+    const r = await runLocalIntel();
+    if (!r.ok) return console.error('[SCHEDULER] T0-E:', r.error);
+    const msg = `🏘️ *Local intel — Valpo / Porter County* (${r.hits} signals across ${r.queries||0} queries)\n\n${r.summary}`;
+    await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')).catch(() => {}));
+  } catch (err) {
+    console.error('[SCHEDULER] T0-E cron failed:', err.message);
+  }
+}, { timezone: 'America/Chicago' });
+
+// Daily 4 AM CT: prune local_intel_raw older than 90 days.
+cron.schedule('0 4 * * *', () => {
+  try { const n = localIntel.pruneOlderThanDays(90); if (n) console.log(`[SCHEDULER] T0-E pruned ${n} old local_intel_raw rows`); }
+  catch (_) {}
+}, { timezone: 'America/Chicago' });
+
 cron.schedule('0 * * * *', async () => {
   try {
     const r = await runPostPurchaseDrip();
