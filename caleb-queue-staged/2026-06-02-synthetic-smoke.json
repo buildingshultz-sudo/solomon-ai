@@ -1,0 +1,31 @@
+{
+  "task_id": "2026-06-02-synthetic-smoke",
+  "task": "Caleb runner synthetic smoke test: navigate to example.com, screenshot, assert title, run a benign powershell echo",
+  "template_id": "synthetic_runner_smoke",
+  "handler": "caleb",
+  "priority": "low",
+  "dispatched_at": "2026-06-02T12:00:00.000Z",
+  "received_at": null,
+  "status": "pending",
+  "auth_context": "none",
+  "headless": true,
+  "variables": {
+    "purpose": "Verifies caleb-runner.js step interpreter (navigate, screenshot, read_dom, assert, powershell) end-to-end without needing any captured browser auth state."
+  },
+  "caleb_steps": [
+    { "action": "navigate", "url": "https://example.com", "wait_until": "networkidle", "timeout_ms": 15000 },
+    { "action": "screenshot", "name": "example-loaded", "full_page": true },
+    { "action": "read_dom", "selector": "h1", "into": "page_title_text" },
+    { "action": "assert", "condition": "contains", "value": "Example Domain", "expected": "Example" },
+    { "action": "navigate", "url": "https://github.com", "wait_until": "domcontentloaded", "timeout_ms": 15000 },
+    { "action": "screenshot", "name": "github-loaded" },
+    { "action": "powershell", "command": "Write-Output 'caleb-runner smoke OK'; Get-Date -Format 'yyyy-MM-ddTHH:mm:ssZ'", "timeout_ms": 5000 }
+  ],
+  "escalation_conditions": [
+    "If any step fails the entire smoke is considered failed -- read the .result.json sidecar for the step_idx that broke."
+  ],
+  "retry_policy": { "max_retries": 0, "retry_categories": [], "no_retry_categories": ["*"] },
+  "irreversible": false,
+  "confidence_default": 1.0,
+  "notes": "Drop this into C:\\Users\\Ashle\\Solomon\\caleb-queue\\ to verify the runner. Auth_context=none means no storageState; opens a clean Chromium. Expected: result.json with status=completed, 7 steps all ok, screenshots in caleb-queue\\screenshots\\2026-06-02-synthetic-smoke\\."
+}

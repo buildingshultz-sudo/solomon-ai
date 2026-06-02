@@ -1,0 +1,18 @@
+{
+  "name": "pc-relay",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Solomon PC-side relay (Windows). Express server + Playwright-driven caleb-runner.",
+  "main": "pc-relay.js",
+  "scripts": {
+    "start": "node pc-relay.js",
+    "runner": "node caleb-runner.js",
+    "postinstall": "npx playwright install chromium"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.49.0"
+  }
+}
