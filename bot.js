@@ -11,6 +11,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks, jedPatterns, purchaseSequences } = require('./memory');
+const { formatLongResponse } = require('./response-formatter');
 const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
 const { execSync } = require('child_process');
 const activityLogger = require("./activity-logger");
@@ -281,6 +282,29 @@ try { require('fs').writeFileSync(require('path').join(__dirname, '.bot-start-ti
 // Splits at paragraph boundaries (double newline). Never duplicates content.
 async function sendLongMessage(chatId, text, opts = {}) {
   const MAX_LEN = 4000;
+
+  // T2 long-response wrapper: any text over LONG_RESPONSE_THRESHOLD (default
+  // 800 chars) gets written to a .md file + delivered as a Telegram document
+  // attachment. Callers opt out with opts.format === 'inline'.
+  try {
+    const fmt = await formatLongResponse(text, {
+      context_label: opts.context_label || 'solomon-reply',
+      format: opts.format,
+      threshold: opts.long_threshold
+    });
+    if (fmt.long) {
+      try {
+        await bot.sendDocument(chatId, fmt.file_path, { caption: fmt.summary_line });
+        return;
+      } catch (e) {
+        // Telegram document send failed (network blip, file too big, etc.) —
+        // fall through to inline chunking so Jed still gets the reply.
+        log && log('WARN', 'LONG-WRAP', 'sendDocument failed, falling back to inline chunking', { error: e.message });
+      }
+    }
+  } catch (e) {
+    // formatter itself errored — keep going with inline chunking
+  }
 
   // Helper: send one chunk with Markdown fallback
   async function sendChunk(chunk) {
@@ -1916,7 +1940,8 @@ app.post('/inject', async (req, res) => {
   log('INFO', 'INJECT', text.slice(0, 100));
   try {
     const reply = await askSolomon(text);
-    await bot.sendMessage(OWNER_ID, reply);
+    // T2: route through long-response wrapper too (inject can return long replies).
+    await sendLongMessage(OWNER_ID, reply, { context_label: 'inject' });
     res.json({ ok: true, reply });
   } catch (err) {
     log('ERROR', 'INJECT', 'Inject error', { error: err.message });
