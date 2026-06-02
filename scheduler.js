@@ -4,7 +4,7 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
-const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts, solomonDocuments } = require('./memory');
+const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts, solomonDocuments, fbTokenMetadata } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
@@ -191,6 +191,17 @@ async function buildMorningScorecard() {
   const tag = _campaignTag();
   if (tag) lines.push(`Campaign: ${tag}.`);
   else     lines.push(`Campaign idle.`);
+  // 3b. FB token expiry warning (only when <= 14d, else silent)
+  try {
+    const tokRows = fbTokenMetadata.all();
+    const warnings = [];
+    for (const r of tokRows) {
+      if (!r.expires_at) continue;
+      const days = Math.floor((new Date(r.expires_at).getTime() - Date.now()) / 86400000);
+      if (days <= 14) warnings.push(`${r.page_key} expires in ${days}d`);
+    }
+    if (warnings.length) lines.push(`📱 FB tokens: ${warnings.join(' · ')}.`);
+  } catch (_) { /* don't let token-meta read break the brief */ }
   // 4. Budget
   const monthSpend = budget.getMonthTotal();
   const hardStop = parseFloat(process.env.MONTHLY_BUDGET_HARD_STOP || '100');
@@ -2189,6 +2200,73 @@ setTimeout(() => {
   } catch (_) {}
 }, 10_000).unref();
 
+// ══════════════════════════════════════════════════════════════════════════
+// FB TOKEN EXPIRY MONITOR — Sunday 10 AM CT.
+// Reads fb_token_metadata for both pages, alerts per tier:
+//   <= 7 days  -> 🚨 URGENT (refresh NOW, posting will break)
+//   <= 14 days AND > 7 -> 🟡 HEADS UP (refresh whenever convenient)
+//   > 14 days  -> silent (healthy)
+// Dedup: 1 alert per (page, tier) per ISO week via mem('fb_token_alert_fired').
+// ══════════════════════════════════════════════════════════════════════════
+function _isoWeek(d = new Date()) {
+  // ISO week key: YYYY-W## (Monday-based). Cheap dedup key.
+  const dt = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((dt - yearStart) / 86400000) + 1) / 7);
+  return dt.getUTCFullYear() + '-W' + String(weekNum).padStart(2, '0');
+}
+
+async function checkFbTokenExpiry() {
+  const out = { checked: [], alerts_fired: [], suppressed: [] };
+  let rows;
+  try { rows = fbTokenMetadata.all(); }
+  catch (e) { console.error('[SCHEDULER] fb_token_metadata read failed:', e.message); return { ok: false, error: e.message }; }
+  if (!rows.length) {
+    console.log('[SCHEDULER] FB token expiry monitor: no token metadata recorded yet (run /setfbtoken first).');
+    return { ok: true, ...out, note: 'no metadata rows' };
+  }
+  const weekKey = _isoWeek();
+  for (const r of rows) {
+    if (!r.expires_at) { out.checked.push({ page: r.page_key, tier: 'unknown_no_expiry' }); continue; }
+    const expiresMs = new Date(r.expires_at).getTime();
+    const days = Math.floor((expiresMs - Date.now()) / 86400000);
+    out.checked.push({ page: r.page_key, days, expires_at: r.expires_at });
+    let tier = null;
+    if (days <= 7)  tier = 'urgent';
+    else if (days <= 14) tier = 'headsup';
+    if (!tier) continue;
+    const memKey = `${r.page_key}_${tier}_${weekKey}`;
+    if (mem.get('fb_token_alert_fired', memKey)) {
+      out.suppressed.push({ page: r.page_key, tier, reason: 'already fired this week' });
+      continue;
+    }
+    const expDate = r.expires_at.slice(0, 10);
+    const refreshSteps =
+      `1) developers.facebook.com/tools/explorer → ` +
+      `2) Select the *Solomon* app → ` +
+      `3) Select the *${r.page_key}* page from the User/Page dropdown → ` +
+      `4) Generate Access Token → ` +
+      `5) Telegram \`/setfbtoken ${r.page_key} <token>\` to Solomon. Auto-exchange + persist runs on send.`;
+    const msg = tier === 'urgent'
+      ? `🚨 *URGENT:* ${r.page_key} FB token expires in *${days} days* (${expDate}). *Posting will break.* Refresh NOW:\n${refreshSteps}`
+      : `🟡 *Heads up:* ${r.page_key} FB token expires in *${days} days* (${expDate}). Refresh whenever convenient — same steps via /tools/explorer + /setfbtoken.`;
+    await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')).catch(() => {}));
+    mem.set('fb_token_alert_fired', memKey, new Date().toISOString());
+    out.alerts_fired.push({ page: r.page_key, tier, days, expires_at: r.expires_at });
+    try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('fb_token_expiry_alert', JSON.stringify({ page: r.page_key, tier, days, expires_at: r.expires_at })); } catch (_) {}
+  }
+  return { ok: true, ...out };
+}
+
+cron.schedule('0 10 * * 0', async () => {
+  console.log('[SCHEDULER] FB token expiry weekly check running...');
+  try { const r = await checkFbTokenExpiry(); console.log('[SCHEDULER] FB token expiry:', JSON.stringify(r)); }
+  catch (e) { console.error('[SCHEDULER] FB token expiry cron failed:', e.message); }
+}, { timezone: 'America/Chicago' });
+
 // ── EXPORTS (callable by bot.js / tools.js on demand) ──────────────────────
 // These were always declared above but never exported, so Solomon could not
 // invoke them on demand (e.g. for an on-demand brief or weekly repurpose).
@@ -2207,7 +2285,8 @@ module.exports = {
   loadCampaignConfig,
   saveCampaignConfig,
   matchSkipTopic,
-  scanDocumentsCron
+  scanDocumentsCron,
+  checkFbTokenExpiry
 };
 
 // Startup banner only fires when scheduler.js is the main module (PM2 process).
