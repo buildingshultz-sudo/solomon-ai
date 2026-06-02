@@ -1114,6 +1114,29 @@ const TOOL_DEFINITIONS = [
     }
   }
   ,{
+    name: "caleb_dispatch",
+    description: "T0-G: dispatch a Caleb task to the PC relay (Cowork agent picks it up from C:\\Users\\Ashle\\Solomon\\caleb-queue\\). Used by the 4 Caleb dispatch templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload). Signs the request with HMAC-SHA256(PC_RELAY_SECRET) when PC_RELAY_HMAC=true. Returns {ok, task_id, file, queue_dir}.",
+    input_schema: {
+      type: "object",
+      properties: {
+        template_id: { type: "string",  description: "Caleb template id, e.g. caleb_affiliate_link_verify." },
+        variables:   { type: "object",  description: "Key/value map of filled inputs the template needs." },
+        priority:    { type: "string",  enum: ["high","normal","low"], description: "Caleb-queue priority hint (default normal)." }
+      },
+      required: ["template_id"]
+    }
+  }
+  ,{
+    name: "caleb_queue_status",
+    description: "T0-G: list pending Caleb-queue jobs on the PC relay (or one specific task by task_id). Calls the relay's GET /caleb-task/queue endpoint. Returns {ok, queue_dir, count, files:[{filename,size,mtime}]}.",
+    input_schema: {
+      type: "object",
+      properties: {
+        task_id: { type: "string", description: "Optional task id to filter to one job." }
+      }
+    }
+  }
+  ,{
     name: "financial_snapshot",
     description: "T0-D financial aggregator: gross-revenue snapshot for the current calendar month across all configured revenue streams (Gumroad sales from activity_log, Spreadshirt API if wired, Amazon Associates if wired) and the API cost (Anthropic usage if ADMIN key set, else activity_log token estimate). Subtracts fixed expenses and returns gross/expenses/net + 30% debt-snowball allocation directed at the current target debt. Pure read tool — does NOT mutate jed_debts (the Monday cron does that).",
     input_schema: {
@@ -2720,6 +2743,52 @@ Output format (JSON):
           };
         } catch (e) {
           return { ok: false, error: 'pc_fetch_file failed: ' + (e.message || String(e)).slice(0, 240) };
+        }
+      }
+      case "caleb_dispatch": {
+        const relayUrl = process.env.PC_RELAY_URL;
+        const relaySecret = process.env.PC_RELAY_SECRET;
+        if (!relayUrl) return { ok: false, error: 'PC_RELAY_URL not set' };
+        if (!relaySecret) return { ok: false, error: 'PC_RELAY_SECRET not set' };
+        if (!input.template_id) return { ok: false, error: 'template_id required' };
+        const payload = {
+          task: input.template_id, // pc-relay /caleb-task requires task,template_id,handler
+          template_id: input.template_id,
+          handler: 'caleb',
+          variables: input.variables || {},
+          priority: input.priority || 'normal',
+          dispatched_at: new Date().toISOString()
+        };
+        try {
+          const body = JSON.stringify(payload);
+          const headers = { 'X-Secret': relaySecret, 'Content-Type': 'application/json' };
+          // Opt-in HMAC: when PC_RELAY_HMAC=true, sign body with PC_RELAY_SECRET.
+          if (String(process.env.PC_RELAY_HMAC || 'false').toLowerCase() === 'true') {
+            const crypto = require('crypto');
+            headers['X-Signature'] = 'sha256=' + crypto.createHmac('sha256', relaySecret).update(body).digest('hex');
+          }
+          const resp = await axios.post(relayUrl.replace(/\/$/, '') + '/caleb-task', body, { headers, timeout: 15000 });
+          return resp.data && resp.data.ok ? resp.data : { ok: false, error: 'relay returned non-ok', raw: resp.data };
+        } catch (e) {
+          return { ok: false, error: 'caleb_dispatch failed: ' + (e.response?.data?.error || e.message).slice(0, 240) };
+        }
+      }
+      case "caleb_queue_status": {
+        const relayUrl = process.env.PC_RELAY_URL;
+        const relaySecret = process.env.PC_RELAY_SECRET;
+        if (!relayUrl || !relaySecret) return { ok: false, error: 'PC_RELAY_URL/SECRET not set' };
+        try {
+          const resp = await axios.get(relayUrl.replace(/\/$/, '') + '/caleb-task/queue', {
+            headers: { 'X-Secret': relaySecret }, timeout: 10000
+          });
+          if (!resp.data || !resp.data.ok) return { ok: false, error: 'relay returned non-ok', raw: resp.data };
+          if (input.task_id) {
+            const match = (resp.data.files || []).find(f => f.filename && f.filename.includes(input.task_id));
+            return { ok: true, queue_dir: resp.data.queue_dir, count: match ? 1 : 0, files: match ? [match] : [] };
+          }
+          return resp.data;
+        } catch (e) {
+          return { ok: false, error: 'caleb_queue_status failed: ' + (e.message).slice(0, 240) };
         }
       }
       case "financial_snapshot": {

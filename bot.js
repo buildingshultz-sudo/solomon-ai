@@ -2182,6 +2182,15 @@ app.post('/webhooks/gumroad/:secret', express.urlencoded({ extended: true }), as
   res.status(200).send('ok');
 });
 
+// ── T0-G HEARTBEAT: write to activity_log every 5 min so the scheduler-side
+// offline monitor can detect solomon-v4 crashing.
+const _db = require('./memory').db;
+function _heartbeat() {
+  try { _db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('solomon_heartbeat', 'ok'); } catch (_) {}
+}
+_heartbeat();
+setInterval(_heartbeat, 5 * 60 * 1000).unref();
+
 // ── LISTEN ───────────────────────────────────────────────────────────────
 app.listen(parseInt(process.env.PORT || '3000'), '0.0.0.0', () => {
   log('INFO', 'SYSTEM', `Inject endpoint listening on port ${process.env.PORT || 3000}`);

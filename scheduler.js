@@ -1871,6 +1871,57 @@ cron.schedule('0 4 * * *', () => {
   catch (_) {}
 }, { timezone: 'America/Chicago' });
 
+// ══════════════════════════════════════════════════════════════════════════
+// T0-G OFFLINE MONITOR — every 5 min. If no solomon_heartbeat row in the last
+// 15 minutes, Telegram Jed an alert. Suppress duplicate alerts within 1 hour
+// via mem('offline_monitor', 'last_alert_at').
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const row = db.prepare(`SELECT MAX(timestamp) AS t FROM activity_log WHERE type='solomon_heartbeat'`).get();
+    const lastTs = (row && row.t) ? new Date(row.t).getTime() : 0;
+    const ageMin = lastTs ? Math.round((Date.now() - lastTs) / 60000) : Infinity;
+    if (ageMin <= 15) return; // healthy
+    const lastAlert = mem.get('offline_monitor', 'last_alert_at');
+    if (lastAlert && (Date.now() - new Date(lastAlert).getTime()) < 60 * 60 * 1000) return; // 1h dedup
+    const ts = lastTs ? new Date(lastTs).toISOString() : 'never';
+    const msg = `⚠️ *Solomon V4 offline* — last heartbeat ${ts} (${ageMin === Infinity ? 'never seen' : ageMin + ' min ago'}). PM2 may be down or the process is hung.`;
+    await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')).catch(() => {}));
+    mem.set('offline_monitor', 'last_alert_at', new Date().toISOString());
+  } catch (e) {
+    console.error('[SCHEDULER] T0-G offline monitor error:', e.message);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// T0-G WEEKLY DRIVE BACKUP — Sunday 4 AM CT. Uploads shultz_master_context.md
+// to Google Drive folder Shultz_Enterprises_Backup/. Currently SKIPS with a
+// warning telegram if GOOGLE_DRIVE_REFRESH_TOKEN is not configured (the
+// integration shares OAuth client_id/secret with the YouTube OAuth flow but
+// needs its own scope grant). Once wired, retains last 12 weekly backups.
+// ══════════════════════════════════════════════════════════════════════════
+async function runWeeklyMasterContextBackup() {
+  if (!process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN === 'PLACEHOLDER') {
+    console.log('[SCHEDULER] T0-G drive backup skipped: GOOGLE_DRIVE_REFRESH_TOKEN not set');
+    return { ok: false, skipped: true, reason: 'GOOGLE_DRIVE_REFRESH_TOKEN not set' };
+  }
+  // Full implementation TBD — needs Drive OAuth client with drive.file scope.
+  // Placeholder so the cron is wired, ready to fill once Jed authorizes Drive.
+  console.log('[SCHEDULER] T0-G drive backup: implementation pending — see jed_tasks for Drive OAuth setup');
+  return { ok: false, error: 'Drive OAuth not wired; implementation pending.' };
+}
+cron.schedule('0 4 * * 0', async () => {
+  console.log('[SCHEDULER] T0-G Sunday master-context backup running...');
+  try {
+    const r = await runWeeklyMasterContextBackup();
+    if (r.skipped) await bot.sendMessage(OWNER_ID, '⚠️ Weekly master-context Drive backup skipped: GOOGLE_DRIVE_REFRESH_TOKEN not set. See jed_tasks for the OAuth setup step.').catch(() => {});
+    else if (!r.ok) console.log('[SCHEDULER] T0-G drive backup result:', r.error);
+  } catch (e) {
+    console.error('[SCHEDULER] T0-G drive backup error:', e.message);
+  }
+}, { timezone: 'America/Chicago' });
+
 cron.schedule('0 * * * *', async () => {
   try {
     const r = await runPostPurchaseDrip();

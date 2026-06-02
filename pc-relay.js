@@ -15,6 +15,7 @@ app.use(express.json());
 
 const SECRET = process.env.PC_RELAY_SECRET;
 const PORT = parseInt(process.env.PC_RELAY_PORT || '7777');
+const HMAC_ENABLED = String(process.env.PC_RELAY_HMAC || 'false').toLowerCase() === 'true';
 
 if (!SECRET) {
   console.error('[PC RELAY] FATAL: PC_RELAY_SECRET not set in .env');
@@ -22,10 +23,24 @@ if (!SECRET) {
 }
 
 // ── AUTH MIDDLEWARE ──────────────────────────────────────────────────────
+// Two-mode: x-secret header (always accepted as fallback) + optional HMAC-SHA256
+// signature in X-Signature header when PC_RELAY_HMAC=true (stronger; verifies
+// body integrity too). If HMAC mode is on AND request has X-Signature, validate.
 app.use((req, res, next) => {
   if (req.headers['x-secret'] !== SECRET) {
     console.log('[RELAY] Unauthorized request from', req.ip);
     return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (HMAC_ENABLED && req.headers['x-signature']) {
+    // Only validate signature on requests that carry one (avoids breaking older clients).
+    const crypto = require('crypto');
+    const rawBody = req.body && Object.keys(req.body).length ? JSON.stringify(req.body) : '';
+    const expected = 'sha256=' + crypto.createHmac('sha256', SECRET).update(rawBody).digest('hex');
+    const provided = req.headers['x-signature'];
+    if (provided !== expected) {
+      console.log('[RELAY] HMAC mismatch from', req.ip);
+      return res.status(401).json({ error: 'Bad signature' });
+    }
   }
   next();
 });
@@ -67,7 +82,18 @@ app.post('/execute', (req, res) => {
 // Caleb tasks here. We persist them as JSON files in the Caleb queue dir
 // for Cowork (the desktop agent) to pick up. The payload schema is the one
 // shaped by shapeCalebPayload() in /root/solomon-v4/caleb-relay.js.
-const CALEB_QUEUE_DIR = process.env.CALEB_QUEUE_DIR || (os.platform() === 'win32' ? 'D:\\caleb-queue' : path.join(os.homedir(), 'caleb-queue'));
+// T0-G: default queue dir updated to C:\Users\Ashle\Solomon\caleb-queue\ per the
+// new spec. Falls back to D:\caleb-queue (the original cutover path) if the C:
+// path can't be created (drive-letter difference between dev boxes). Override
+// always via CALEB_QUEUE_DIR env.
+const CALEB_QUEUE_DIR = (function () {
+  if (process.env.CALEB_QUEUE_DIR) return process.env.CALEB_QUEUE_DIR;
+  if (os.platform() !== 'win32') return path.join(os.homedir(), 'caleb-queue');
+  const preferred = 'C:\\Users\\Ashle\\Solomon\\caleb-queue';
+  const fallback  = 'D:\\caleb-queue';
+  try { fs.mkdirSync(preferred, { recursive: true }); return preferred; }
+  catch (_) { return fallback; }
+})();
 try {
   if (!fs.existsSync(CALEB_QUEUE_DIR)) fs.mkdirSync(CALEB_QUEUE_DIR, { recursive: true });
   console.log(`[PC RELAY] Caleb queue dir: ${CALEB_QUEUE_DIR}`);
