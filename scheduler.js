@@ -1315,6 +1315,41 @@ async function runWeeklyRepurpose() {
 cron.schedule('0 7 * * 1', runWeeklyRepurpose, { timezone: 'America/Chicago' });
 
 // ══════════════════════════════════════════════════════════════════════════
+// ONE-TIME REMINDER — FB data-access re-engage (set 2026-06-02)
+// FB page tokens for Building Shultz + Irish Craftsman are PERMANENT
+// (expires_at=0, never expire) — they do NOT need re-issuing. But Facebook's
+// data_access_expires_at is 2026-08-31; if the app isn't re-engaged, API data
+// access degrades after that. Fire ONCE on/after 2026-08-24 09:00 CT to remind
+// Jed to re-open the app in Graph Explorer and re-engage. Runs every 30 min so a
+// missed exact minute (process down) still fires on the next tick; a persisted
+// flag in mem('reminders', ...) guarantees it sends only once.
+// ══════════════════════════════════════════════════════════════════════════
+cron.schedule('*/30 * * * *', async () => {
+  try {
+    const SENT_KEY = 'fb_data_access_reengage_2026_08_24';
+    if (mem.get('reminders', SENT_KEY)) return; // already sent — never re-fire
+    // 2026-08-24 09:00 America/Chicago is CDT (UTC-5) => 14:00 UTC. month 7 = Aug.
+    const fireAt = Date.UTC(2026, 7, 24, 14, 0, 0);
+    if (Date.now() < fireAt) return; // not due yet
+    const msg = [
+      '📅 *FB data-access reminder* (set 2026-06-02)',
+      '',
+      'The Facebook page tokens for *Building Shultz* and *Irish Craftsman* are *permanent and do NOT need re-issuing* — `expires_at = 0` (never expires). ✅',
+      '',
+      "But Facebook's `data_access_expires_at` for both is *2026-08-31*. To stop API data access from degrading, *re-open the app in Graph Explorer and re-engage* (load the Graph API Explorer, select the app, request the page tokens / run a Graph call) before Aug 31.",
+      '',
+      'Action: re-engage the app this week. *No token swap needed* — the tokens stay valid.'
+    ].join('\n');
+    await bot.sendMessage(OWNER_ID, msg, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(OWNER_ID, msg.replace(/[*_`]/g, '')));
+    mem.set('reminders', SENT_KEY, new Date().toISOString());
+    console.log('[SCHEDULER] FB data-access re-engage reminder sent to Jed (one-time).');
+  } catch (e) {
+    console.error('[SCHEDULER] FB data-access reminder failed:', e.message);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // EVENING SUMMARY — 9:00 PM CT daily. Same terse shape as the morning brief.
 // ══════════════════════════════════════════════════════════════════════════
 cron.schedule('0 21 * * *', async () => {
