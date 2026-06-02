@@ -1137,6 +1137,18 @@ const TOOL_DEFINITIONS = [
     }
   }
   ,{
+    name: "validate_fb_token",
+    description: "Verify a Facebook page-publish token by hitting Graph API /me/accounts (the correct check — owner-ID-vs-page-ID comparison was the old buggy gate). Confirms the user token's owner has admin rights on the target page, AND extracts the page-derived access_token Facebook recommends using for posting. On success: persists the derived page token into process.env (FB_<page>_PAGE_TOKEN_DERIVED) so subsequent social_post calls use it. Pass {page: 'irish_craftsman' | 'building_shultz'}. Returns {valid, page_id, page_name, page_token_derived, scopes_hint?, error?}.",
+    input_schema: {
+      type: "object",
+      properties: {
+        page: { type: "string", enum: ["irish_craftsman", "building_shultz"], description: "Which page to validate." },
+        post_test: { type: "boolean", description: "If true, posts a tiny test message + deletes it immediately. Default false (smoke without writes)." }
+      },
+      required: ["page"]
+    }
+  }
+  ,{
     name: "search_documents",
     description: "Search the Solomon document registry (PDFs / MD / DOCX from D:\\Solomon\\reports\\ on Jed's PC, indexed weekly via the pc-relay). Case-insensitive substring match over filename + summary. Newest first. Use this before answering Jed's questions about past reports / audits / briefs — it surfaces what's on disk.",
     input_schema: {
@@ -2119,11 +2131,17 @@ Output format (JSON):
         const pageId = input.page === 'building_shultz'
           ? process.env.FB_BUILDING_SHULTZ_ID
           : process.env.FB_IRISH_CRAFTSMAN_ID;
-        // Candidate tokens in priority order. FACEBOOK_PAGE_TOKEN is a valid spare for
-        // Building Shultz, so if the page-specific token is expired we still post.
+        // Candidate tokens in priority order:
+        //   1. Derived page token from a prior validate_fb_token / getSocialAuthStatus call
+        //      (FB recommends page tokens for page posts; survives the runtime session)
+        //   2. The user token (legacy fallback — works if user has page admin)
+        //   3. FACEBOOK_PAGE_TOKEN spare for Building Shultz
+        const derivedToken = input.page === 'building_shultz'
+          ? process.env.FB_BUILDING_SHULTZ_PAGE_TOKEN_DERIVED
+          : process.env.FB_IRISH_CRAFTSMAN_PAGE_TOKEN_DERIVED;
         const tokenCandidates = (input.page === 'building_shultz'
-          ? [process.env.FB_BUILDING_SHULTZ_TOKEN, process.env.FACEBOOK_PAGE_TOKEN]
-          : [process.env.FB_IRISH_CRAFTSMAN_TOKEN]
+          ? [derivedToken, process.env.FB_BUILDING_SHULTZ_TOKEN, process.env.FACEBOOK_PAGE_TOKEN]
+          : [derivedToken, process.env.FB_IRISH_CRAFTSMAN_TOKEN]
         ).filter(t => t && t !== 'PLACEHOLDER');
         if (!tokenCandidates.length) {
           return { ok: false, error: 'No token for page: ' + input.page + '. Set FB_BUILDING_SHULTZ_TOKEN / FB_IRISH_CRAFTSMAN_TOKEN (or FACEBOOK_PAGE_TOKEN) in .env.' };
@@ -2812,6 +2830,92 @@ Output format (JSON):
         } catch (e) {
           return { ok: false, error: 'caleb_queue_status failed: ' + (e.message).slice(0, 240) };
         }
+      }
+      case "validate_fb_token": {
+        // Verify a FB page-publish token via /me/accounts (NOT owner-ID compare).
+        // /me/accounts returns the pages the user has admin access to, each with
+        // a derived page-level access_token Facebook recommends for posting.
+        const pageKey = input && input.page;
+        if (!['irish_craftsman', 'building_shultz'].includes(pageKey)) {
+          return { ok: false, error: "page must be 'irish_craftsman' or 'building_shultz'" };
+        }
+        const userTokenEnv = pageKey === 'irish_craftsman' ? 'FB_IRISH_CRAFTSMAN_TOKEN' : 'FB_BUILDING_SHULTZ_TOKEN';
+        const pageIdEnv    = pageKey === 'irish_craftsman' ? 'FB_IRISH_CRAFTSMAN_ID'    : 'FB_BUILDING_SHULTZ_ID';
+        const derivedEnv   = pageKey === 'irish_craftsman' ? 'FB_IRISH_CRAFTSMAN_PAGE_TOKEN_DERIVED' : 'FB_BUILDING_SHULTZ_PAGE_TOKEN_DERIVED';
+        const userToken    = process.env[userTokenEnv];
+        const targetPageId = process.env[pageIdEnv];
+        if (!userToken || userToken === 'PLACEHOLDER') return { ok: false, valid: false, error: `${userTokenEnv} not set in .env` };
+        if (!targetPageId)                              return { ok: false, valid: false, error: `${pageIdEnv} not set in .env` };
+
+        let accountsResp;
+        try {
+          accountsResp = await axios.get('https://graph.facebook.com/v19.0/me/accounts', {
+            params: { fields: 'id,name,category,access_token,tasks', access_token: userToken, limit: 100 },
+            timeout: 12000
+          });
+        } catch (e) {
+          const fbErr = e.response?.data?.error;
+          return { ok: false, valid: false, page_id: targetPageId, error: fbErr ? `${fbErr.type || 'OAuthException'}: ${fbErr.message}` : e.message, fb_error_code: fbErr?.code };
+        }
+
+        const pages = (accountsResp.data?.data) || [];
+        const match = pages.find(p => String(p.id) === String(targetPageId));
+        if (!match) {
+          return {
+            ok: true, valid: false, page_id: targetPageId, error: 'Target page not in /me/accounts — the token owner does NOT have admin access.',
+            pages_accessible: pages.map(p => ({ id: p.id, name: p.name, category: p.category }))
+          };
+        }
+
+        // Persist the derived page token into this process's env so social_post can pick it up.
+        if (match.access_token) process.env[derivedEnv] = match.access_token;
+
+        const result = {
+          ok: true,
+          valid: true,
+          page_id: targetPageId,
+          page_name: match.name,
+          page_category: match.category,
+          tasks_granted: match.tasks || [],
+          page_token_derived: !!match.access_token,
+          derived_env_var: derivedEnv,
+          posting_note: match.tasks && match.tasks.includes('CREATE_CONTENT') ? 'CREATE_CONTENT task granted — posts will succeed.' : 'CREATE_CONTENT task NOT in tasks[] — posting may fail; re-grant page admin role.'
+        };
+
+        // Optional test post + immediate delete
+        if (input && input.post_test && match.access_token) {
+          try {
+            const testMsg = `Solomon — ${pageKey} token wired up. (test post, will delete in ~1s)`;
+            const postResp = await axios.post(`https://graph.facebook.com/v19.0/${targetPageId}/feed`, {
+              message: testMsg, access_token: match.access_token
+            }, { timeout: 10000 });
+            const postId = postResp.data?.id;
+            result.test_post_id = postId;
+            // Delete it back
+            if (postId) {
+              try {
+                await axios.delete(`https://graph.facebook.com/v19.0/${postId}`, { params: { access_token: match.access_token }, timeout: 10000 });
+                result.test_post_deleted = true;
+              } catch (delErr) {
+                result.test_post_deleted = false;
+                result.test_post_delete_error = delErr.response?.data?.error?.message || delErr.message;
+              }
+            }
+          } catch (e) {
+            result.test_post_error = e.response?.data?.error?.message || e.message;
+          }
+        } else if (input && input.post_test) {
+          result.test_post_skipped = 'no page token derived';
+        }
+
+        try {
+          db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run(
+            'fb_token_validated',
+            JSON.stringify({ page: pageKey, page_id: targetPageId, valid: result.valid, page_token_derived: result.page_token_derived, test_post_id: result.test_post_id || null })
+          );
+        } catch (_) {}
+
+        return result;
       }
       case "search_documents": {
         if (!input || !input.query) return { ok: false, error: 'query required' };
@@ -4157,23 +4261,49 @@ async function getSocialAuthStatus() {
   } catch (e) {
     status.youtube.error = (e.response && e.response.data && e.response.data.error_description) || e.message;
   }
-  // Facebook page tokens + linked Instagram business accounts (try spare token too)
+  // Facebook page tokens + linked Instagram business accounts.
+  // Validation strategy: call /me/accounts ONCE per candidate user token, then
+  // confirm the target page id is in the returned list. This is stricter than
+  // the old GET /<page_id> check (which passed for any read-access token) and
+  // it yields the derived page-level access_token Facebook recommends for posts.
+  // The derived page token is persisted into process.env so social_post can use it.
   const pages = [
-    { key: 'building_shultz', id: process.env.FB_BUILDING_SHULTZ_ID, tokens: [process.env.FB_BUILDING_SHULTZ_TOKEN, process.env.FACEBOOK_PAGE_TOKEN] },
-    { key: 'irish_craftsman', id: process.env.FB_IRISH_CRAFTSMAN_ID, tokens: [process.env.FB_IRISH_CRAFTSMAN_TOKEN] }
+    { key: 'building_shultz', id: process.env.FB_BUILDING_SHULTZ_ID, tokens: [process.env.FB_BUILDING_SHULTZ_TOKEN, process.env.FACEBOOK_PAGE_TOKEN], derivedEnv: 'FB_BUILDING_SHULTZ_PAGE_TOKEN_DERIVED' },
+    { key: 'irish_craftsman', id: process.env.FB_IRISH_CRAFTSMAN_ID, tokens: [process.env.FB_IRISH_CRAFTSMAN_TOKEN],                                       derivedEnv: 'FB_IRISH_CRAFTSMAN_PAGE_TOKEN_DERIVED' }
   ];
   for (const p of pages) {
-    const fb = { canPost: false };
+    const fb = { canPost: false, pageTokenDerived: false };
     const ig = { ready: false };
     const cands = (p.tokens || []).filter(t => t && t !== 'PLACEHOLDER');
     for (const tk of cands) {
       try {
-        const r = await axios.get('https://graph.facebook.com/v19.0/' + p.id, {
-          params: { fields: 'name,instagram_business_account', access_token: tk }, timeout: 12000
+        // Strict check: /me/accounts must contain the target page.
+        const ar = await axios.get('https://graph.facebook.com/v19.0/me/accounts', {
+          params: { fields: 'id,name,category,access_token,tasks', access_token: tk, limit: 100 }, timeout: 12000
         });
+        const match = (ar.data?.data || []).find(x => String(x.id) === String(p.id));
+        if (!match) {
+          fb.error = 'Target page not in /me/accounts for this token (no admin access).';
+          continue; // try next candidate token
+        }
         fb.canPost = true;
-        fb.pageName = r.data.name;
-        if (r.data.instagram_business_account) { ig.ready = true; ig.igId = r.data.instagram_business_account.id; }
+        fb.pageName = match.name;
+        fb.tasks = match.tasks || [];
+        if (match.access_token) {
+          process.env[p.derivedEnv] = match.access_token;
+          fb.pageTokenDerived = true;
+          fb.derivedEnv = p.derivedEnv;
+        }
+        // IG linkage check uses the derived page token (more reliable than user token).
+        try {
+          const igResp = await axios.get('https://graph.facebook.com/v19.0/' + p.id, {
+            params: { fields: 'instagram_business_account', access_token: match.access_token || tk }, timeout: 8000
+          });
+          if (igResp.data?.instagram_business_account) {
+            ig.ready = true;
+            ig.igId = igResp.data.instagram_business_account.id;
+          }
+        } catch (_) { /* IG link check failure is non-fatal — FB itself is fine */ }
         break;
       } catch (e) {
         fb.error = (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message;
