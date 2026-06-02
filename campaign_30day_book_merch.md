@@ -1,7 +1,7 @@
 # Building Shultz — 30-Day Book & Merch Launch Campaign
 
 Campaign source for Solomon's auto-poster. Promotes the book **"Motivation for Tough Guys"**
-(digital, hardback planner, audiobook — 52 quotes for tradesmen) and **Building Shultz Gear**
+(digital + hardback planner — 52 quotes for tradesmen; audiobook PLANNED, not recorded yet — audiobook-tagged campaign posts are filtered out at runtime by the scheduler's CAMPAIGN_SKIP_TOPICS) and **Building Shultz Gear**
 (heavyweight tees, fleece hoodies, 15oz mugs, hardhat stickers, leather-patch trucker hats,
 field-notes journals, shop aprons, wall clocks — built around the book's signature quotes).
 

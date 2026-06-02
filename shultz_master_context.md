@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-05-30 — [SAMQUEUE] Two new pending Sam tasks queued: PC-side Caleb `/caleb-task` endpoint + auto-dispatch on free text <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-02 07:45 CT — [PROJECTS] Feature shipped — commit 3c277f4: feat(campaign): skip-topic filter + /campaign  <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,8 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-01 05:37 CT] FB token refreshed for irish_craftsman (Irish Craftsman)
+- [2026-06-01 05:36 CT] FB token refreshed for building_shultz (Building Shultz)
 
 ## 4. BUSINESS DETAILS
 - **LLC:** **Shultz Enterprises LLC** — FILED **2026-05-29** (Indiana, INBiz). Confirmation **#6435718975**. Registered agent: Jedidiah Shultz.
@@ -63,6 +65,29 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-02 07:45 CT] Feature shipped — commit 3c277f4: feat(campaign): skip-topic filter + /campaign skip|unskip commands
+- [2026-06-02 06:30 CT] Feature shipped — commit 8427542: feat(caleb-runner): Playwright executor + Canva auth + synthetic smoke + security doc
+- [2026-06-01 19:45 CT] Feature shipped — commit f3cd3bb: feat(T0-G): caleb_dispatch + caleb_queue_status tools, HMAC opt-in on relay, queue-path swap, offline monitor, Drive backup stub
+- [2026-06-01 19:30 CT] Feature shipped — commit 2cf1d6c: feat(T0-C): post-purchase email drip (4-step sequence, preview-gated)
+- [2026-06-01 19:00 CT] Feature shipped — commit 86faf37: feat: phase 8 v2 — Claude-picked autonomous priority queue with confidence ladder + IronEdit V1 gate
+- [2026-06-01 12:15 CT] Feature shipped — commit 1f4ba83: feat(pc-relay): add GET /file + GET /file/list for D:\ drive bridge
+- [2026-06-01 11:30 CT] Feature shipped — commit 5473c20: feat(yt-affiliate): shorts filter + duration classifier + scope db ref
+- [2026-06-01 11:00 CT] Feature shipped — commit 3f3c6e2: feat(tools): add youtube_affiliate_audit_and_fill (dry-run default)
+- [2026-06-01 08:00 CT] Feature shipped — commit 991735b: feat(mcp): add OAuth 2.0 wrapper so claude.ai connector UI completes the handshake
+- [2026-06-01 06:15 CT] Feature shipped — commit 3a88bda: feat: nginx reverse proxy + cert-ready setup for MCP HTTPS
+- [2026-06-01 05:15 CT] Feature shipped — commit ff3df4c: feat(jed_tasks): SQLite-backed action queue, add_jed_task tool, done-detect, /tasks, brief prepend
+- [2026-06-01 05:00 CT] Feature shipped — commit 1b9765d: playwright capture: auto-kill Chrome, no prompt
+- [2026-05-31 20:15 CT] Feature shipped — commit 27c05a1: feat: remote MCP server (port 3001) for Nathan integration
+- [2026-05-31 18:15 CT] Feature shipped — commit c6cbc5a: feat(tools): route post_via_browser to browser-poster module
+- [2026-05-31 17:15 CT] Feature shipped — commit 9cd110f: feat: add browser-poster module + IG playwright auth scaffold
+- [2026-05-31 17:00 CT] Feature shipped — commit 7dc4ba8: send_email: SMTP-first + Gmail API fallback + multipart HTML + cc/bcc/reply_to + sensitive guard + dispatch template
+- [2026-05-31 16:15 CT] Feature shipped — commit ca86043: klein-newsletter-watcher: auto-click hidden reward links in Klein Tools Tradesman Club emails
+- [2026-05-31 13:00 CT] Feature shipped — commit bc26244: scheduler: terse 3-5 line morning + new evening summary + autonomous priority cron
+- [2026-05-31 11:30 CT] Feature shipped — commit 3daf0d4: Solomon improvements: reply cache + tighter dispatch classifier + /stats command
+- [2026-05-30 17:30 CT] Feature shipped — commit b776d1d: PDF pipeline: briefToPdf helper + generate_pdf_report + employee_stack_audit tools
+- [2026-05-30 16:00 CT] Feature shipped — commit 11555be: YT Playwright: reuse user real Chrome + Default profile (no login UI)
+- [2026-05-30 15:45 CT] Feature shipped — commit cde4bc2: gitignore: dispatch-live-smoke-results.json (runtime test artifact)
+- [2026-05-30 14:30 CT] Feature shipped — commit 6a2ebe9: feat(dispatch): invisible auto-dispatch on free text + master context update
 - [2026-05-30] PENDING (Sam, in progress): PC-side Caleb `/caleb-task` endpoint (unlocks affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload); auto-dispatch on free text with Jed-flippable `/dispatch mode live|shadow` toggle.
 - [2026-05-30 14:00 CT] Feature shipped — commit 61e8d15: Dispatch system: templates + Nathan bridge + classifier (opt-in via /dispatch)
 - [2026-05-30 13:15 CT] Feature shipped — commit 8784e34: Morning scorecard, FB approval buttons, campaign preview, KDP scrape, weekly repurpose
@@ -84,8 +109,10 @@
 | Stripe | (Manus-connected?) | UNKNOWN — needs audit | unknown |
 | YouTube AdSense | YouTube | NOT YET (needs 1,000 subs + 4,000 watch hrs) | — |
 | 1Password / NordVPN / DaVinci affiliates | applications | PENDING | — |
+| Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-01 24:50 CT] Revenue/billing email from DigitalOcean Support: "[DigitalOcean] Your 2026-05 invoice is available"
 
 ## 7. SAM TASK QUEUE (Claude Code build priorities)
 1. **Context file + /brief** — ✅ DONE (this master-context system; /brief returns it).
@@ -120,7 +147,7 @@
 10. **Transfer "Building Shultz" YouTube channel ownership (CAREFUL — Jedidiah-only):** Move Brand Account primary ownership `irishcraftsman7@gmail.com` → `buildingshultz@gmail.com` (invite → Manager → Owner → Make primary owner; ~7-day Google hold period). **Solomon's YT OAuth refresh token will likely need re-auth via `/oauth/start` after the move.** Sam/Solomon must NOT execute this — documented steps only in the same runbook.
 
 ## 10. THE 12-APP ROADMAP (build order is NON-NEGOTIABLE — IronEdit first; App #2 can't start until IronEdit V1.0 has ≥1 paying customer)
-1. **IronEdit** — AI video-editing desktop app. *(App #1, foundation in progress; needs DaVinci Resolve Studio $295.)*
+1. **IronEdit** *(formerly RoughCut Pro)* — AI video-editing desktop app. *(App #1, foundation in progress; needs DaVinci Resolve Studio $295.)*
 2. **TradeQuote AI** — voice-first quoting for contractors ($49/mo, TAM $1.7B).
 3. **ImmiNav** — AI compliance navigator for immigrant entrepreneurs ($15/mo or $99/filing).
 4. **RuralRoute Logistics** — micro-freight matching for rural areas (10–15% fee).
@@ -131,7 +158,7 @@
 9. **PermitPuller** — AI permit research (flagged high-risk by Manus).
 10. **Community Grant Navigator** — AI for small communities finding federal grants.
 11. **Fleet Predictive Maintenance** — AI maintenance scheduling for contractor fleets.
-12. **RoughCut Pro / Builder's AI Blueprint platform** — trades education SaaS.
+12. **Builder's AI Blueprint platform** — trades education SaaS. *(RoughCut Pro consolidated into App #1 — IronEdit — they are the same product under different working names.)*
 - _The roadmap is the mission made into software (e.g., ImmiNav helps immigrant business owners; Co-Parent Sync helps broken families) — not just a product portfolio._
 - **Solomon phases:** Phase 8 = autonomous app factory (build the 12 apps); Phase 9 = revenue engine (Stripe, landing pages, funnels, ads); Phase 10 = organizational director (multi-agent, hiring, Tasia operations manual).
 <!-- LOG:PROJECTS -->
@@ -157,6 +184,12 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-02 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-01 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-05-31 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-05-30 19:00 CT] YT milestone crossed: 1,000 subscribers
+- [2026-05-30 19:00 CT] YT milestone crossed: 750 subscribers
+- [2026-05-30 19:00 CT] YT milestone crossed: 500 subscribers
 - [2026-05-30] Queued two new pending Sam tasks (section 7 #10/#11): PC-side Caleb `/caleb-task` endpoint and auto-dispatch on free text. Master context pushed to VPS. (Sam)
 - [2026-05-30 CT] Documented two pending Jedidiah-only YouTube tasks (section 9 #9/#10): (a) add irishcraftsman7@gmail.com as OAuth test user to clear Error 403 access_denied; (b) transfer Building Shultz Brand Account ownership irishcraftsman7→buildingshultz. Runbook: YouTube_OAuth_TestUser_and_BrandTransfer_Runbook.md. Transfer is doc-only, NOT executed (Sam).
 - [2026-05-30 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
