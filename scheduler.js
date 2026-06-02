@@ -881,6 +881,50 @@ function loadCampaignDays() {
   } catch (_) { return []; }
 }
 
+// ── CAMPAIGN SKIP-TOPIC FILTER ──────────────────────────────────────────────
+// Per-tick reload (no scheduler restart needed when Jed edits via /campaign).
+// Default seeds with ["audiobook"] (content doesn't exist yet — see Sam queue).
+const CAMPAIGN_CONFIG_PATH = path.join(__dirname, 'campaign-config.json');
+const CAMPAIGN_CONFIG_DEFAULTS = { skip_topics: ['audiobook'] };
+
+function loadCampaignConfig() {
+  try {
+    if (!fs.existsSync(CAMPAIGN_CONFIG_PATH)) {
+      fs.writeFileSync(CAMPAIGN_CONFIG_PATH, JSON.stringify(CAMPAIGN_CONFIG_DEFAULTS, null, 2), 'utf8');
+      return { ...CAMPAIGN_CONFIG_DEFAULTS };
+    }
+    const cfg = JSON.parse(fs.readFileSync(CAMPAIGN_CONFIG_PATH, 'utf8'));
+    if (!Array.isArray(cfg.skip_topics)) cfg.skip_topics = [...CAMPAIGN_CONFIG_DEFAULTS.skip_topics];
+    return cfg;
+  } catch (e) {
+    console.error('[SCHEDULER] campaign-config.json read failed, using defaults:', e.message);
+    return { ...CAMPAIGN_CONFIG_DEFAULTS };
+  }
+}
+
+function saveCampaignConfig(cfg) {
+  try { fs.writeFileSync(CAMPAIGN_CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8'); return true; }
+  catch (e) { console.error('[SCHEDULER] campaign-config.json write failed:', e.message); return false; }
+}
+
+// Word-boundary, case-insensitive substring match against the haystack.
+// "audiobook" matches "audiobook", "Audiobook", "AUDIOBOOK!"; does NOT match
+// "book", "audio book" (space-separated), or "book club".
+// Returns the matched topic string, or null if no match.
+function matchSkipTopic(haystack, topics) {
+  if (!haystack || !Array.isArray(topics) || !topics.length) return null;
+  const text = String(haystack);
+  for (const raw of topics) {
+    const topic = String(raw || '').trim();
+    if (!topic) continue;
+    // Escape regex-significant chars in the topic so users can paste freely.
+    const esc = topic.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`\\b${esc}\\b`, 'i');
+    if (re.test(text)) return topic;
+  }
+  return null;
+}
+
 // Campaign preview + auto-post flow:
 //   • At T-30min  → previewCampaignSlot(slot) generates variants, sends Telegram
 //                   preview with ✅/✍️/⏭️ buttons, persists action with deadline
@@ -929,6 +973,27 @@ async function previewCampaignSlot(slot) {
     }
     if (!variants || !variants.facebook) {
       await bot.sendMessage(OWNER_ID, `⚠️ Campaign day ${dayIndex} (${slot}): could not parse post content.`).catch(() => {});
+      return;
+    }
+
+    // ── Skip-topic filter ────────────────────────────────────────────────
+    // Check the plan title + brief + generated copy against the per-tick
+    // reloaded skip list. If any topic word-boundary-matches, skip the
+    // queue+telegram preview entirely and log the skip. The date-based
+    // dayIndex cursor naturally advances tomorrow — no bunching.
+    const cfg = loadCampaignConfig();
+    const haystack = [plan.title, brief, variants.facebook, variants.instagram_caption, variants.youtube_community].filter(Boolean).join(' \n ');
+    const matched = matchSkipTopic(haystack, cfg.skip_topics);
+    if (matched) {
+      const tg = `⏭️ Skipped today's campaign post (matched skip-topic: ${matched}). Schedule continues.`;
+      try {
+        db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run(
+          'campaign_skip',
+          JSON.stringify({ topic_matched: matched, post_slot: slot, day_index: dayIndex, title: plan.title, reason: 'skip_topic' })
+        );
+      } catch (_) {}
+      await bot.sendMessage(OWNER_ID, tg).catch(() => {});
+      console.log(`[SCHEDULER] Campaign day ${dayIndex} (${slot}) SKIPPED — matched topic "${matched}"`);
       return;
     }
 
@@ -1959,7 +2024,10 @@ module.exports = {
   loadCampaignDays,
   getStaleTaskCount,
   loadStandingPriorities,
-  generateWeeklyPatternDigest
+  generateWeeklyPatternDigest,
+  loadCampaignConfig,
+  saveCampaignConfig,
+  matchSkipTopic
 };
 
 // Startup banner only fires when scheduler.js is the main module (PM2 process).

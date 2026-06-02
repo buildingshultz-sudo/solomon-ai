@@ -1560,6 +1560,56 @@ bot.onText(/^\/post\b/i, async (msg) => {
   executeTool('append_master_context', { section: 'GENERAL', entry: `/post ran — content: "${content.slice(0, 80)}"` }).catch(() => {});
 });
 
+// /campaign — view/edit the campaign skip-topic list. Subcommands:
+//   /campaign skip                  → list current skip-topics
+//   /campaign skip <topic>          → add <topic> to the list
+//   /campaign skip --clear          → reset to defaults (["audiobook"])
+//   /campaign unskip <topic>        → remove <topic> from the list
+// Config persists in scheduler-side campaign-config.json; per-tick reload, no restart needed.
+bot.onText(/^\/campaign(?:\s+(.*))?$/i, async (msg) => {
+  if (msg.chat.id !== OWNER_ID) return;
+  const args = (msg.text.match(/^\/campaign(?:\s+(.*))?$/i)[1] || '').trim();
+  const scheduler = require('./scheduler');
+  const cfg = scheduler.loadCampaignConfig();
+  // No args → terse help + current list
+  if (!args) {
+    const list = (cfg.skip_topics || []).map(t => `• ${t}`).join('\n') || '(empty)';
+    return bot.sendMessage(msg.chat.id, `📣 *Campaign skip-topics* (current):\n${list}\n\n_Usage:_\n\`/campaign skip <topic>\` — add\n\`/campaign skip --clear\` — reset to defaults\n\`/campaign unskip <topic>\` — remove`, { parse_mode: 'Markdown' })
+      .catch(() => bot.sendMessage(msg.chat.id, `Campaign skip-topics:\n${list}\nUsage: /campaign skip <topic> | /campaign skip --clear | /campaign unskip <topic>`));
+  }
+  // `skip ...` paths
+  const skipMatch = args.match(/^skip\s*(.*)$/i);
+  if (skipMatch) {
+    const rest = (skipMatch[1] || '').trim();
+    if (!rest) {
+      const list = (cfg.skip_topics || []).map(t => `• ${t}`).join('\n') || '(empty)';
+      return bot.sendMessage(msg.chat.id, `📣 Current campaign skip-topics:\n${list}`);
+    }
+    if (rest === '--clear') {
+      cfg.skip_topics = ['audiobook'];
+      scheduler.saveCampaignConfig(cfg);
+      return bot.sendMessage(msg.chat.id, `📣 Reset campaign skip-topics to defaults: ${cfg.skip_topics.join(', ')}`);
+    }
+    const topic = rest.toLowerCase();
+    if (!cfg.skip_topics.map(t => t.toLowerCase()).includes(topic)) cfg.skip_topics.push(topic);
+    scheduler.saveCampaignConfig(cfg);
+    return bot.sendMessage(msg.chat.id, `📣 Added "${topic}". Current list: ${cfg.skip_topics.join(', ')}`);
+  }
+  // `unskip <topic>`
+  const unMatch = args.match(/^unskip\s+(.+)$/i);
+  if (unMatch) {
+    const topic = unMatch[1].trim().toLowerCase();
+    const before = cfg.skip_topics.length;
+    cfg.skip_topics = cfg.skip_topics.filter(t => t.toLowerCase() !== topic);
+    scheduler.saveCampaignConfig(cfg);
+    const removed = before - cfg.skip_topics.length;
+    return bot.sendMessage(msg.chat.id, removed
+      ? `📣 Removed "${topic}". Current list: ${cfg.skip_topics.join(', ') || '(empty)'}`
+      : `📣 "${topic}" wasn't on the list. Current list: ${cfg.skip_topics.join(', ') || '(empty)'}`);
+  }
+  bot.sendMessage(msg.chat.id, `Unknown /campaign subcommand. Usage:\n/campaign — show current list\n/campaign skip <topic>\n/campaign skip --clear\n/campaign unskip <topic>`);
+});
+
 // /launch — start the 30-day book & merch launch campaign sequence.
 bot.onText(/^\/launch\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
