@@ -1726,7 +1726,7 @@ bot.onText(/^\/setfbtoken\b/i, async (msg) => {
       if (newTok) {
         tokenToPersist = newTok;
         exchanged = (newTok !== rawToken);
-        exchangeNote = exchanged ? `Exchanged → long-lived (expires_in ${Math.round((expIn || 0)/86400)}d).` : 'Token was already long-lived (FB returned same).';
+        exchangeNote = exchanged ? (expIn ? `Exchanged → long-lived (expires_in ${Math.round(expIn/86400)}d).` : 'Exchanged → long-lived (permanent, never expires).') : 'Token was already long-lived (FB returned same).';
       }
     } catch (e) {
       const m = e.response?.data?.error?.message || e.message;
@@ -1776,7 +1776,7 @@ bot.onText(/^\/setfbtoken\b/i, async (msg) => {
         params: { input_token: tokenToPersist, access_token: appId + '|' + appSecret }, timeout: 12000
       });
       const d = dbg.data?.data || {};
-      if (d.expires_at) expiresAt = new Date(d.expires_at * 1000).toISOString();
+      if (typeof d.expires_at === 'number') expiresAt = d.expires_at === 0 ? 'never' : new Date(d.expires_at * 1000).toISOString();
       if (Array.isArray(d.scopes)) scopes = d.scopes.join(',');
     } catch (_) { /* non-fatal; metadata row still written without expiry */ }
   }
@@ -1794,7 +1794,7 @@ bot.onText(/^\/setfbtoken\b/i, async (msg) => {
   }
 
   const masked = tokenToPersist.slice(0, 6) + '…' + tokenToPersist.slice(-4);
-  const expLine = expiresAt ? `Expires: \`${expiresAt.slice(0, 10)}\` (${Math.round((new Date(expiresAt).getTime() - Date.now()) / 86400000)}d)` : 'Expiry unknown (debug_token failed or app creds missing).';
+  const expLine = expiresAt === 'never' ? 'Expires: never (permanent token ✅)' : expiresAt ? `Expires: \`${expiresAt.slice(0, 10)}\` (${Math.round((new Date(expiresAt).getTime() - Date.now()) / 86400000)}d)` : 'Expiry unknown (debug_token failed or app creds missing).';
   const reply = [
     `✅ *${pageKey}* token saved (validated as "${pageName}").`,
     `Token: \`${masked}\``,

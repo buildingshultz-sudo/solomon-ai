@@ -196,8 +196,11 @@ async function buildMorningScorecard() {
     const tokRows = fbTokenMetadata.all();
     const warnings = [];
     for (const r of tokRows) {
-      if (!r.expires_at) continue;
-      const days = Math.floor((new Date(r.expires_at).getTime() - Date.now()) / 86400000);
+      // null = unknown, 'never'/0 = permanent (expires_at===0 from debug_token) → never warn
+      if (!r.expires_at || r.expires_at === 'never' || r.expires_at === 0) continue;
+      const expMs = new Date(r.expires_at).getTime();
+      if (Number.isNaN(expMs)) continue; // unparseable expiry → skip rather than false-warn
+      const days = Math.floor((expMs - Date.now()) / 86400000);
       if (days <= 14) warnings.push(`${r.page_key} expires in ${days}d`);
     }
     if (warnings.length) lines.push(`📱 FB tokens: ${warnings.join(' · ')}.`);
