@@ -459,6 +459,57 @@ cron.schedule("*/5 * * * *", async () => {
         }
       } catch (_) {}
       if (classification === "newsletter") continue;
+      // T0-F: 3-tier intent classifier on top of the urgent/normal/newsletter base.
+      // Maps urgent -> HIGH (almost always); applies high-tier signal sniffing
+      // to flag legal/financial/family/$>500 even if urgent classifier missed it.
+      const voiceTpl = require('./email-voice-templates');
+      const highSignal = voiceTpl.detectHighTier({ from: em.from_email, subject: em.subject, snippet: em.body_snippet });
+      let intent = classification === 'urgent' ? 'HIGH' : 'MEDIUM';
+      if (highSignal) intent = 'HIGH';
+      // Cheap downgrade to ROUTINE for unmistakable acks (newsletter unsubscribe ack, simple "thanks!").
+      const haySubj = (em.subject || '').toLowerCase();
+      if (intent === 'MEDIUM' && /^(thanks|thank you|got it|received|unsubscribed|you'?re unsubscribed)/.test(haySubj)) intent = 'ROUTINE';
+
+      const tplId = voiceTpl.chooseTemplate(intent, em.from_email, em.subject, em.body_snippet);
+      const draft = tplId ? voiceTpl.renderDraft(tplId, em) : null;
+      const autorespondActive = String(process.env.EMAIL_TRIAGE_AUTORESPOND || 'false').toLowerCase() === 'true';
+
+      // HIGH always Telegrams + NEVER autoresponds — Jed-only zone.
+      if (intent === 'HIGH') {
+        const alert = `🚨 *HIGH-tier email*${highSignal ? ` _(signal: ${highSignal})_` : ''}\n\n*From:* ${em.from_name}\n*Subject:* ${em.subject}\n*Summary:* ${summary || '(no summary)'}\n\n_No auto-action taken. This needs your direct response._`;
+        await bot.sendMessage(OWNER_ID, alert, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, alert.replace(/[*_`]/g, '')).catch(() => {}));
+        try { emailTriageDrafts.save({ from_addr: em.from_email, subject: em.subject, intent: 'HIGH', template_id: null, draft_body: null }); } catch (_) {}
+        try { emailTriageDrafts.markStatus(1, 'escalated'); } catch (_) {}
+        continue;
+      }
+
+      // ROUTINE: auto-respond (if active) or just Telegram a one-liner.
+      if (intent === 'ROUTINE' && draft) {
+        if (autorespondActive) {
+          try {
+            await executeTool('send_email', { to: em.from_email, subject: draft.subject, body: draft.body });
+            console.log(`[EMAIL] ROUTINE autorespond sent (${tplId}) -> ${em.from_email}`);
+            try { emailTriageDrafts.save({ from_addr: em.from_email, subject: em.subject, intent: 'ROUTINE', template_id: tplId, draft_body: draft.body }); } catch (_) {}
+          } catch (e) {
+            console.error('[EMAIL] ROUTINE autorespond send failed:', e.message);
+          }
+        } else {
+          const dId = (() => { try { return emailTriageDrafts.save({ from_addr: em.from_email, subject: em.subject, intent: 'ROUTINE', template_id: tplId, draft_body: draft.body }); } catch (_) { return null; } })();
+          const tg = `📩 *ROUTINE — draft staged* (${tplId}, autoresp OFF)\n*From:* ${em.from_name} <${em.from_email}>\n*Subject:* ${em.subject}\n*Draft id:* ${dId}\n\n${draft.body.slice(0, 700)}`;
+          await bot.sendMessage(OWNER_ID, tg, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, tg.replace(/[*_`]/g, '')).catch(() => {}));
+        }
+        continue;
+      }
+
+      // MEDIUM: draft + Telegram for ✅/✍️/❌ inline review (buttons leveraged via pending_action shape — bot.js callback covers post/edit/skip)
+      if (intent === 'MEDIUM' && draft) {
+        const dId = (() => { try { return emailTriageDrafts.save({ from_addr: em.from_email, subject: em.subject, intent: 'MEDIUM', template_id: tplId, draft_body: draft.body }); } catch (_) { return null; } })();
+        const tg = `📧 *MEDIUM — draft ready* (${tplId}${autorespondActive ? '' : ', autoresp OFF'})\n*From:* ${em.from_name} <${em.from_email}>\n*Subject:* ${em.subject}\n*Summary:* ${summary || '(none)'}\n*Draft id:* ${dId}\n\n${draft.body.slice(0, 800)}\n\n_Reply to this Telegram with the edited body (or send as-is) — Solomon will email back from buildingshultz@gmail.com._`;
+        await bot.sendMessage(OWNER_ID, tg, { parse_mode: 'Markdown' }).catch(() => bot.sendMessage(OWNER_ID, tg.replace(/[*_`]/g, '')).catch(() => {}));
+        continue;
+      }
+
+      // Fallback: no template fit — drop to the old urgent/normal Telegram alert.
       const icon = classification === "urgent" ? "🚨" : "📧";
       const alert =
         `${icon} *${classification.toUpperCase()} email*\n\n` +
