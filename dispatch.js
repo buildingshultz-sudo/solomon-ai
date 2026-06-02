@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { consultNathan, IRREVERSIBLE_CATEGORIES, CAUTIOUS_CATEGORIES } = require('./nathan-bridge');
-const { dispatchThresholds } = require('./memory');
+const { dispatchThresholds, db } = require('./memory');
 
 const TEMPLATES_DIR = path.join(__dirname, 'dispatch-templates');
 const SAM_QUEUE_DIR = path.join(__dirname, 'sam-queue');
@@ -245,7 +245,50 @@ function appendShadowLog(entry) {
  * async fn(template, inputs, filledPrompt, ctx) so this module stays decoupled
  * from bot.js. opts.dryRun = true forces shadow mode regardless of memory.
  */
+// Question pre-detector. Fires when a message is unambiguously a question and
+// is NOT phrased as a task request. Returns null if not a question; otherwise
+// returns a short reason string that the caller surfaces via decision='direct_answer'.
+// Bot.js consumes 'direct_answer' the same way it consumes consult_nathan /
+// escalate_jed: fall through to askSolomon().
+const QUESTION_WH_STARTS = /^\s*(how|what|why|when|where|who|whom|whose|which|can|could|should|would|will|is|are|am|was|were|do|does|did|has|have|had)\b/i;
+const QUESTION_TASK_OVERRIDE = /\b(build me|build a|add a|create a|set up|fix the|fix that|update the|update my|send|post|email|run|deploy|publish|generate|launch|schedule|cancel|delete|remove|kill|restart|reboot|reset|rotate)\b/i;
+function detectDirectAnswer(message) {
+  if (!message || typeof message !== 'string') return null;
+  const trimmed = message.trim();
+  if (!trimmed) return null;
+  const endsWithQ = /\?\s*$/.test(trimmed);
+  const startsWithWh = QUESTION_WH_STARTS.test(trimmed);
+  if (!endsWithQ && !startsWithWh) return null;
+  // Override: if the message also has explicit task intent ("can you build me X?", "could you send Y?"),
+  // let the normal classifier route it — it's a task request phrased as a question.
+  if (QUESTION_TASK_OVERRIDE.test(trimmed)) return null;
+  return endsWithQ ? 'ends-with-? (no task verb)' : 'wh-word start (no task verb)';
+}
+
 async function classifyAndRoute(message, opts = {}) {
+  // ── DIRECT-ANSWER PRE-STEP ──
+  // Cheap detector that short-circuits the LLM classifier when the message is
+  // clearly a question (and not a task phrased as one). Saves a Claude call +
+  // keeps Telegram chat snappy for "how do I X?"-style asks.
+  const directReason = detectDirectAnswer(message);
+  if (directReason) {
+    try {
+      db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run(
+        'direct_answer',
+        JSON.stringify({ question: message.slice(0, 280), reason: directReason })
+      );
+    } catch (_) {}
+    return {
+      decision: 'direct_answer',
+      template: null,
+      template_id: null,
+      classification: { template_id: null, confidence: null, inputs: {}, rationale: 'question pre-detector: ' + directReason },
+      reason: directReason,
+      action_result: null,
+      mode: opts.dryRun ? 'shadow' : getMode(opts.mem)
+    };
+  }
+
   const templates = loadTemplates(opts.forceReload);
   const classification = await classifyMessage(message, templates);
   const mode = opts.dryRun ? 'shadow' : getMode(opts.mem);
