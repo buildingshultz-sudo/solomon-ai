@@ -259,6 +259,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_solomon_docs_filename ON solomon_documents(filename);
   CREATE INDEX IF NOT EXISTS idx_solomon_docs_mtime ON solomon_documents(mtime DESC);
+  -- Facebook token metadata: tracks long-lived token expiry per page so the
+  -- weekly monitor can warn before posting breaks. NEVER stores the full
+  -- token value; only the last 8 chars for audit + the expiry timestamp.
+  CREATE TABLE IF NOT EXISTS fb_token_metadata (
+    page_key TEXT PRIMARY KEY,
+    token_last8 TEXT,
+    expires_at TIMESTAMP,
+    issued_at TIMESTAMP,
+    scopes TEXT,
+    source TEXT
+  );
 `);
 // ── jed_tasks SEED (idempotent: only inserts if table is empty) ────────────
 // Initial open-task list captured from the Jed-action items that have been
@@ -879,4 +890,23 @@ const solomonDocuments = {
   all(limit = 100) { return db.prepare(`SELECT * FROM solomon_documents ORDER BY mtime DESC LIMIT ?`).all(limit); }
 };
 
-module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts, solomonDocuments };
+// ── FB token metadata: track expiry per page (last 8 chars for audit only) ──
+const fbTokenMetadata = {
+  upsert({ page_key, token_last8, expires_at, issued_at, scopes, source }) {
+    if (!['irish_craftsman', 'building_shultz'].includes(page_key)) {
+      throw new Error('page_key must be irish_craftsman | building_shultz');
+    }
+    db.prepare(`INSERT INTO fb_token_metadata (page_key, token_last8, expires_at, issued_at, scopes, source)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(page_key) DO UPDATE SET
+        token_last8 = excluded.token_last8,
+        expires_at  = excluded.expires_at,
+        issued_at   = excluded.issued_at,
+        scopes      = excluded.scopes,
+        source      = excluded.source`).run(page_key, token_last8 || null, expires_at || null, issued_at || null, scopes || null, source || null);
+  },
+  get(page_key) { return db.prepare(`SELECT * FROM fb_token_metadata WHERE page_key = ?`).get(page_key); },
+  all() { return db.prepare(`SELECT * FROM fb_token_metadata ORDER BY page_key`).all(); }
+};
+
+module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts, solomonDocuments, fbTokenMetadata };

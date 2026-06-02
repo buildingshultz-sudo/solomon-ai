@@ -10,7 +10,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks, jedPatterns, purchaseSequences } = require('./memory');
+const { messages, tasks, mem, budget, projectQueue, featureRequests, nathanInbox, lessons, jedTasks, jedPatterns, purchaseSequences, fbTokenMetadata } = require('./memory');
 const { formatLongResponse } = require('./response-formatter');
 const { TOOL_DEFINITIONS, executeTool, getSocialAuthStatus } = require('./tools');
 const { execSync } = require('child_process');
@@ -1668,60 +1668,147 @@ bot.onText(/^\/brief\b/i, async (msg) => {
   }
 });
 
-// /setfbtoken <page> <token> — Jed pastes a freshly-regenerated long-lived Facebook
-// page token from developers.facebook.com/tools/explorer. Solomon validates it
-// (Graph API /me + page-ID match), updates .env, and triggers a PM2 restart of
-// solomon-v4 to pick up the new value. The token is REDACTED from logs.
+// /setfbtoken <page> <token> — Jed pastes a freshly-regenerated Facebook page
+// token from developers.facebook.com/tools/explorer (short-lived OK). Solomon:
+//   1. Exchanges it for a 60-day long-lived token via /oauth/access_token
+//   2. Validates via /me/accounts — page id must be in the returned admin list
+//   3. Writes the long-lived token to .env (NOT the raw input)
+//   4. Calls /debug_token to capture expiry + scopes -> fb_token_metadata table
+//   5. Restarts solomon-v4 to activate
+// Tokens are REDACTED from logs (line 1331). On exchange failure (e.g. missing
+// FB_APP_ID / FB_APP_SECRET), falls back to saving the raw token with a clear warning.
 bot.onText(/^\/setfbtoken\b/i, async (msg) => {
   if (msg.chat.id !== OWNER_ID) return;
   const parts = (msg.text || '').trim().split(/\s+/);
   if (parts.length < 3) {
-    bot.sendMessage(msg.chat.id, 'Usage: /setfbtoken <building_shultz|irish_craftsman> <long-lived-token>').catch(() => {});
+    bot.sendMessage(msg.chat.id, 'Usage: /setfbtoken <building_shultz|irish_craftsman> <token>').catch(() => {});
     return;
   }
   const pageKey = String(parts[1]).toLowerCase();
-  const token = parts.slice(2).join(' ').trim();
+  const rawToken = parts.slice(2).join(' ').trim();
   const pageIds = { building_shultz: process.env.FB_BUILDING_SHULTZ_ID, irish_craftsman: process.env.FB_IRISH_CRAFTSMAN_ID };
   if (!pageIds[pageKey]) {
     bot.sendMessage(msg.chat.id, '❌ Unknown page. Use `building_shultz` or `irish_craftsman`.', { parse_mode: 'Markdown' }).catch(() => {});
     return;
   }
-  if (token.length < 30) {
-    bot.sendMessage(msg.chat.id, '❌ Token looks too short — paste the full long-lived token.').catch(() => {});
+  if (rawToken.length < 30) {
+    bot.sendMessage(msg.chat.id, '❌ Token looks too short — paste the full token from /tools/explorer.').catch(() => {});
     return;
   }
   bot.sendChatAction(msg.chat.id, 'typing').catch(() => {});
-  try {
-    // Validate the token against Graph API and check it belongs to the EXPECTED page id.
-    const r = await axios.get('https://graph.facebook.com/v19.0/me', {
-      params: { access_token: token, fields: 'id,name' }, timeout: 12000
-    });
-    const tokId = String(r.data && r.data.id || '');
-    const tokName = (r.data && r.data.name) || '';
-    if (tokId !== String(pageIds[pageKey])) {
-      await bot.sendMessage(msg.chat.id, `❌ Token belongs to page "${tokName}" (id ${tokId}), not the *${pageKey}* page (expected id ${pageIds[pageKey]}). Not saved.`, { parse_mode: 'Markdown' }).catch(() => {});
-      return;
-    }
-    // Write into .env (replace existing line or append). Preserve everything else.
-    const envPath = path.join(__dirname, '.env');
-    const envKey = pageKey === 'building_shultz' ? 'FB_BUILDING_SHULTZ_TOKEN' : 'FB_IRISH_CRAFTSMAN_TOKEN';
+
+  const envPath = path.join(__dirname, '.env');
+  const envKey = pageKey === 'building_shultz' ? 'FB_BUILDING_SHULTZ_TOKEN' : 'FB_IRISH_CRAFTSMAN_TOKEN';
+  const writeEnv = (val) => {
     let envContent = fs.readFileSync(envPath, 'utf8');
     const re = new RegExp('^' + envKey + '=.*$', 'm');
-    envContent = re.test(envContent) ? envContent.replace(re, envKey + '=' + token) : (envContent.replace(/\s*$/, '') + '\n' + envKey + '=' + token + '\n');
+    envContent = re.test(envContent) ? envContent.replace(re, envKey + '=' + val) : (envContent.replace(/\s*$/, '') + '\n' + envKey + '=' + val + '\n');
     fs.writeFileSync(envPath, envContent, 'utf8');
-    process.env[envKey] = token; // keep current process in sync until restart
-    const masked = token.slice(0, 8) + '…' + token.slice(-4);
-    await bot.sendMessage(msg.chat.id, `✅ *${pageKey}* token saved (validated as "${tokName}", id ${tokId}; masked: \`${masked}\`).\nRestarting solomon-v4 to activate…`, { parse_mode: 'Markdown' })
-      .catch(() => bot.sendMessage(msg.chat.id, `✅ ${pageKey} token saved (validated). Restarting solomon-v4...`));
-    try { await executeTool('append_master_context', { section: 'STACK', entry: `FB token refreshed for ${pageKey} (${tokName})` }); } catch (_) {}
-    // Restart after a short delay so the confirmation reply lands first.
-    setTimeout(() => {
-      try { require('child_process').spawn('pm2', ['restart', 'solomon-v4'], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
-    }, 1500);
-  } catch (e) {
-    const m = (e.response && e.response.data && e.response.data.error && e.response.data.error.message) || e.message;
-    bot.sendMessage(msg.chat.id, `❌ Token validation failed: ${String(m).slice(0, 200)}`).catch(() => {});
+    process.env[envKey] = val;
+  };
+
+  // STEP 1: exchange short->long via FB.
+  const appId = process.env.FB_APP_ID;
+  const appSecret = process.env.FB_APP_SECRET;
+  let tokenToPersist = rawToken;
+  let exchanged = false;
+  let exchangeNote = '';
+  if (!appId || !appSecret) {
+    exchangeNote = '⚠️ FB_APP_ID / FB_APP_SECRET missing in .env — can\'t exchange. Saving raw token as fallback (will expire in ~1 hour). Add the app credentials and re-run /setfbtoken.';
+  } else {
+    try {
+      const exResp = await axios.get('https://graph.facebook.com/v19.0/oauth/access_token', {
+        params: { grant_type: 'fb_exchange_token', client_id: appId, client_secret: appSecret, fb_exchange_token: rawToken },
+        timeout: 12000
+      });
+      const newTok = exResp.data && exResp.data.access_token;
+      const expIn = exResp.data && exResp.data.expires_in;
+      if (newTok) {
+        tokenToPersist = newTok;
+        exchanged = (newTok !== rawToken);
+        exchangeNote = exchanged ? `Exchanged → long-lived (expires_in ${Math.round((expIn || 0)/86400)}d).` : 'Token was already long-lived (FB returned same).';
+      }
+    } catch (e) {
+      const m = e.response?.data?.error?.message || e.message;
+      exchangeNote = `⚠️ Exchange call failed (${String(m).slice(0, 120)}). Saving raw token as fallback — refresh sooner.`;
+    }
   }
+
+  // STEP 2: validate the (long-lived if exchanged, else raw) token via /me/accounts.
+  // This is the correct check — owner-ID-vs-page-ID compare was the old bug.
+  let pageName = null, pageTokenDerived = null;
+  try {
+    const ar = await axios.get('https://graph.facebook.com/v19.0/me/accounts', {
+      params: { fields: 'id,name,access_token,tasks', access_token: tokenToPersist, limit: 100 }, timeout: 12000
+    });
+    const match = (ar.data?.data || []).find(p => String(p.id) === String(pageIds[pageKey]));
+    if (!match) {
+      const accessible = (ar.data?.data || []).map(p => `${p.id} (${p.name})`).join(', ') || '(none)';
+      await bot.sendMessage(msg.chat.id, `❌ Token owner doesn't admin the ${pageKey} page (id ${pageIds[pageKey]}). Pages accessible to this token: ${accessible}. Not saved.`).catch(() => {});
+      return;
+    }
+    pageName = match.name;
+    pageTokenDerived = match.access_token || null;
+  } catch (e) {
+    const m = e.response?.data?.error?.message || e.message;
+    await bot.sendMessage(msg.chat.id, `❌ Token validation failed (${String(m).slice(0, 200)}). Not saved.`).catch(() => {});
+    return;
+  }
+
+  // STEP 3: persist long-lived to .env.
+  try { writeEnv(tokenToPersist); }
+  catch (e) {
+    await bot.sendMessage(msg.chat.id, `❌ .env write failed: ${e.message.slice(0, 200)}. Token NOT persisted.`).catch(() => {});
+    return;
+  }
+
+  // Persist derived page token in-process too.
+  if (pageTokenDerived) {
+    const derivedEnv = pageKey === 'building_shultz' ? 'FB_BUILDING_SHULTZ_PAGE_TOKEN_DERIVED' : 'FB_IRISH_CRAFTSMAN_PAGE_TOKEN_DERIVED';
+    process.env[derivedEnv] = pageTokenDerived;
+  }
+
+  // STEP 4: debug_token for expiry + scopes -> fb_token_metadata.
+  let expiresAt = null, scopes = '';
+  if (appId && appSecret) {
+    try {
+      const dbg = await axios.get('https://graph.facebook.com/v19.0/debug_token', {
+        params: { input_token: tokenToPersist, access_token: appId + '|' + appSecret }, timeout: 12000
+      });
+      const d = dbg.data?.data || {};
+      if (d.expires_at) expiresAt = new Date(d.expires_at * 1000).toISOString();
+      if (Array.isArray(d.scopes)) scopes = d.scopes.join(',');
+    } catch (_) { /* non-fatal; metadata row still written without expiry */ }
+  }
+  try {
+    fbTokenMetadata.upsert({
+      page_key: pageKey,
+      token_last8: tokenToPersist.slice(-8),
+      expires_at: expiresAt,
+      issued_at: new Date().toISOString(),
+      scopes,
+      source: 'setfbtoken_exchange'
+    });
+  } catch (e) {
+    log('WARN', 'FB-TOKEN', 'fb_token_metadata upsert failed', { error: e.message });
+  }
+
+  const masked = tokenToPersist.slice(0, 6) + '…' + tokenToPersist.slice(-4);
+  const expLine = expiresAt ? `Expires: \`${expiresAt.slice(0, 10)}\` (${Math.round((new Date(expiresAt).getTime() - Date.now()) / 86400000)}d)` : 'Expiry unknown (debug_token failed or app creds missing).';
+  const reply = [
+    `✅ *${pageKey}* token saved (validated as "${pageName}").`,
+    `Token: \`${masked}\``,
+    exchangeNote,
+    expLine,
+    pageTokenDerived ? `Page-derived token cached in process.env.` : '',
+    `Restarting solomon-v4 to activate…`
+  ].filter(Boolean).join('\n');
+  await bot.sendMessage(msg.chat.id, reply, { parse_mode: 'Markdown' })
+    .catch(() => bot.sendMessage(msg.chat.id, reply.replace(/[*_`]/g, '')));
+  try { await executeTool('append_master_context', { section: 'STACK', entry: `FB token refreshed for ${pageKey} (${pageName})${exchanged ? ' [auto-exchanged → long-lived]' : ''}` }); } catch (_) {}
+  setTimeout(() => {
+    try { require('child_process').spawn('pm2', ['restart', 'solomon-v4'], { detached: true, stdio: 'ignore' }).unref(); } catch (_) {}
+  }, 1500);
 });
 
 // /dispatch <message> — run a Telegram message through the new dispatch engine
