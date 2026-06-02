@@ -2,7 +2,7 @@
 // tools.js — All tool definitions and executors.
 // NO self-patching. NO Ollama. NO local LLM. Cloud-only.
 require('dotenv').config();
-const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget, db, jedDebts, localIntel, emailTriageDrafts } = require('./memory');
+const { mem, nativeMem, batchJobs, tasks, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, scheduledPosts, budget, db, jedDebts, localIntel, emailTriageDrafts, solomonDocuments } = require('./memory');
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
@@ -1133,6 +1133,28 @@ const TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         task_id: { type: "string", description: "Optional task id to filter to one job." }
+      }
+    }
+  }
+  ,{
+    name: "search_documents",
+    description: "Search the Solomon document registry (PDFs / MD / DOCX from D:\\Solomon\\reports\\ on Jed's PC, indexed weekly via the pc-relay). Case-insensitive substring match over filename + summary. Newest first. Use this before answering Jed's questions about past reports / audits / briefs — it surfaces what's on disk.",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search term (matched against filename + summary, case-insensitive)." },
+        limit: { type: "integer", description: "Max results (default 5, cap 50)." }
+      },
+      required: ["query"]
+    }
+  }
+  ,{
+    name: "reindex_documents",
+    description: "Manually trigger the document registry scan (normally runs Sunday 3 AM CT). Idempotent: skips files whose content_hash + mtime haven't changed since last index. Pass {force:true} to re-summarize every file regardless of hash. Returns {ok, total, new, updated, skipped, errors, took_ms}.",
+    input_schema: {
+      type: "object",
+      properties: {
+        force: { type: "boolean", description: "If true, re-summarize every file even when content_hash matches. Default false." }
       }
     }
   }
@@ -2789,6 +2811,36 @@ Output format (JSON):
           return resp.data;
         } catch (e) {
           return { ok: false, error: 'caleb_queue_status failed: ' + (e.message).slice(0, 240) };
+        }
+      }
+      case "search_documents": {
+        if (!input || !input.query) return { ok: false, error: 'query required' };
+        const rows = solomonDocuments.search(input.query, input.limit || 5);
+        return {
+          ok: true,
+          query: input.query,
+          count: rows.length,
+          results: rows.map(r => ({
+            filename: r.filename,
+            path: r.path,
+            filetype: r.filetype,
+            size_bytes: r.size_bytes,
+            mtime: r.mtime,
+            summary: r.summary,
+            last_indexed_at: r.last_indexed_at
+          }))
+        };
+      }
+      case "reindex_documents": {
+        try {
+          const scheduler = require('./scheduler');
+          if (typeof scheduler.scanDocumentsCron !== 'function') {
+            return { ok: false, error: 'scheduler.scanDocumentsCron not exported (scheduler import path issue)' };
+          }
+          const r = await scheduler.scanDocumentsCron({ force: !!(input && input.force) });
+          return { ok: true, ...r };
+        } catch (e) {
+          return { ok: false, error: 'reindex_documents failed: ' + (e.message || String(e)).slice(0, 240) };
         }
       }
       case "financial_snapshot": {

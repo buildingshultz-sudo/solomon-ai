@@ -4,7 +4,7 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const TelegramBot = require('node-telegram-bot-api');
-const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts } = require('./memory');
+const { tasks, mem, budget, db, projectQueue, lessons, featureRequests, nathanInbox, scheduledPosts, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts, solomonDocuments } = require('./memory');
 const { executeTool, TOOL_DEFINITIONS } = require('./tools');
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
@@ -2010,6 +2010,185 @@ cron.schedule('0 20 * * 0', async () => {
   }
 }, { timezone: 'America/Chicago' });
 
+// ══════════════════════════════════════════════════════════════════════════
+// DOCUMENT REGISTRY: weekly scan of D:\Solomon\reports\ on the PC via pc-relay.
+// Indexes PDFs / MD / DOCX into solomon_documents (with Claude-generated
+// summaries). Sunday 3 AM CT scheduled scan; reindex_documents tool for
+// on-demand. Graceful degrade if pc-relay is unreachable.
+// ══════════════════════════════════════════════════════════════════════════
+const DOCS_REMOTE_DIR  = process.env.SOLOMON_DOCS_REMOTE_DIR || 'D:/Solomon/reports/';
+const DOCS_RELAY_URL   = process.env.PC_RELAY_URL || '';
+const DOCS_RELAY_SECRET= process.env.PC_RELAY_SECRET || '';
+const DOCS_RECURSE_DEPTH = 1; // recurse one level — many briefs are reports/<topic>/x.pdf
+const DOCS_EXTENSIONS = ['.pdf', '.md', '.docx', '.txt'];
+const DOCS_MAX_SUMMARY_CHARS = 500;
+const DOCS_PICKER_MODEL = process.env.DOCS_SUMMARY_MODEL || 'claude-sonnet-4-6';
+
+async function _relayListDir(absDir) {
+  if (!DOCS_RELAY_URL) throw new Error('PC_RELAY_URL not set');
+  const url = DOCS_RELAY_URL.replace(/\/$/, '') + '/file/list?dir=' + encodeURIComponent(absDir);
+  const r = await axios.get(url, { headers: { 'X-Secret': DOCS_RELAY_SECRET }, timeout: 12000 });
+  if (!r.data || !r.data.ok) throw new Error('relay returned non-ok for list ' + absDir);
+  return r.data.entries || [];
+}
+
+async function _enumerateAllDocs() {
+  // Returns [{name, path, size, mtime}] of all eligible files, recursing
+  // DOCS_RECURSE_DEPTH levels into subdirs.
+  const out = [];
+  async function walk(absDir, depth) {
+    let entries;
+    try { entries = await _relayListDir(absDir); }
+    catch (e) { throw e; }
+    for (const e of entries) {
+      if (e.is_dir) {
+        if (depth < DOCS_RECURSE_DEPTH) await walk(absDir.replace(/[\\/]+$/, '') + '/' + e.name + '/', depth + 1);
+        continue;
+      }
+      const lower = (e.name || '').toLowerCase();
+      const ext = path.extname(lower);
+      if (!DOCS_EXTENSIONS.includes(ext)) continue;
+      out.push({
+        name: e.name,
+        path: absDir.replace(/[\\/]+$/, '') + '\\' + e.name,
+        size: e.size,
+        mtime: e.mtime,
+        ext
+      });
+    }
+  }
+  await walk(DOCS_REMOTE_DIR, 0);
+  return out;
+}
+
+async function _fetchAndExtract(remotePath, ext) {
+  // Use the existing pc_fetch_file tool — it handles HMAC + size cap + tmp dir.
+  const fetchRes = await executeTool('pc_fetch_file', { path: remotePath, max_bytes: 50 * 1024 * 1024 });
+  if (!fetchRes || !fetchRes.ok) throw new Error('pc_fetch_file failed: ' + (fetchRes && fetchRes.error));
+  const localPath = fetchRes.local_path;
+  let text = '';
+  if (ext === '.pdf') {
+    try { text = execSync(`pdftotext -layout "${localPath}" -`, { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 }); }
+    catch (e) { text = '(pdftotext failed: ' + e.message.slice(0, 120) + ')'; }
+  } else if (ext === '.md' || ext === '.txt') {
+    try { text = fs.readFileSync(localPath, 'utf8'); }
+    catch (e) { text = '(read failed: ' + e.message.slice(0, 120) + ')'; }
+  } else if (ext === '.docx') {
+    try { text = execSync(`pandoc "${localPath}" -t plain`, { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 }); }
+    catch (e) { text = '(pandoc unavailable or failed: ' + e.message.slice(0, 120) + ' — falling back to filename-only index)'; }
+  }
+  // Hash the actual file bytes (not the extracted text) — more stable for re-index skip.
+  let hash = null;
+  try { hash = crypto.createHash('sha256').update(fs.readFileSync(localPath)).digest('hex'); } catch (_) {}
+  // Clean up temp file
+  try { fs.unlinkSync(localPath); } catch (_) {}
+  return { text: (text || '').slice(0, 80000), hash };
+}
+
+async function _summarizeDoc(filename, text) {
+  if (!text || text.length < 40) {
+    return { summary: '(too short to summarize: ' + (text || '').slice(0, 100) + ')', model: 'noop' };
+  }
+  try {
+    const resp = await axios.post('https://api.anthropic.com/v1/messages', {
+      model: DOCS_PICKER_MODEL,
+      max_tokens: 400,
+      system: `Summarize the document in 2-3 sentences for a search index. Capture: (1) what it is about, (2) who would search for it, (3) the key takeaway. Output ONLY a single JSON object: {"summary": "<2-3 sentences, max ${DOCS_MAX_SUMMARY_CHARS} chars>", "key_topics": ["tag1","tag2",...]}. No preamble, no markdown.`,
+      messages: [{ role: 'user', content: `Filename: ${filename}\n\n--- DOCUMENT ---\n${text.slice(0, 30000)}` }]
+    }, {
+      headers: { 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      timeout: 30000
+    });
+    try { budget.log({ inputTokens: resp.data.usage.input_tokens, outputTokens: resp.data.usage.output_tokens, model: DOCS_PICKER_MODEL }); } catch (_) {}
+    const txt = (resp.data.content?.[0]?.text || '').trim();
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (m) {
+      try {
+        const j = JSON.parse(m[0]);
+        const sum = String(j.summary || '').slice(0, DOCS_MAX_SUMMARY_CHARS);
+        const topics = Array.isArray(j.key_topics) ? j.key_topics.slice(0, 8).join(', ') : '';
+        return { summary: topics ? `${sum} | topics: ${topics}` : sum, model: DOCS_PICKER_MODEL };
+      } catch (_) {}
+    }
+    return { summary: txt.slice(0, DOCS_MAX_SUMMARY_CHARS), model: DOCS_PICKER_MODEL };
+  } catch (e) {
+    return { summary: '(summarize failed: ' + e.message.slice(0, 120) + ')', model: 'error' };
+  }
+}
+
+async function scanDocumentsCron(opts = {}) {
+  const t0 = Date.now();
+  const force = !!opts.force;
+  const counts = { total: 0, new: 0, updated: 0, skipped: 0, errors: 0 };
+
+  if (!DOCS_RELAY_URL || !DOCS_RELAY_SECRET) {
+    try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('document_index_skipped', JSON.stringify({ reason: 'PC_RELAY_URL or PC_RELAY_SECRET not set' })); } catch (_) {}
+    return { ok: false, error: 'PC_RELAY_URL or PC_RELAY_SECRET not configured', ...counts };
+  }
+
+  let docs;
+  try { docs = await _enumerateAllDocs(); }
+  catch (e) {
+    try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('document_index_skipped', JSON.stringify({ reason: 'pc-relay unreachable', error: e.message.slice(0, 200) })); } catch (_) {}
+    console.log('[SCHEDULER] document registry: pc-relay unreachable — scan skipped (' + e.message.slice(0, 120) + ')');
+    return { ok: false, error: 'pc-relay unreachable: ' + e.message.slice(0, 200), ...counts };
+  }
+
+  for (const d of docs) {
+    counts.total++;
+    try {
+      const existing = solomonDocuments.getByPath(d.path);
+      if (existing && !force && existing.mtime === d.mtime && existing.size_bytes === d.size && existing.content_hash) {
+        counts.skipped++;
+        continue;
+      }
+      const { text, hash } = await _fetchAndExtract(d.path, d.ext);
+      if (existing && !force && existing.content_hash === hash) {
+        // mtime drifted but content didn't — update mtime only.
+        solomonDocuments.upsert({ filename: d.name, path: d.path, filetype: d.ext.slice(1), size_bytes: d.size, mtime: d.mtime, summary: existing.summary, summary_model: existing.summary_model, content_hash: hash });
+        counts.skipped++;
+        continue;
+      }
+      const { summary, model } = await _summarizeDoc(d.name, text);
+      const res = solomonDocuments.upsert({ filename: d.name, path: d.path, filetype: d.ext.slice(1), size_bytes: d.size, mtime: d.mtime, summary, summary_model: model, content_hash: hash });
+      if (res.action === 'inserted') counts.new++;
+      else                            counts.updated++;
+      try {
+        db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('document_indexed', JSON.stringify({
+          path: d.path, filename: d.name, action: res.action, model
+        }));
+      } catch (_) {}
+    } catch (e) {
+      counts.errors++;
+      console.error(`[SCHEDULER] document index error for ${d.path}: ${e.message}`);
+    }
+  }
+
+  const took = Date.now() - t0;
+  if (counts.new > 0 || counts.updated > 0 || counts.errors > 0) {
+    const msg = `📚 Document registry refreshed: ${counts.total} total, ${counts.new} new, ${counts.updated} updated${counts.errors ? `, ${counts.errors} errors` : ''}.`;
+    try { await bot.sendMessage(OWNER_ID, msg); } catch (_) {}
+  }
+  return { ok: true, ...counts, took_ms: took };
+}
+
+cron.schedule('0 3 * * 0', async () => {
+  console.log('[SCHEDULER] Document registry weekly scan running...');
+  try { const r = await scanDocumentsCron({}); console.log('[SCHEDULER] doc scan:', JSON.stringify(r)); }
+  catch (e) { console.error('[SCHEDULER] doc scan error:', e.message); }
+}, { timezone: 'America/Chicago' });
+
+// Bootstrap: on first startup with an empty registry, do an initial scan
+// 10 seconds after boot. Skips silently if pc-relay is unreachable.
+setTimeout(() => {
+  try {
+    if (solomonDocuments.count() === 0) {
+      console.log('[SCHEDULER] Document registry empty — running bootstrap scan...');
+      scanDocumentsCron({}).then(r => console.log('[SCHEDULER] bootstrap doc scan:', JSON.stringify(r))).catch(e => console.error('[SCHEDULER] bootstrap doc scan error:', e.message));
+    }
+  } catch (_) {}
+}, 10_000).unref();
+
 // ── EXPORTS (callable by bot.js / tools.js on demand) ──────────────────────
 // These were always declared above but never exported, so Solomon could not
 // invoke them on demand (e.g. for an on-demand brief or weekly repurpose).
@@ -2027,7 +2206,8 @@ module.exports = {
   generateWeeklyPatternDigest,
   loadCampaignConfig,
   saveCampaignConfig,
-  matchSkipTopic
+  matchSkipTopic,
+  scanDocumentsCron
 };
 
 // Startup banner only fires when scheduler.js is the main module (PM2 process).

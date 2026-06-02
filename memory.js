@@ -241,6 +241,24 @@ db.exec(`
     status TEXT CHECK(status IN ('pending','sent','skipped','escalated')) DEFAULT 'pending'
   );
   CREATE INDEX IF NOT EXISTS email_drafts_status_idx ON email_triage_drafts (status);
+  -- Document registry: PDFs/MD/DOCX from D:\Solomon\reports\ on the PC,
+  -- indexed weekly so search_documents can find them by filename + summary.
+  CREATE TABLE IF NOT EXISTS solomon_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    path TEXT NOT NULL UNIQUE,
+    filetype TEXT,
+    size_bytes INTEGER,
+    mtime TIMESTAMP,
+    created_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_indexed_at TIMESTAMP,
+    summary TEXT,
+    summary_model TEXT,
+    content_hash TEXT,
+    source TEXT DEFAULT 'D:\\Solomon\\reports\\'
+  );
+  CREATE INDEX IF NOT EXISTS idx_solomon_docs_filename ON solomon_documents(filename);
+  CREATE INDEX IF NOT EXISTS idx_solomon_docs_mtime ON solomon_documents(mtime DESC);
 `);
 // ── jed_tasks SEED (idempotent: only inserts if table is empty) ────────────
 // Initial open-task list captured from the Jed-action items that have been
@@ -829,4 +847,36 @@ const emailTriageDrafts = {
   pending() { return db.prepare(`SELECT * FROM email_triage_drafts WHERE status='pending' ORDER BY id DESC LIMIT 50`).all(); }
 };
 
-module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts };
+// ── solomon_documents module: registry lookups + upserts ────────────────────
+const solomonDocuments = {
+  // Case-insensitive LIKE search across filename + summary. Newest first.
+  search(query, limit = 5) {
+    const q = '%' + String(query || '').toLowerCase() + '%';
+    return db.prepare(`
+      SELECT id, filename, path, filetype, size_bytes, mtime, summary, last_indexed_at
+      FROM solomon_documents
+      WHERE LOWER(filename) LIKE ? OR LOWER(IFNULL(summary, '')) LIKE ?
+      ORDER BY mtime DESC
+      LIMIT ?
+    `).all(q, q, Math.max(1, Math.min(50, limit | 0)));
+  },
+  getByPath(p) { return db.prepare(`SELECT * FROM solomon_documents WHERE path = ?`).get(p); },
+  upsert({ filename, path, filetype, size_bytes, mtime, summary, summary_model, content_hash, source }) {
+    const existing = db.prepare(`SELECT id, created_date FROM solomon_documents WHERE path = ?`).get(path);
+    if (existing) {
+      db.prepare(`UPDATE solomon_documents
+        SET filename=?, filetype=?, size_bytes=?, mtime=?, summary=?, summary_model=?, content_hash=?, source=COALESCE(?, source), last_indexed_at=CURRENT_TIMESTAMP
+        WHERE id=?`).run(filename, filetype, size_bytes, mtime, summary, summary_model, content_hash, source || null, existing.id);
+      return { id: existing.id, action: 'updated' };
+    }
+    const info = db.prepare(`INSERT INTO solomon_documents
+      (filename, path, filetype, size_bytes, mtime, summary, summary_model, content_hash, source, last_indexed_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, 'D:\\Solomon\\reports\\'), CURRENT_TIMESTAMP)`)
+      .run(filename, path, filetype, size_bytes, mtime, summary, summary_model, content_hash, source || null);
+    return { id: info.lastInsertRowid, action: 'inserted' };
+  },
+  count() { return db.prepare(`SELECT COUNT(*) AS n FROM solomon_documents`).get().n; },
+  all(limit = 100) { return db.prepare(`SELECT * FROM solomon_documents ORDER BY mtime DESC LIMIT ?`).all(limit); }
+};
+
+module.exports = { messages, scheduledPosts, tasks, mem, nativeMem, batchJobs, budget, lessons, projects, errorDB, projectQueue, featureRequests, nathanInbox, claudeFiles, testDB, resetDB, db, jedTasks, jedPatterns, dispatchThresholds, purchaseSequences, jedDebts, localIntel, emailTriageDrafts, solomonDocuments };
