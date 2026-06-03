@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-02 07:45 CT — [PROJECTS] Feature shipped — commit 3c277f4: feat(campaign): skip-topic filter + /campaign  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-03 16:35 CT — [REVENUE] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jun <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,11 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-02 15:58 CT] FB token refreshed for irish_craftsman (Irish Craftsman) [auto-exchanged → long-lived]
+- [2026-06-02 15:57 CT] FB token refreshed for building_shultz (Building Shultz) [auto-exchanged → long-lived]
+- [2026-06-02 15:51 CT] FB token refreshed for building_shultz (Building Shultz)
+- [2026-06-02 15:31 CT] FB token refreshed for irish_craftsman (Irish Craftsman)
+- [2026-06-02 15:25 CT] FB token refreshed for building_shultz (Building Shultz)
 - [2026-06-01 05:37 CT] FB token refreshed for irish_craftsman (Irish Craftsman)
 - [2026-06-01 05:36 CT] FB token refreshed for building_shultz (Building Shultz)
 
@@ -65,6 +70,12 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-02 16:30 CT] Feature shipped — commit 82449d6: feat(scheduler): VPS date-gated FB data-access reminder for 2026-08-24
+- [2026-06-02 16:15 CT] Feature shipped — commit 12bc8ba: fix(fb): treat permanent tokens (expires_at===0) as never-expiring
+- [2026-06-02 13:00 CT] Feature shipped — commit 0638b6b: feat(fb): weekly token expiry monitor with 14d + 7d Telegram alerts
+- [2026-06-02 12:30 CT] Feature shipped — commit 53c98f9: fix(manus-catalog): use items: not rows: for briefToPdf table sections
+- [2026-06-02 12:15 CT] Feature shipped — commit 4860e7f: fix(facebook): use Graph API page-access check instead of token-owner-ID match for Irish Craftsman/Building Shultz validation
+- [2026-06-02 11:30 CT] Feature shipped — commit 7979b7c: feat(document-registry): index reports/ docs, weekly scan + search_documents tool
 - [2026-06-02 07:45 CT] Feature shipped — commit 3c277f4: feat(campaign): skip-topic filter + /campaign skip|unskip commands
 - [2026-06-02 06:30 CT] Feature shipped — commit 8427542: feat(caleb-runner): Playwright executor + Canva auth + synthetic smoke + security doc
 - [2026-06-01 19:45 CT] Feature shipped — commit f3cd3bb: feat(T0-G): caleb_dispatch + caleb_queue_status tools, HMAC opt-in on relay, queue-path swap, offline monitor, Drive backup stub
@@ -112,6 +123,8 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-03 16:35 CT] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jun 3, 2026"
+- [2026-06-02 21:25 CT] Revenue/billing email from OpenAI: "OpenAI API Invoice 4PUTIXIO-0012"
 - [2026-06-01 24:50 CT] Revenue/billing email from DigitalOcean Support: "[DigitalOcean] Your 2026-05 invoice is available"
 
 ## 7. SAM TASK QUEUE (Claude Code build priorities)
@@ -184,6 +197,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-03 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-02 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-01 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-05-31 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
