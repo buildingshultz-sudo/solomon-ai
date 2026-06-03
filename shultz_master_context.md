@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-03 18:41 CT — [PROJECTS] IronEdit (App #1) packaging feature locked (Nathan+Jed): before upload, IronEdit <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-03 18:42 CT — [STACK] Nathan MCP usage note: append_master_context (and the other Nathan/Solomon Comms <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,7 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-03 18:42 CT] Nathan MCP usage note: append_master_context (and the other Nathan/Solomon Comms tools) are DEFERRED MCP tools — they do NOT appear in the default tool list and do NOT require a connector reconnect or a fresh chat to use. Load them by calling tool_search (e.g. query "append master context") at the start of any session where Nathan will lock decisions, then call directly. The earlier "switch to a new chat / reconnect the connector" diagnosis was wrong; the write tool was reachable all along via search. Standing rule: Nathan persists confirmed decisions to master context via this tool mid-chat, no manual relay.
 - [2026-06-02 15:58 CT] FB token refreshed for irish_craftsman (Irish Craftsman) [auto-exchanged → long-lived]
 - [2026-06-02 15:57 CT] FB token refreshed for building_shultz (Building Shultz) [auto-exchanged → long-lived]
 - [2026-06-02 15:51 CT] FB token refreshed for building_shultz (Building Shultz)
