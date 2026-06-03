@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-03 16:35 CT — [REVENUE] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jun <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-03 17:10 CT — [GENERAL] append_master_context MCP tool deployed + verified live via end-to-end test (rej <!-- LASTUPDATED -->
 
 ---
 
@@ -213,6 +213,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-03 17:10 CT] append_master_context MCP tool deployed + verified live via end-to-end test (rejection paths + happy path). (Sam)
 - [2026-06-03 CT] Product & roadmap lock-in appended under LOG:PROJECTS (TradeQuote modules Paydirt+Permit Scout, ToolShare/S&H, Lantern wedge+moat, ShiftSwap parked, RuralRoute cut, fit-filter, asset-protection, revenue priority). (Sam)
 - [2026-06-03 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-02 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
