@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-03 17:10 CT — [GENERAL] append_master_context MCP tool deployed + verified live via end-to-end test (rej <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-03 18:41 CT — [PROJECTS] IronEdit (App #1) packaging feature locked (Nathan+Jed): before upload, IronEdit <!-- LASTUPDATED -->
 
 ---
 
@@ -70,6 +70,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-03 18:41 CT] IronEdit (App #1) packaging feature locked (Nathan+Jed): before upload, IronEdit auto-detects the tools used in the footage, pulls their Amazon affiliate links, and injects those plus any other revenue links into the video description prior to the scheduled YouTube auto-post — extending the existing packaging step (thumbnail/title/desc/tags/SEO). Recognizing tools from raw video is the harder AI slice, so it lands as a LATER IronEdit phase, not the V1.0 MVP (V1.0 floor stays: finished cut on desktop ready to upload). The manual affiliate-link fill Solomon is doing now on the top-5 videos is the prototype/dogfood of this feature.
+- [2026-06-03 17:15 CT] Feature shipped — commit cd93700: feat(mcp): append-only append_master_context tool for Nathan
 - [2026-06-03 CT] PRODUCT & ROADMAP LOCK-IN (Nathan+Jed session) — supersedes the section-10 list where they differ:
   - ROADMAP FIT FILTER (locked): an app earns an active slot ONLY if Jed has lived/understands the problem (mission into software), not opportunity-chasing.
   - App #1 IronEdit (fka RoughCut Pro): AI auto-builds rough cut from raw footage; Jed dogfoods own footage; built on DaVinci Resolve. North star: voice-trigger IP-cam record → auto-ingest → AI edits → packages thumbnail/title/desc/tags/SEO → scheduled YouTube auto-post. V1.0 MVP floor = finished cut on desktop ready to upload; phase the rest. GATED on $295 DaVinci Studio (cash, not credit). This gate holds the whole roadmap.
@@ -139,6 +141,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-03 17:35 CT] Revenue/billing email from Soundstripe Team: "Your social post just became a commercial. Now what? 📲"
 - [2026-06-03 16:35 CT] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jun 3, 2026"
 - [2026-06-02 21:25 CT] Revenue/billing email from OpenAI: "OpenAI API Invoice 4PUTIXIO-0012"
 - [2026-06-01 24:50 CT] Revenue/billing email from DigitalOcean Support: "[DigitalOcean] Your 2026-05 invoice is available"
