@@ -121,6 +121,27 @@ const TOOLS = [
       },
       required: ['message']
     }
+  },
+  {
+    name: 'append_master_context',
+    description: "Persist a CONFIRMED decision to the permanent master context file (shultz_master_context.md), APPEND-ONLY. Prepends a [YYYY-MM-DD CT] timestamp and inserts the entry as a new line directly under the chosen section's log marker, then git add/commit/pushes. Use this to lock in a decision during a chat. Append-only by construction: never edits, deletes, reorders, or compresses any existing line. REFUSES any entry that looks like a credential/secret (sk-, API key, token, password, secret, Bearer, private key) and caps a single entry at ~1000 chars. Returns {ok, section, entry, committed, commit, pushed}.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        section: {
+          type: 'string',
+          enum: ['PROJECTS', 'GENERAL', 'REVENUE', 'STACK', 'SAMQUEUE'],
+          description: 'Which section log marker to append under.'
+        },
+        entry: {
+          type: 'string',
+          minLength: 1,
+          maxLength: 1000,
+          description: 'Plain-text decision to record. No credentials/secrets. The timestamp is added automatically — do not include one.'
+        }
+      },
+      required: ['section', 'entry']
+    }
   }
 ];
 
@@ -233,6 +254,87 @@ async function _toolSendTelegram(args) {
   return { ok: true, message_id: sent.message_id, chat_id: OWNER_ID };
 }
 
+// ── append_master_context — Nathan-facing append-only writer ──────────────
+// HARD CONSTRAINTS (enforced here, BEFORE any write):
+//   * section must be one of the 5 known log markers
+//   * entry capped at 1000 chars
+//   * entry rejected if it matches any credential pattern
+//   * NEVER writes .env — the reused updater only ever touches the master
+//     context file, so this is structurally guaranteed
+// The actual file mutation REUSES the existing 2026-05-29 append-only updater
+// in tools.js (executeTool -> appendMasterContext): timestamp + insert under
+// the first <!-- LOG:section --> marker, never deleting/reordering anything.
+// This tool adds only the git add/commit/push orchestration on top.
+const APPEND_ALLOWED_SECTIONS = ['PROJECTS', 'GENERAL', 'REVENUE', 'STACK', 'SAMQUEUE'];
+const APPEND_MAX_LEN = 1000;
+const CREDENTIAL_PATTERNS = [
+  /sk-/i,                                   // Anthropic/OpenAI-style key prefix
+  /\bapi[ _-]?keys?\b/i,                    // "API key" / api_key / apikey
+  /\btokens?\b/i,                           // token / tokens
+  /\bpasswords?\b/i,                        // password(s)
+  /\bsecrets?\b/i,                          // secret(s)
+  /\bbearer\b/i,                            // Bearer <...>
+  /\bprivate[ _-]?key\b/i,                  // private key
+  /-----BEGIN [A-Z ]*PRIVATE KEY-----/i     // PEM block
+];
+
+function _execFileP(cmd, args, opts) {
+  return new Promise((resolve, reject) => {
+    execFile(cmd, args, opts, (err, stdout, stderr) => {
+      if (err) { err.stdout = String(stdout || ''); err.stderr = String(stderr || ''); return reject(err); }
+      resolve({ stdout: String(stdout || ''), stderr: String(stderr || '') });
+    });
+  });
+}
+
+async function _toolAppendMasterContext(args) {
+  const section = String((args && args.section) || '').toUpperCase().trim();
+  const entry = (args && typeof args.entry === 'string') ? args.entry.trim() : '';
+
+  if (!APPEND_ALLOWED_SECTIONS.includes(section)) {
+    throw new Error('invalid section: must be one of ' + APPEND_ALLOWED_SECTIONS.join(', '));
+  }
+  if (!entry) throw new Error('entry required (non-empty plain text)');
+  if (entry.length > APPEND_MAX_LEN) {
+    throw new Error('entry too long: ' + entry.length + ' chars (max ' + APPEND_MAX_LEN + ')');
+  }
+  for (const re of CREDENTIAL_PATTERNS) {
+    if (re.test(entry)) {
+      throw new Error('refused: entry looks like it contains a credential/secret (matched ' + re + '). The master context never stores secrets.');
+    }
+  }
+
+  // Reuse the existing append-only updater (tools.js). Lazy-require so the tools
+  // dependency graph only loads when this tool is actually invoked.
+  const { executeTool } = require(path.join(SOLOMON_DIR, 'tools.js'));
+  const r = await executeTool('append_master_context', { section, entry });
+  if (!r || !r.ok) {
+    throw new Error('append failed: ' + ((r && r.error) || 'unknown error from updater'));
+  }
+
+  // git add/commit/push — orchestration only (file already mutated above).
+  // The entry text is intentionally NOT placed in the commit message, so even a
+  // benign entry can never leak into commit metadata.
+  const gitOpts = { cwd: SOLOMON_DIR, timeout: 30000, maxBuffer: 4 * 1024 * 1024 };
+  await _execFileP('git', ['add', 'shultz_master_context.md'], gitOpts);
+  let committed = false, commitHash = null, pushed = false;
+  try {
+    await _execFileP('git', ['commit', '-m', 'docs(master-context): Nathan append [' + section + ']'], gitOpts);
+    committed = true;
+  } catch (e) {
+    const blob = (e.stdout || '') + (e.stderr || '') + (e.message || '');
+    if (!/nothing to commit/i.test(blob)) throw e; // genuine failure
+  }
+  if (committed) {
+    const h = await _execFileP('git', ['rev-parse', 'HEAD'], gitOpts);
+    commitHash = h.stdout.trim();
+    await _execFileP('git', ['push', 'origin', 'master'], gitOpts);
+    pushed = true;
+  }
+
+  return { ok: true, section: r.section, entry: r.entry, committed, commit: commitHash, pushed };
+}
+
 const TOOL_IMPLS = {
   get_master_context:   _toolGetMasterContext,
   get_pm2_status:       _toolGetPm2Status,
@@ -240,7 +342,8 @@ const TOOL_IMPLS = {
   get_revenue_snapshot: _toolGetRevenueSnapshot,
   get_activity_log:     _toolGetActivityLog,
   get_morning_scorecard:_toolGetMorningScorecard,
-  send_telegram:        _toolSendTelegram
+  send_telegram:        _toolSendTelegram,
+  append_master_context:_toolAppendMasterContext
 };
 
 // ── MCP SERVER FACTORY ────────────────────────────────────────────────────
