@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 08:30 CT — [GENERAL] TEAM ROSTER: Dispatch is now named GABRIEL (Jed picked 6/4) — the messenger. Gab <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 11:17 CT — [SAMQUEUE] Sam task (priority): Update Solomon's Telegram bot to auto-load shultz_master_co <!-- LASTUPDATED -->
 
 ---
 
@@ -75,6 +75,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-04 08:45 CT] Feature shipped — commit 528b5a5: docs(master-context): Nathan append [GENERAL]
 - [2026-06-04 08:30 CT] Feature shipped — commit 99ce499: docs(master-context): Nathan append [STACK]
 - [2026-06-04 08:00 CT] Feature shipped — commit 44b89ae: docs(master-context): Nathan append [STACK]
 - [2026-06-03 21:45 CT] Feature shipped — commit 92104c5: fix(d-bridge): gate watcher on cowork_active only — Caleb stood down, CSV is now an output not a trigger
@@ -173,6 +174,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-04 11:17 CT] Sam task (priority): Update Solomon's Telegram bot to auto-load shultz_master_context.md at the start of every conversation, not only on /brief command. This closes the context gap where Solomon doesn't know today's decisions (Gabriel name, team roster, operating principles, architecture lessons) unless explicitly asked to read the file. Also update Solomon's startup system prompt to include the full team roster: Nathan/Sam/Caleb/Solomon/Gabriel. Current gap is causing team-name confusion and ambiguous-command misreads (e.g. campaign-stop incident 2026-06-04).
 
 ## 8. COWORK TASK QUEUE (desktop-agent priorities)
 1. Gmail labels & filters setup across all 3 accounts.
