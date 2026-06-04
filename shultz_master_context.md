@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 12:30 CT — [GENERAL] OPERATING PRINCIPLE — Jed's hands rule (6/4, locked): Jed's hands are for two th <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 12:30 CT — [SAMQUEUE] Sam task (6/4, banked — fire after inventory walk completes): Upgrade Solomon's  <!-- LASTUPDATED -->
 
 ---
 
@@ -179,6 +179,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-04 12:30 CT] Sam task (6/4, banked — fire after inventory walk completes): Upgrade Solomon's 5-min heartbeat to a self-healing ops layer. Checks: all PM2 procs online; 3 app /health return 200; relay reachable + correct version + read-only invariant (D: PUT/POST/DELETE → 405); campaign on correct day; API spend under $100/mo cap. Self-heal in safety envelope: restart downed non-protected proc, reload missing tool, correct campaign counter, log all heals. Exception-only alerts: Solomon SILENT when green, messages Jed only for Decisions or Irreversibles. Never auto-execute elevated/irreversible — escalate with one clear recommended action.
 - [2026-06-04 11:17 CT] Sam task (priority): Update Solomon's Telegram bot to auto-load shultz_master_context.md at the start of every conversation, not only on /brief command. This closes the context gap where Solomon doesn't know today's decisions (Gabriel name, team roster, operating principles, architecture lessons) unless explicitly asked to read the file. Also update Solomon's startup system prompt to include the full team roster: Nathan/Sam/Caleb/Solomon/Gabriel. Current gap is causing team-name confusion and ambiguous-command misreads (e.g. campaign-stop incident 2026-06-04).
 
 ## 8. COWORK TASK QUEUE (desktop-agent priorities)
