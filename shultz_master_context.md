@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-03 20:22 CT — [REVENUE] Revenue map (Nathan+Jed 6/3, beyond affiliate). Principle: AI removes labor from <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-03 20:33 CT — [REVENUE] Revenue map REFINED via Q&A (6/3). Jed wants NO client-facing work (passive/syst <!-- LASTUPDATED -->
 
 ---
 
@@ -71,6 +71,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-03 20:30 CT] Feature shipped — commit 6a5471c: docs(master-context): Nathan append [REVENUE]
 - [2026-06-03 18:45 CT] Feature shipped — commit f23455b: docs(master-context): Nathan append [STACK]
 - [2026-06-03 18:41 CT] IronEdit (App #1) packaging feature locked (Nathan+Jed): before upload, IronEdit auto-detects the tools used in the footage, pulls their Amazon affiliate links, and injects those plus any other revenue links into the video description prior to the scheduled YouTube auto-post — extending the existing packaging step (thumbnail/title/desc/tags/SEO). Recognizing tools from raw video is the harder AI slice, so it lands as a LATER IronEdit phase, not the V1.0 MVP (V1.0 floor stays: finished cut on desktop ready to upload). The manual affiliate-link fill Solomon is doing now on the top-5 videos is the prototype/dogfood of this feature.
 - [2026-06-03 17:15 CT] Feature shipped — commit cd93700: feat(mcp): append-only append_master_context tool for Nathan
@@ -143,6 +144,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-03 20:33 CT] Revenue map REFINED via Q&A (6/3). Jed wants NO client-facing work (passive/system-run only) → DROP service/agency, B2B consulting, recruiting. Has all 4 assets + some capital; time = windows + some weekend. NEW passive idle-asset plays: (A) License the D: footage library to AI training-data marketplaces (Troveo/Versos; ~$1-4/min; real-world trades/hands/tools footage in high demand for world-model/robotics; agencies handle deals = passive; one-time organize + rights-clear via Solomon/Caleb; CAVEAT footage with faces needs signed releases). (B) Sell build plans/cut lists as digital downloads (build skills + footage = build-once products; footage = free marketing). Network reframed = distribution/credibility amplifier, NOT a sales target. CAPITAL steer: best guaranteed return = pay down ~20% debt; otherwise only cheap build-once inputs (DaVinci $295, domains), not speculation. First moves: confirm YT monetization + Shopping; start footage pipeline; convert 2-3 builds to plans.
 - [2026-06-03 20:22 CT] Revenue map (Nathan+Jed 6/3, beyond affiliate). Principle: AI removes labor from value you already have — lead with unfair advantages: niche trades audience, trades credibility, Solomon engine, built products. TIER 1 (found money, ~0 added time): YouTube monetization (past 1k subs; entry tier ~3M Shorts views/90d unlocks YouTube Shopping to tag own book/merch in 230k-view videos; full ad-rev needs 10M Shorts views/90d, steep — Solomon pull real 90d stats) + fix book/Blueprint funnel (0 sales = plumbing). TIER 2 (audience, low time): niche newsletter sponsorships; AI-built digital products/templates/KDP. TIER 3 (real cash, costs TIME): done-for-you social + lead-followup for trades businesses ($600-2500/mo, Solomon delivers, AI invisible, needs contract + E&O); Blueprint sold B2B. REC: ride Tier 1+2 (Tuesday-vision safe) to cover burn + dent debt; Tier 3 only as deliberate time-for-money choice. CAUTION: YT/Amazon crack down on inauthentic AI spam.
 - [2026-06-03 17:35 CT] Revenue/billing email from Soundstripe Team: "Your social post just became a commercial. Now what? 📲"
 - [2026-06-03 16:35 CT] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jun 3, 2026"
