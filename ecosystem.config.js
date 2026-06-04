@@ -63,6 +63,26 @@ module.exports = {
       error_file: '/root/solomon-v4/logs/pm2-dashboard-err.log',
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss'
+    },
+    {
+      name: 'solomon-health',
+      script: 'heartbeat-health.js',
+      cwd: '/root/solomon-v4',
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '150M',
+      restart_delay: 5000,
+      max_restarts: 10,
+      min_uptime: '30s',
+      env: {
+        NODE_ENV: 'production',
+        PM2_BIN: '/usr/bin/pm2'
+      },
+      out_file: '/root/solomon-v4/logs/pm2-health-out.log',
+      error_file: '/root/solomon-v4/logs/pm2-health-err.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss'
     }
   ]
 };
