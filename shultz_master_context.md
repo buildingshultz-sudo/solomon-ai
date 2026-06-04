@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-03 20:33 CT — [REVENUE] Revenue map REFINED via Q&A (6/3). Jed wants NO client-facing work (passive/syst <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 07:47 CT — [STACK] Agent-routing lessons (locked this session): TWO "Sams" — DESKTOP Claude Code on <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,7 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-04 07:47 CT] Agent-routing lessons (locked this session): TWO "Sams" — DESKTOP Claude Code on the PC has the SSH key + local shell, fully capable (SSH to VPS, drive the relay); MOBILE/cloud Code = isolated sandbox, fresh repo clone, NO SSH/PC/VPS reach, cannot run infra tasks. To spawn a capable Sam remotely from the phone, use Dispatch's native start_code_task (spawns a real local_ Code session on the PC) — NOT Caleb typing into Code (Code/terminals are IDE tier-restricted; the paste hangs). Caleb's role = launch + stand down + release the cowork lock; it is NOT a message relay to Sam. Solomon punts run-jobs to the Sam queue when the matching tool isn't loaded in its running process (new tools need deploy + solomon-v4 restart). D: read-only bridge enforcement CONFIRMED in live smoke test (PUT/POST/DELETE on D: footage paths → 405 as designed).
 - [2026-06-03 18:42 CT] Nathan MCP usage note: append_master_context (and the other Nathan/Solomon Comms tools) are DEFERRED MCP tools — they do NOT appear in the default tool list and do NOT require a connector reconnect or a fresh chat to use. Load them by calling tool_search (e.g. query "append master context") at the start of any session where Nathan will lock decisions, then call directly. The earlier "switch to a new chat / reconnect the connector" diagnosis was wrong; the write tool was reachable all along via search. Standing rule: Nathan persists confirmed decisions to master context via this tool mid-chat, no manual relay.
 - [2026-06-02 15:58 CT] FB token refreshed for irish_craftsman (Irish Craftsman) [auto-exchanged → long-lived]
 - [2026-06-02 15:57 CT] FB token refreshed for building_shultz (Building Shultz) [auto-exchanged → long-lived]
@@ -71,6 +72,9 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-03 21:45 CT] Feature shipped — commit 92104c5: fix(d-bridge): gate watcher on cowork_active only — Caleb stood down, CSV is now an output not a trigger
+- [2026-06-03 21:30 CT] Feature shipped — commit 0f88e85: feat(d-bridge): read-only D: drive access via pc-relay + cowork conflict gate
+- [2026-06-03 20:45 CT] Feature shipped — commit 9ee605b: docs(master-context): Nathan append [REVENUE]
 - [2026-06-03 20:30 CT] Feature shipped — commit 6a5471c: docs(master-context): Nathan append [REVENUE]
 - [2026-06-03 18:45 CT] Feature shipped — commit f23455b: docs(master-context): Nathan append [STACK]
 - [2026-06-03 18:41 CT] IronEdit (App #1) packaging feature locked (Nathan+Jed): before upload, IronEdit auto-detects the tools used in the footage, pulls their Amazon affiliate links, and injects those plus any other revenue links into the video description prior to the scheduled YouTube auto-post — extending the existing packaging step (thumbnail/title/desc/tags/SEO). Recognizing tools from raw video is the harder AI slice, so it lands as a LATER IronEdit phase, not the V1.0 MVP (V1.0 floor stays: finished cut on desktop ready to upload). The manual affiliate-link fill Solomon is doing now on the top-5 videos is the prototype/dogfood of this feature.
@@ -221,6 +225,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-04 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-03 17:10 CT] append_master_context MCP tool deployed + verified live via end-to-end test (rejection paths + happy path). (Sam)
 - [2026-06-03 CT] Product & roadmap lock-in appended under LOG:PROJECTS (TradeQuote modules Paydirt+Permit Scout, ToolShare/S&H, Lantern wedge+moat, ShiftSwap parked, RuralRoute cut, fit-filter, asset-protection, revenue priority). (Sam)
 - [2026-06-03 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
