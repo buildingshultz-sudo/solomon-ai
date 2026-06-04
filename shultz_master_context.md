@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 12:30 CT — [STACK] Relay runs non-elevated (medium integrity) after one-time admin restart on 6/4 — <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 12:30 CT — [GENERAL] OPERATING PRINCIPLE — Jed's hands rule (6/4, locked): Jed's hands are for two th <!-- LASTUPDATED -->
 
 ---
 
@@ -237,6 +237,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-04 12:30 CT] OPERATING PRINCIPLE — Jed's hands rule (6/4, locked): Jed's hands are for two things only: (1) Decisions (strategy/ambiguity → Nathan) and (2) Irreversibles (UAC, money, legal, delete, publish). If Jed is doing anything else — verifying, restarting, relaying status, reminding an agent of a settled decision — that is a system bug to engineer away, not a task to do faster. The Windows OS enforcing the elevated-UAC boundary is this principle working correctly.
 - [2026-06-04 08:30 CT] TEAM ROSTER: Dispatch is now named GABRIEL (Jed picked 6/4) — the messenger. Gabriel = the cross-agent remote phone interface spanning the Cowork tab (Caleb) and Code tab (Sam); carries Jed's directive from anywhere and routes it to the right agent (e.g. start_code_task spawns a Sam Code session). Use the name "Gabriel" in all prompts and reports going forward, consistent across Solomon, Sam, and Caleb. Full crew: Nathan (chat advisor/strategy), Solomon (24/7 Telegram operator on VPS), Sam (Claude Code builder), Caleb (Cowork desktop agent), Gabriel (remote dispatch/coordinator across Caleb + Sam).
 - [2026-06-04 07:51 CT] OPERATING PRINCIPLE (Jed, locked): always take the clean, root-cause fix over the fast workaround, even when it costs more steps or time. Keep the system neat and architecturally clean — the standard set by rebuilding Solomon out of the Manus spaghetti code. Never trade a hard safety or structural guarantee (e.g. the D: read-only invariant) for speed or convenience; if a classifier or guardrail flags a shortcut, back the guardrail. Done right, always moving forward. Applies to Sam builds, Caleb tasks, and Solomon dispatch alike.
 - [2026-06-04 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
