@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 07:47 CT — [STACK] Agent-routing lessons (locked this session): TWO "Sams" — DESKTOP Claude Code on <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 07:51 CT — [GENERAL] OPERATING PRINCIPLE (Jed, locked): always take the clean, root-cause fix over th <!-- LASTUPDATED -->
 
 ---
 
@@ -225,6 +225,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-04 07:51 CT] OPERATING PRINCIPLE (Jed, locked): always take the clean, root-cause fix over the fast workaround, even when it costs more steps or time. Keep the system neat and architecturally clean — the standard set by rebuilding Solomon out of the Manus spaghetti code. Never trade a hard safety or structural guarantee (e.g. the D: read-only invariant) for speed or convenience; if a classifier or guardrail flags a shortcut, back the guardrail. Done right, always moving forward. Applies to Sam builds, Caleb tasks, and Solomon dispatch alike.
 - [2026-06-04 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-03 17:10 CT] append_master_context MCP tool deployed + verified live via end-to-end test (rejection paths + happy path). (Sam)
 - [2026-06-03 CT] Product & roadmap lock-in appended under LOG:PROJECTS (TradeQuote modules Paydirt+Permit Scout, ToolShare/S&H, Lantern wedge+moat, ShiftSwap parked, RuralRoute cut, fit-filter, asset-protection, revenue priority). (Sam)
