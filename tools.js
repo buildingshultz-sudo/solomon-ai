@@ -1114,6 +1114,20 @@ const TOOL_DEFINITIONS = [
     }
   }
   ,{
+    name: "pc_d_drive_read",
+    description: "READ-ONLY access to Jed's PC D: drive (footage, raw video, large media) through the pc-relay. Three actions: 'list' (directory listing), 'meta' (file metadata + ffprobe duration/resolution for media), 'fetch' (download a file or byte range). HARD-enforced read-only: paths must start with D:\\ and the relay refuses non-GET methods on D: paths. Auto-defers when Cowork is active (relay /status reports cowork_active:true) — returns {ok:false, queued:true} instead of competing for desktop access. For large media, use action='fetch' with range:{start, end} to stream partial content (Range: bytes=START-END).",
+    input_schema: {
+      type: "object",
+      properties: {
+        action: { type: "string", enum: ["list", "meta", "fetch"], description: "list=directory listing | meta=single file metadata (+ ffprobe for media) | fetch=download file (with optional range)" },
+        path:   { type: "string", description: "Absolute path under D:\\ (forward slashes OK). For action='list', this is the directory; for 'meta' and 'fetch', a file." },
+        range:  { type: "object", properties: { start: { type: "integer" }, end: { type: "integer" } }, description: "Byte range for fetch action (inclusive). Omit to fetch the whole file (subject to relay's size cap)." },
+        ignore_cowork: { type: "boolean", description: "If true, skip the cowork_active gate. Default false. Use sparingly — only when you're certain Cowork is not running." }
+      },
+      required: ["action", "path"]
+    }
+  }
+  ,{
     name: "caleb_dispatch",
     description: "T0-G: dispatch a Caleb task to the PC relay (Cowork agent picks it up from C:\\Users\\Ashle\\Solomon\\caleb-queue\\). Used by the 4 Caleb dispatch templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload). Signs the request with HMAC-SHA256(PC_RELAY_SECRET) when PC_RELAY_HMAC=true. Returns {ok, task_id, file, queue_dir}.",
     input_schema: {
@@ -2698,6 +2712,92 @@ Output format (JSON):
             error: 'youtube_affiliate_audit_and_fill failed: ' + (e.response?.data?.error?.message || e.message || String(e)).slice(0, 240),
             scope: grantedScope
           };
+        }
+      }
+      case "pc_d_drive_read": {
+        // READ-ONLY D: drive bridge. Three actions: list, meta, fetch.
+        // Path must start with D:\. Auto-defers when cowork_active=true unless ignore_cowork:true.
+        const relayUrl = process.env.PC_RELAY_URL;
+        const relaySecret = process.env.PC_RELAY_SECRET;
+        if (!relayUrl || !relaySecret) return { ok: false, error: 'PC_RELAY_URL or PC_RELAY_SECRET not set' };
+        if (!input || !input.action || !input.path) return { ok: false, error: 'action and path required' };
+        const action = input.action;
+        if (!['list', 'meta', 'fetch'].includes(action)) return { ok: false, error: 'action must be list | meta | fetch' };
+        // D: scoping — normalize forward slashes for the check, keep original for the relay (relay normalizes too).
+        const normForCheck = String(input.path).replace(/\//g, '\\').toLowerCase();
+        if (!/^d:\\/.test(normForCheck)) return { ok: false, error: 'pc_d_drive_read: path must start with D:\\ (got: ' + String(input.path).slice(0, 80) + ')' };
+        const headers = { 'X-Secret': relaySecret };
+        const baseUrl = relayUrl.replace(/\/$/, '');
+
+        // Cowork gate: hit /status first, refuse if active.
+        if (!input.ignore_cowork) {
+          try {
+            const s = await axios.get(baseUrl + '/status', { headers, timeout: 8000 });
+            if (s.data && s.data.cowork_active === true) {
+              return { ok: false, queued: true, reason: 'Cowork is active on the PC; D: read deferred to avoid contention.', cowork_lock_path: s.data.cowork_lock_path || null, hint: 'Retry after Cowork releases the lock, or pass ignore_cowork:true to force.' };
+            }
+          } catch (e) {
+            // /status probe failure isn't fatal — proceed and let the actual request surface the error.
+          }
+        }
+
+        try {
+          if (action === 'list') {
+            const r = await axios.get(baseUrl + '/file/list', { headers, params: { dir: input.path }, timeout: 15000 });
+            return { ok: true, action, ...r.data };
+          }
+          if (action === 'meta') {
+            const r = await axios.get(baseUrl + '/file/meta', { headers, params: { path: input.path }, timeout: 15000 });
+            return { ok: true, action, ...r.data };
+          }
+          // action === 'fetch'
+          const reqHeaders = { ...headers };
+          let isRange = false;
+          if (input.range && (typeof input.range.start === 'number' || typeof input.range.end === 'number')) {
+            const s = typeof input.range.start === 'number' ? input.range.start : '';
+            const e = typeof input.range.end === 'number' ? input.range.end : '';
+            reqHeaders['Range'] = `bytes=${s}-${e}`;
+            isRange = true;
+          }
+          const url = baseUrl + '/file?path=' + encodeURIComponent(input.path);
+          const resp = await axios.get(url, { headers: reqHeaders, responseType: 'stream', timeout: 60000, maxContentLength: 500 * 1024 * 1024, maxBodyLength: 500 * 1024 * 1024, validateStatus: () => true });
+          if (resp.status !== 200 && resp.status !== 206) {
+            let body = ''; await new Promise(r => { resp.data.on('data', c => { body += c.toString('utf8'); if (body.length > 2000) body = body.slice(0,2000); }); resp.data.on('end', r); resp.data.on('error', r); });
+            let parsed = null; try { parsed = JSON.parse(body); } catch (_) {}
+            return { ok: false, http_status: resp.status, error: parsed?.error || body || `relay returned ${resp.status}` };
+          }
+          // Stream to /tmp/pc-d-fetch with a clear naming convention.
+          const tmpDir = '/tmp/pc-d-fetch';
+          if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+          const safeBase = String(input.path).replace(/[\\/:]+/g, '_').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+          const localPath = path.join(tmpDir, Date.now() + '_' + safeBase);
+          const out = fs.createWriteStream(localPath);
+          let written = 0;
+          await new Promise((resolve, reject) => {
+            resp.data.on('data', c => { written += c.length; });
+            resp.data.on('end', resolve);
+            resp.data.on('error', reject);
+            out.on('error', reject);
+            resp.data.pipe(out);
+          });
+          return {
+            ok: true,
+            action,
+            local_path: localPath,
+            bytes: written,
+            partial: isRange,
+            http_status: resp.status,
+            content_range: resp.headers['content-range'] || null,
+            content_type: resp.headers['content-type'] || null,
+            source_path: resp.headers['x-file-path'] || input.path,
+            source_total_bytes: parseInt(resp.headers['x-file-bytes'] || '0', 10) || null
+          };
+        } catch (e) {
+          const fbErr = e.response?.data?.error || e.message;
+          // Translate 405 (D:-write attempted via non-GET) and 423 (cowork lock) into clearer messages.
+          if (e.response?.status === 405) return { ok: false, error: 'Relay refused: D: is read-only. ' + fbErr };
+          if (e.response?.status === 423) return { ok: false, queued: true, reason: 'Relay reports cowork active (locked). ' + fbErr };
+          return { ok: false, error: 'pc_d_drive_read failed: ' + String(fbErr).slice(0, 240) };
         }
       }
       case "pc_fetch_file": {

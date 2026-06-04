@@ -52,7 +52,12 @@ app.get('/status', (req, res) => {
     hostname: os.hostname(),
     platform: os.platform(),
     uptime: os.uptime(),
-    time: new Date().toISOString()
+    time: new Date().toISOString(),
+    cowork_active: _coworkActive(),
+    cowork_lock_path: COWORK_LOCK_PATH,
+    d_readonly_prefixes: D_READONLY_PREFIXES,
+    d_bridge_routes: ['/file', '/file/list', '/file/meta'],
+    relay_version: '1.2.0'
   });
 });
 
@@ -60,6 +65,19 @@ app.get('/status', (req, res) => {
 app.post('/execute', (req, res) => {
   const { command, timeout = 30000 } = req.body;
   if (!command) return res.status(400).json({ error: 'No command provided' });
+
+  // D: write-pattern guard — refuse PowerShell commands that would write/move/delete on D:.
+  const refuseReason = dWriteRefuseReason(command);
+  if (refuseReason) {
+    console.log('[RELAY] /execute D-WRITE-REFUSED:', refuseReason, '|', command.slice(0, 120));
+    return res.status(403).json({ ok: false, error: 'Command refused: D: drive is read-only on this relay.', reason: refuseReason });
+  }
+  // Cowork lock — refuse desktop-driving commands while Cowork is active.
+  // (PowerShell that doesn't touch D: still runs — this is desktop-aware safety, not a hard block.)
+  if (_coworkActive() && /\b(Start-Process|Invoke-Item|New-Object\s+-ComObject)\b/i.test(command)) {
+    console.log('[RELAY] /execute COWORK-GUARD: refusing desktop-driving cmd while Cowork is active');
+    return res.status(423).json({ ok: false, error: 'Cowork is currently active — refusing desktop-driving command to avoid contention.', cowork_lock: COWORK_LOCK_PATH });
+  }
 
   console.log('[RELAY] Execute:', command.slice(0, 100));
 
@@ -190,6 +208,73 @@ const FILE_MAX_BYTES = parseInt(process.env.PC_RELAY_FILE_MAX_BYTES || (500 * 10
 console.log('[PC RELAY] /file allowlist:', FILE_ALLOWLIST.join(' | '));
 console.log('[PC RELAY] /file max bytes:', FILE_MAX_BYTES);
 
+// ── D: DRIVE READ-ONLY EXTENSION ─────────────────────────────────────────
+// Adds a wider read-only allowlist for D: footage scanning, plus the cowork
+// lock so Solomon-side never reads while Caleb/Cowork is driving the desktop.
+//
+// READ-ONLY ENFORCEMENT: any path under D:\ refuses non-GET methods at the
+// router. /execute is also scanned for write-pattern PowerShell verbs that
+// target D: (Remove-Item, Move-Item, Set-Content, Out-File, Copy-Item -Dest D:,
+// New-Item, Rename-Item, ffmpeg -y output to D:, etc.).
+const D_READONLY_PREFIXES = (process.env.PC_RELAY_D_READONLY_PREFIXES
+  ? process.env.PC_RELAY_D_READONLY_PREFIXES.split(',').map(s => s.trim()).filter(Boolean)
+  : ['D:\\']
+).map(p => p.endsWith('\\') || p.endsWith('/') ? p : p + '\\');
+const COWORK_LOCK_PATH = process.env.PC_COWORK_LOCK_PATH || 'C:\\Users\\Ashle\\Solomon\\.cowork-active';
+const FFPROBE_BIN = process.env.PC_FFPROBE_BIN || 'ffprobe';
+
+function _coworkActive() {
+  try { return fs.existsSync(COWORK_LOCK_PATH); } catch (_) { return false; }
+}
+function _isUnderD(absOrRaw) {
+  if (!absOrRaw || typeof absOrRaw !== 'string') return false;
+  const norm = absOrRaw.toLowerCase();
+  return D_READONLY_PREFIXES.some(p => norm.startsWith(p.toLowerCase()));
+}
+
+// PowerShell write-verb scanner for /execute. Pure-regex; not a sandbox.
+// Matches Remove-Item D:, Move-Item ... D:, Set-Content ..D:, Out-File ..D:,
+// Copy-Item ... -Destination D:, New-Item -Path D:, Rename-Item D:,
+// ffmpeg ... -y D:, robocopy SRC D: /MIR, del D:, rd D:, etc.
+const D_WRITE_PATTERNS = [
+  /\bRemove[-_]Item\b[^|;\n]*\bd:[\\/]/i,
+  /\bMove[-_]Item\b[^|;\n]*\bd:[\\/]/i,
+  /\bRename[-_]Item\b[^|;\n]*\bd:[\\/]/i,
+  /\bSet[-_]Content\b[^|;\n]*\bd:[\\/]/i,
+  /\bOut[-_]File\b[^|;\n]*\bd:[\\/]/i,
+  /\bAdd[-_]Content\b[^|;\n]*\bd:[\\/]/i,
+  /\bNew[-_]Item\b[^|;\n]*\bd:[\\/]/i,
+  /\bCopy[-_]Item\b[^|;\n]*-(?:Destination|Path)\b[^|;\n]*\bd:[\\/]/i,
+  /\bMkdir\b[^|;\n]*\bd:[\\/]/i,
+  /\bdel\b\s+["']?d:[\\/]/i,
+  /\bdel\s+\/[sq]\b[^|;\n]*\bd:[\\/]/i,
+  /\brmdir\b[^|;\n]*\bd:[\\/]/i,
+  /\brd\b\s+["']?d:[\\/]/i,
+  /\brobocopy\b[^|;\n]+\bd:[\\/]/i,
+  /\bxcopy\b[^|;\n]+\bd:[\\/]/i,
+  /\bffmpeg\b[^|;\n]+(?:-y\s+)?[^|;\n]+\bd:[\\/]/i,
+  /\bhandbrake\b[^|;\n]+\bd:[\\/]/i,
+  // redirection > or >> to D:
+  />>?\s*["']?d:[\\/]/i
+];
+function dWriteRefuseReason(cmd) {
+  if (!cmd || typeof cmd !== 'string') return null;
+  for (const re of D_WRITE_PATTERNS) if (re.test(cmd)) return 're=' + re.toString();
+  return null;
+}
+
+// Hard-refuse non-GET on any D: path. Mounts as middleware so EVERY route
+// that touches a D: path-query gets caught, not just /file*.
+app.use((req, res, next) => {
+  if (req.method === 'GET') return next();
+  // Inspect query.path / query.dir for D:.
+  const cand = req.query?.path || req.query?.dir || req.body?.path || req.body?.dir || '';
+  if (cand && _isUnderD(String(cand))) {
+    return res.status(405).json({ ok: false, error: 'D: drive is read-only on this relay. Non-GET methods refused for D: paths.', method: req.method, path: cand });
+  }
+  next();
+});
+
 const MIME_BY_EXT = {
   '.pdf': 'application/pdf',
   '.txt': 'text/plain; charset=utf-8',
@@ -237,6 +322,7 @@ function resolveAndCheck(rawPath) {
 
 // GET /file?path=<absolute-path>
 // Streams the file as binary with Content-Type, Content-Length, Content-Disposition.
+// Supports Range: bytes=START-END for partial-content streaming (returns 206).
 app.get('/file', (req, res) => {
   const rawPath = req.query.path;
   const check = resolveAndCheck(rawPath);
@@ -251,27 +337,108 @@ app.get('/file', (req, res) => {
     return res.status(500).json({ ok: false, error: 'stat failed: ' + e.message });
   }
   if (st.isDirectory()) return res.status(400).json({ ok: false, error: 'path is a directory; use /file/list instead' });
-  if (st.size > FILE_MAX_BYTES) {
+
+  // Range header parse (bytes=start-end). RFC 7233 single-range only — multipart not supported.
+  const rangeHeader = req.headers['range'];
+  let rangeStart = 0, rangeEnd = st.size - 1, isPartial = false;
+  if (rangeHeader) {
+    const m = String(rangeHeader).match(/^bytes=(\d*)-(\d*)$/i);
+    if (!m) return res.status(416).json({ ok: false, error: 'malformed Range header (expect bytes=START-END)' });
+    const s = m[1] === '' ? null : parseInt(m[1], 10);
+    const e = m[2] === '' ? null : parseInt(m[2], 10);
+    if (s == null && e == null) return res.status(416).json({ ok: false, error: 'Range header has no bounds' });
+    if (s != null && e != null) { rangeStart = s; rangeEnd = e; }
+    else if (s != null)         { rangeStart = s; }
+    else if (e != null)         { rangeStart = Math.max(0, st.size - e); }
+    if (rangeStart < 0 || rangeEnd >= st.size || rangeStart > rangeEnd) {
+      res.set('Content-Range', `bytes */${st.size}`);
+      return res.status(416).json({ ok: false, error: 'Range Not Satisfiable', size: st.size, requested: { start: rangeStart, end: rangeEnd } });
+    }
+    isPartial = true;
+  }
+  const chunkSize = rangeEnd - rangeStart + 1;
+  if (!isPartial && st.size > FILE_MAX_BYTES) {
     console.log('[RELAY] /file TOO LARGE', st.size, '>', FILE_MAX_BYTES, '|', check.abs);
-    return res.status(413).json({ ok: false, error: 'file exceeds size cap', size: st.size, cap: FILE_MAX_BYTES });
+    return res.status(413).json({ ok: false, error: 'file exceeds size cap (use Range header for partial reads)', size: st.size, cap: FILE_MAX_BYTES });
+  }
+  if (isPartial && chunkSize > FILE_MAX_BYTES) {
+    return res.status(413).json({ ok: false, error: 'requested range exceeds size cap', range_size: chunkSize, cap: FILE_MAX_BYTES });
   }
 
   const filename = path.basename(check.abs);
-  // Quote-safe filename for Content-Disposition (RFC 6266 fallback).
   const filenameAttr = filename.replace(/["\\]/g, '_');
   res.set('Content-Type', mimeFor(check.abs));
-  res.set('Content-Length', String(st.size));
+  res.set('Content-Length', String(chunkSize));
+  res.set('Accept-Ranges', 'bytes');
   res.set('Content-Disposition', `attachment; filename="${filenameAttr}"`);
   res.set('X-File-Path', check.abs);
   res.set('X-File-Bytes', String(st.size));
-  console.log(`[RELAY] /file SERVE ${check.abs} (${st.size}B, ${mimeFor(check.abs)})`);
-  const stream = fs.createReadStream(check.abs);
+  if (isPartial) {
+    res.set('Content-Range', `bytes ${rangeStart}-${rangeEnd}/${st.size}`);
+    res.status(206);
+  }
+  console.log(`[RELAY] /file SERVE ${check.abs} (${chunkSize}/${st.size}B${isPartial ? ` range=${rangeStart}-${rangeEnd}` : ''}, ${mimeFor(check.abs)})`);
+  const stream = fs.createReadStream(check.abs, isPartial ? { start: rangeStart, end: rangeEnd } : undefined);
   stream.on('error', (e) => {
     console.error('[RELAY] /file stream error:', e.message);
     if (!res.headersSent) res.status(500).json({ ok: false, error: e.message });
     else res.destroy(e);
   });
   stream.pipe(res);
+});
+
+// GET /file/meta?path=<absolute-path>
+// Returns metadata; for media files, runs ffprobe (read-only) for duration/resolution.
+// Format: { ok, path, name, size, mtime, mime, is_dir, media?: {duration_sec, width, height, codec, bitrate}, ffprobe_error? }
+const MEDIA_EXTS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v', '.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.jpg', '.jpeg', '.png', '.webp', '.gif']);
+app.get('/file/meta', (req, res) => {
+  const rawPath = req.query.path;
+  const check = resolveAndCheck(rawPath);
+  if (!check.ok) return res.status(check.code).json({ ok: false, error: check.reason });
+  let st;
+  try { st = fs.statSync(check.abs); }
+  catch (e) { return res.status(500).json({ ok: false, error: 'stat failed: ' + e.message }); }
+  const ext = path.extname(check.abs).toLowerCase();
+  const out = {
+    ok: true,
+    path: check.abs,
+    name: path.basename(check.abs),
+    size: st.size,
+    mtime: st.mtime.toISOString(),
+    mime: mimeFor(check.abs),
+    is_dir: st.isDirectory(),
+    ext
+  };
+  if (st.isDirectory() || !MEDIA_EXTS.has(ext)) {
+    return res.json(out);
+  }
+  // ffprobe (read-only) for media metadata. JSON output.
+  execFile(FFPROBE_BIN, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', check.abs], { timeout: 8000, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (err) {
+      out.ffprobe_error = (stderr || err.message || '').toString().slice(0, 200);
+      return res.json(out);
+    }
+    try {
+      const probe = JSON.parse(stdout);
+      const v = (probe.streams || []).find(s => s.codec_type === 'video') || null;
+      const a = (probe.streams || []).find(s => s.codec_type === 'audio') || null;
+      const f = probe.format || {};
+      out.media = {
+        duration_sec: f.duration ? Number(f.duration) : null,
+        bitrate: f.bit_rate ? Number(f.bit_rate) : null,
+        format_name: f.format_name || null,
+        width: v?.width || null,
+        height: v?.height || null,
+        video_codec: v?.codec_name || null,
+        fps: v?.r_frame_rate ? v.r_frame_rate : null,
+        audio_codec: a?.codec_name || null,
+        audio_sample_rate: a?.sample_rate ? Number(a.sample_rate) : null
+      };
+    } catch (e) {
+      out.ffprobe_error = 'ffprobe JSON parse: ' + e.message.slice(0, 120);
+    }
+    res.json(out);
+  });
 });
 
 // GET /file/list?dir=<absolute-dir>
