@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 16:47 CT — [PROJECTS] Heartbeat self-healing ops layer deployed (6/4): PM2 process solomon-health (pid <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 16:47 CT — [STACK] Security action PENDING Jed (6/4): GitHub PAT plaintext in VPS git remote URL —  <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,7 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-04 16:47 CT] Security action PENDING Jed (6/4): GitHub PAT plaintext in VPS git remote URL — Sam flagged, credential still live in git config. Fix: (1) Sam generates SSH keypair on VPS, Jed adds public key at github.com/settings/keys, Sam switches remote to git@github.com permanently. (2) Rotate Anthropic key at console.anthropic.com — Sam updates .env on VPS, new value typed directly into Sam terminal only, never through chat or Telegram. Both blocked on Jed's next PC session.
 - [2026-06-04 12:30 CT] Relay runs non-elevated (medium integrity) after one-time admin restart on 6/4 — final admin restart for this relay stack. Future relay restarts go via Sam Bash, no Jed paste needed. Screen-access grant for Claude desktop app now active (full tier, survives) — Caleb can screenshot + click visible UI elements (Chrome, Settings, file dialogs, app windows) without re-requesting approval each session.
 - [2026-06-04 12:29 CT] Windows OS wall — permanent architecture, no grant changes it. (1) Terminal-tier typing rule: Caleb cannot TYPE into PowerShell/cmd/IDE terminals; click-only on visible UI elements. (2) UIPI: Caleb runs medium-integrity, cannot send input to elevated (Administrator) windows. (3) Secure Desktop UAC: automation never sees the consent dialog; Jed's hand required. Division locked: Sam handles all shell/git/admin/restarts via Bash (bypasses the wall); Caleb handles GUI clicks on non-elevated windows. Never route elevated PS through Caleb — it is a Windows OS wall, not a policy.
 - [2026-06-04 12:28 CT] Elevated/UAC actions are a permanent Windows OS wall: terminal-tier typing rule blocks Caleb from typing into any terminal; UIPI integrity isolation blocks input from medium-integrity Caleb to higher-integrity elevated processes; Secure Desktop blocks UAC consent automation. No screen-access grant changes this. Route: Sam's Bash channel for all shell/git/admin/restarts (invokes processes directly, not GUI-driving); Jed's hand only for genuine UAC consent (rare now relay runs non-elevated). Never route elevated shell execution through Caleb — it is an OS wall, not a permission gap.
