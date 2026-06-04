@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 11:17 CT — [SAMQUEUE] Sam task (priority): Update Solomon's Telegram bot to auto-load shultz_master_co <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 12:28 CT — [STACK] Elevated/UAC actions are a permanent Windows OS wall: terminal-tier typing rule  <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,7 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-04 12:28 CT] Elevated/UAC actions are a permanent Windows OS wall: terminal-tier typing rule blocks Caleb from typing into any terminal; UIPI integrity isolation blocks input from medium-integrity Caleb to higher-integrity elevated processes; Secure Desktop blocks UAC consent automation. No screen-access grant changes this. Route: Sam's Bash channel for all shell/git/admin/restarts (invokes processes directly, not GUI-driving); Jed's hand only for genuine UAC consent (rare now relay runs non-elevated). Never route elevated shell execution through Caleb — it is an OS wall, not a permission gap.
 - [2026-06-04 08:20 CT] CORRECTION to prior STACK entry: Dispatch is present in BOTH the Cowork tab (Caleb) AND the Code tab (Sam) of the Claude desktop app — not only Cowork. Dispatch is the unified remote phone interface for the entire desktop app, spanning both agents. It can reach Caleb for computer-use/browser tasks and Sam for code/shell tasks, and routes between them (e.g. used start_code_task to spawn a Sam Code session directly from the Code tab). This makes Dispatch a true cross-agent remote coordinator, not just Caleb's phone interface.
 - [2026-06-04 08:16 CT] Claude desktop app architecture (confirmed): three tabs — Chat / Cowork / Code. Cowork tab = Caleb (desktop agent). Code tab = where desktop Sam sessions appear; Dispatch's start_code_task spawns sessions here. Dispatch is NOT a separate agent — it is a feature panel inside the Cowork tab enabling remote phone access ("Dispatch to Claude and check in from anywhere — a task, a code session, in one continuous thread"). The routing intelligence is Caleb; Dispatch is the phone-access channel into Caleb. Same brain, two access modes: local (desktop Cowork tab) and remote (Dispatch from phone). Cowork app update pending (Relaunch to update) — apply after the active inventory Code session finishes.
 - [2026-06-04 07:58 CT] Guardrail (locked): privileged/elevated actions — e.g. a relay restart that needs UAC/elevation — stay HUMAN-IN-THE-LOOP; Jed pastes the PowerShell block. Do NOT route elevated execution through Caleb or through pre-opened elevated PowerShell windows. Why: (1) Caleb's terminal/PS typing is tier-restricted and hangs (same block that killed the Caleb inventory route this morning); (2) an agent driving standing elevated admin shells is a risk surface and bypasses the human checkpoint on privileged actions. Sam should attempt a non-elevated self-restart first; only if true elevation is needed, hand the PS block to Jed. Also: those standing elevated PS windows are clutter — close them in normal Caleb cleanup, don't lean on them. Direct application of the clean-fix / back-the-guardrail principle.
@@ -75,6 +76,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-04 11:30 CT] Feature shipped — commit 7493716: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 08:45 CT] Feature shipped — commit 528b5a5: docs(master-context): Nathan append [GENERAL]
 - [2026-06-04 08:30 CT] Feature shipped — commit 99ce499: docs(master-context): Nathan append [STACK]
 - [2026-06-04 08:00 CT] Feature shipped — commit 44b89ae: docs(master-context): Nathan append [STACK]
