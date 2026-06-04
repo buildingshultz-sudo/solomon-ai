@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 12:43 CT — [SAMQUEUE] Sam task (6/4): make the master context a true live shared brain so all agents s <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 14:29 CT — [PROJECTS] Footage inventory pipeline PROVEN end-to-end (6/4): all three invariants passed  <!-- LASTUPDATED -->
 
 ---
 
@@ -78,6 +78,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-04 14:29 CT] Footage inventory pipeline PROVEN end-to-end (6/4): all three invariants passed — root-folder list 200 w/ 8 entries (trailing-slash bug fixed), carve-out write to D:\Solomon\reports\ matched, footage write → 405 (read-only intact). Outputs hash-identical PC↔VPS: Shultz_Footage_Inventory.csv + Shultz_Footage_Summary.txt in /root/solomon-v4/reports/ and D:\Solomon\reports\, Telegram summary landed. First run scoped to D:\B ROLL FOOTAGE only — full-drive re-run is the real deliverable (queued).
+- [2026-06-04 12:45 CT] Feature shipped — commit 6c51aaf: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 12:30 CT] Feature shipped — commit a7b1770: docs(master-context): Nathan append [STACK]
 - [2026-06-04 11:30 CT] Feature shipped — commit 7493716: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 08:45 CT] Feature shipped — commit 528b5a5: docs(master-context): Nathan append [GENERAL]
