@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 14:29 CT — [SAMQUEUE] Heartbeat decisions (6/4, locked): (1) DEPLOY NOW — done, both relay versions (1 <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 16:46 CT — [PROJECTS] Full D: drive footage inventory complete (6/4): 985 files, 31.18 hrs, 644.8 GB.  <!-- LASTUPDATED -->
 
 ---
 
@@ -78,6 +78,9 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-04 16:46 CT] Full D: drive footage inventory complete (6/4): 985 files, 31.18 hrs, 644.8 GB. 100% 4K or 1080p+ (zero sub-1080p). 23 face=YES (Me Rambling folder, all correctly flagged) / 962 faceless = 97.7% licensable without model releases. Folders: UNEDITED VIDEOS 578/16.57 hrs/388.8 GB (priority); EDITED AND UPLOADED 158/6.56 hrs/93.9 GB; B ROLL FOOTAGE 132/3.31 hrs/70.4 GB; moped stuff 76/2.77 hrs/52.6 GB; Me Rambling 20/0.62 hrs/26.1 GB; smaller folders to Thumbnails. CSV+Summary hash-identical PC↔VPS. Read-only held throughout.
+- [2026-06-04 16:30 CT] Feature shipped — commit a3663ae: Add solomon-health self-healing ops layer (new PM2 process)
+- [2026-06-04 14:30 CT] Feature shipped — commit 8fa4d4d: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 14:29 CT] Footage inventory pipeline PROVEN end-to-end (6/4): all three invariants passed — root-folder list 200 w/ 8 entries (trailing-slash bug fixed), carve-out write to D:\Solomon\reports\ matched, footage write → 405 (read-only intact). Outputs hash-identical PC↔VPS: Shultz_Footage_Inventory.csv + Shultz_Footage_Summary.txt in /root/solomon-v4/reports/ and D:\Solomon\reports\, Telegram summary landed. First run scoped to D:\B ROLL FOOTAGE only — full-drive re-run is the real deliverable (queued).
 - [2026-06-04 12:45 CT] Feature shipped — commit 6c51aaf: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 12:30 CT] Feature shipped — commit a7b1770: docs(master-context): Nathan append [STACK]
