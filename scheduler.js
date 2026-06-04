@@ -2306,44 +2306,33 @@ cron.schedule('0 10 * * 0', async () => {
 }, { timezone: 'America/Chicago' });
 
 // ══════════════════════════════════════════════════════════════════════════
-// D: BRIDGE LIVE-TEST WATCHER — every 5 min poll for the Caleb all-clear:
-//   (a) D:\Shultz_Footage_Inventory.csv exists on the PC (Caleb scrub done)
-//   (b) cowork_active === false in relay /status
-// When both true AND the test hasn't fired yet (mem flag), runs a small smoke:
-//   1. pc_d_drive_read action=list  dir=D:\Solomon\
-//   2. pc_d_drive_read action=meta  path=D:\Shultz_Footage_Inventory.csv
-// Telegrams Jed the result + sets mem flag so it won't re-fire.
+// D: BRIDGE LIVE-TEST WATCHER — every 5 min, fire-once when cowork is clear.
+// Caleb was originally going to produce D:\Shultz_Footage_Inventory.csv and
+// THAT was the gate signal. Caleb is now stood down — Solomon does the
+// inventory directly. So the gate simplifies to: relay /status reports
+// cowork_active=false. The CSV is now an OUTPUT of the inventory work, not
+// a precondition for the smoke test.
 // ══════════════════════════════════════════════════════════════════════════
-async function _checkDBridgeAllClear() {
+async function _checkDBridgeReady() {
   const url = process.env.PC_RELAY_URL;
   const sec = process.env.PC_RELAY_SECRET;
   if (!url || !sec) return { ready: false, reason: 'PC_RELAY_URL or PC_RELAY_SECRET not set' };
   try {
     const s = await axios.get(url.replace(/\/$/, '') + '/status', { headers: { 'X-Secret': sec }, timeout: 6000 });
     if (s.data?.cowork_active === true) return { ready: false, reason: 'cowork_active still true' };
+    return { ready: true, relay_version: s.data?.relay_version || 'unknown', has_new_routes: Array.isArray(s.data?.d_bridge_routes) };
   } catch (e) {
     return { ready: false, reason: 'relay /status unreachable: ' + e.message.slice(0, 100) };
   }
-  // Check CSV via /file/meta (read-only).
-  try {
-    const m = await axios.get(url.replace(/\/$/, '') + '/file/meta', { headers: { 'X-Secret': sec }, params: { path: 'D:\\Shultz_Footage_Inventory.csv' }, timeout: 8000, validateStatus: () => true });
-    if (m.status === 404 || (m.data && m.data.ok === false)) return { ready: false, reason: 'Inventory CSV not present yet (' + (m.data?.error || m.status) + ')' };
-    if (m.status === 200 && m.data?.ok && m.data.size > 0) return { ready: true, csv: { size: m.data.size, mtime: m.data.mtime } };
-    return { ready: false, reason: 'CSV check inconclusive (' + m.status + ')' };
-  } catch (e) {
-    return { ready: false, reason: 'CSV check failed: ' + e.message.slice(0, 100) };
-  }
 }
 
-async function runDBridgeLiveTest(csv) {
+async function runDBridgeLiveTest(meta) {
   const out = { ok: false, steps: [] };
   try {
     const r1 = await executeTool('pc_d_drive_read', { action: 'list', path: 'D:\\Solomon\\' });
     out.steps.push({ step: 'list D:\\Solomon\\', ok: !!r1.ok, count: r1.count, queued: !!r1.queued, error: r1.error });
-    const r2 = await executeTool('pc_d_drive_read', { action: 'meta', path: 'D:\\Shultz_Footage_Inventory.csv' });
-    out.steps.push({ step: 'meta CSV', ok: !!r2.ok, size: r2.size, mtime: r2.mtime, queued: !!r2.queued, error: r2.error });
     out.ok = out.steps.every(s => s.ok);
-    out.csv_info = csv;
+    out.relay_meta = meta;
     out.tested_at = new Date().toISOString();
   } catch (e) {
     out.error = e.message;
@@ -2352,21 +2341,20 @@ async function runDBridgeLiveTest(csv) {
 }
 
 cron.schedule('*/5 * * * *', async () => {
-  // Only fire once per "Caleb session" — uses mem flag keyed by the CSV mtime.
+  // Fires once per process lifetime via mem flag (cleared on restart if needed).
   try {
     if (mem.get('d_bridge_test', 'fired_at')) return; // already done
-    const status = await _checkDBridgeAllClear();
+    const status = await _checkDBridgeReady();
     if (!status.ready) return;
-    console.log('[SCHEDULER] D: bridge: Caleb all-clear detected. Firing queued live test...');
-    const result = await runDBridgeLiveTest(status.csv);
+    console.log('[SCHEDULER] D: bridge: cowork clear. Firing one-time live smoke...');
+    const result = await runDBridgeLiveTest({ relay_version: status.relay_version, has_new_routes: status.has_new_routes });
     mem.set('d_bridge_test', 'fired_at', new Date().toISOString());
     mem.set('d_bridge_test', 'last_result', JSON.stringify(result).slice(0, 4000));
     try { db.prepare(`INSERT INTO activity_log (type, summary) VALUES (?, ?)`).run('d_bridge_live_test', JSON.stringify(result).slice(0, 2000)); } catch (_) {}
     const msg = result.ok
-      ? `✅ D: bridge live test PASSED.\n• list D:\\\\Solomon\\\\ → ${result.steps[0]?.count} entries\n• meta CSV → ${result.steps[1]?.size} bytes, ${(result.steps[1]?.mtime||'').slice(0,16)}\nRead-only D: access is live.`
-      : `⚠️ D: bridge live test result: ${result.ok ? 'ok' : 'partial/failed'}.\nSteps: ${JSON.stringify(result.steps).slice(0, 600)}`;
+      ? `✅ D: bridge live smoke PASSED.\n• list D:\\\\Solomon\\\\ → ${result.steps[0]?.count} entries\n• Relay version: ${status.relay_version}, new routes deployed: ${status.has_new_routes}`
+      : `⚠️ D: bridge live smoke: ${result.steps?.[0]?.error || result.error || 'failed'}. Steps: ${JSON.stringify(result.steps).slice(0, 600)}`;
     try { await bot.sendMessage(OWNER_ID, msg); } catch (_) {}
-    try { await executeTool('append_master_context', { section: 'STACK', entry: `D: bridge live test fired (${result.ok ? 'PASS' : 'FAIL'}) — Caleb all-clear detected.` }); } catch (_) {}
   } catch (e) {
     console.error('[SCHEDULER] D: bridge watcher error:', e.message);
   }
