@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-04 08:20 CT — [STACK] CORRECTION to prior STACK entry: Dispatch is present in BOTH the Cowork tab (Cal <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-04 08:30 CT — [GENERAL] TEAM ROSTER: Dispatch is now named GABRIEL (Jed picked 6/4) — the messenger. Gab <!-- LASTUPDATED -->
 
 ---
 
@@ -75,6 +75,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-04 08:30 CT] Feature shipped — commit 99ce499: docs(master-context): Nathan append [STACK]
 - [2026-06-04 08:00 CT] Feature shipped — commit 44b89ae: docs(master-context): Nathan append [STACK]
 - [2026-06-03 21:45 CT] Feature shipped — commit 92104c5: fix(d-bridge): gate watcher on cowork_active only — Caleb stood down, CSV is now an output not a trigger
 - [2026-06-03 21:30 CT] Feature shipped — commit 0f88e85: feat(d-bridge): read-only D: drive access via pc-relay + cowork conflict gate
@@ -229,6 +230,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-04 08:30 CT] TEAM ROSTER: Dispatch is now named GABRIEL (Jed picked 6/4) — the messenger. Gabriel = the cross-agent remote phone interface spanning the Cowork tab (Caleb) and Code tab (Sam); carries Jed's directive from anywhere and routes it to the right agent (e.g. start_code_task spawns a Sam Code session). Use the name "Gabriel" in all prompts and reports going forward, consistent across Solomon, Sam, and Caleb. Full crew: Nathan (chat advisor/strategy), Solomon (24/7 Telegram operator on VPS), Sam (Claude Code builder), Caleb (Cowork desktop agent), Gabriel (remote dispatch/coordinator across Caleb + Sam).
 - [2026-06-04 07:51 CT] OPERATING PRINCIPLE (Jed, locked): always take the clean, root-cause fix over the fast workaround, even when it costs more steps or time. Keep the system neat and architecturally clean — the standard set by rebuilding Solomon out of the Manus spaghetti code. Never trade a hard safety or structural guarantee (e.g. the D: read-only invariant) for speed or convenience; if a classifier or guardrail flags a shortcut, back the guardrail. Done right, always moving forward. Applies to Sam builds, Caleb tasks, and Solomon dispatch alike.
 - [2026-06-04 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-03 17:10 CT] append_master_context MCP tool deployed + verified live via end-to-end test (rejection paths + happy path). (Sam)
