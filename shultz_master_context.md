@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 07:58 CT — [REVENUE] Spreadshop store verified (6/5, Caleb): 5 designs x 8 blanks = 40 live listings. <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 08:08 CT — [REVENUE] Merch brand strategy LOCKED (6/5, Jed's call): The Moto design ("Be Inspired. St <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-05 08:00 CT] Feature shipped — commit e4cb360: docs(master-context): Nathan append [REVENUE]
 - [2026-06-05 07:45 CT] Feature shipped — commit f0515e1: docs(master-context): Nathan append [REVENUE]
 - [2026-06-04 20:15 CT] Feature shipped — commit 5384dd6: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 17:00 CT] Feature shipped — commit 4ecb023: docs(master-context): Nathan append [STACK]
@@ -170,6 +171,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-05 08:08 CT] Merch brand strategy LOCKED (6/5, Jed's call): The Moto design ("Be Inspired. Stay Humble. And Build.") is the campaign anchor — the brand's core identity and foundation line. Already live in Spreadshop across 8 blanks (tees, hoodies, cap, bodysuit, long-sleeve) with verified URLs in Caleb's CSV. Campaign rewrites to center on The Moto with direct Spreadshop URLs. "Nobody cares. Figure it out." is SAVED for a future merch drop — held deliberately, not missing. Building What Matters and The Hitchcock are supporting designs. Ghost products (mugs, aprons, stickers, journals, clocks, trucker hats) remain paused until actually published in the store.
 - [2026-06-05 07:58 CT] Spreadshop store verified (6/5, Caleb): 5 designs x 8 blanks = 40 live listings. Designs: Building What Matters (white+black), The Hitchcock (white+black), The Moto. Blanks: Men's/Women's/Kids' Premium Tees, Men's/Women's Premium Hoodies, Snapback Cap, Organic Baby Bodysuit, Premium Long-Sleeve. NO mugs, aprons, stickers, journals, clocks, or trucker hats. CRITICAL GAP: "Nobody cares. Figure it out." design — the book's flagship quote — does not exist in the store. 7 of 8 campaign items are ghost products. Action: (1) Sam rewrites campaign immediately to promote only the 40 live listings with direct URLs from Caleb's CSV; (2) Jed uploads "Nobody cares." design to Spreadshop ASAP — highest priority missing item; (3) mugs/aprons/journals/stickers deferred. Gumroad URL shultzbuilds.gumroad.com/l/ihjobd from prior work, unverified this pass (Chrome extension disconnected). Full 40-row URL CSV held by Caleb.
 - [2026-06-05 07:44 CT] Marketing friction rule LOCKED (6/5): campaign posts must include DIRECT product links in the post body AND description — NOT "link in bio." Link-in-bio = too many clicks, kills conversion when people see a post. Each day's post links straight to the product it advertises (book → Gumroad/KDP; specific merch item → its Spreadshop product URL). PREREQUISITE: verify every advertised product actually EXISTS as a live purchasable listing on buildingshultz.myspreadshop.com before driving traffic — do NOT advertise merch that isn't really listed. Caleb verifies the store + collects direct URLs; Sam then wires direct links into the campaign poster, replacing the link-in-bio CTA. (Note: external links can slightly reduce FB reach, but conversion benefit wins for a sales campaign — Jed's call.)
 - [2026-06-04 20:11 CT] Footage rollout plan LOCKED (6/4): monetize the 31-hr faceless trades footage library, NON-EXCLUSIVE, weighted toward continuous passive income over one-time lump sum (Jed's call — more sustainable, compounds across stacked platforms, fits debt + no-spare-time reality). Sequence: (1) ANCHOR = Troveo (troveo.ai) — highest upside + most passive, built for robotics/world-model demand that trades footage uniquely serves; before signing confirm IN WRITING the revenue-share % and that terms are non-exclusive. (2) STACK = BlackBox aggregator (one upload → Shutterstock/Adobe Stock/Pond5/Storyblocks) + Wirestock as second AI channel. (3) Opportunistic = direct pitches to tool brands/trade-training producers; rights-managed agency (Dissolve) for premium one-offs. AVOID exclusivity traps: Pond5 Exclusive, Artgrid/Artlist, any Troveo "exclusive rep" option. Realistic stacked passive: ~$1.5k–$15k+/yr, lumpy, skewed by AI deals. Full report saved this session.
