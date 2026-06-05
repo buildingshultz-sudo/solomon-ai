@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 13:43 CT — [SAMQUEUE] Nathan dispatch → sam: 'FIX 1 tap test — Approve should NOT spin' (status: queue <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 13:44 CT — [SAMQUEUE] Caleb relay FIXED (6/5, commit 8e53e1d): caleb-worker.js was built 6/2 but never <!-- LASTUPDATED -->
 
 ---
 
@@ -206,6 +206,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-05 13:44 CT] Caleb relay FIXED (6/5, commit 8e53e1d): caleb-worker.js was built 6/2 but never started — now running (pid 24352, detached). /caleb-result endpoint added to VPS; dispatch-core gained recordCalebResult(); Solomon now Telegrams Jed on Caleb task completion. Telegram answerCallbackQuery spinner bug fixed (bot.js). End-to-end verify loop confirmed closed. TWO GAPS REMAINING: (1) caleb-worker.js not wired to Task Scheduler — won't survive PC reboot; (2) browser/desktop task types (kdp/spreadshop/youtube/gmail) marked queued_needs_desktop_agent — Cowork/Playwright executor not yet built. KDP cover+bleed fixes still need manual execution or Playwright build session.
 - [2026-06-05 13:43 CT] Nathan dispatch → sam: 'FIX 1 tap test — Approve should NOT spin' (status: queued, id: dispatch_1780684576179)
 - [2026-06-05 13:34 CT] Nathan dispatch → caleb: 'Caleb path test (FIX2)' (status: dispatched_to_caleb, id: dispatch_1780684467579)
 - [2026-06-05 13:21 CT] Nathan dispatch → sam: 'Fix Telegram callback loading bug + Caleb relay diagnosis' (status: queued, id: dispatch_1780683671250)
