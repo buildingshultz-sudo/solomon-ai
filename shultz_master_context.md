@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 08:58 CT — [SAMQUEUE] ElevenLabs AI phone support QUEUED (6/5): Clone Jed's voice, cadence, and person <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 09:18 CT — [SAMQUEUE] DISPATCH SYSTEM approved 6/5 (ends the copy-paste game) — Sam build task: extend <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-05 09:00 CT] Feature shipped — commit e8e5791: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-05 08:45 CT] Feature shipped — commit 41edd6e: docs(master-context): Nathan append [GENERAL]
 - [2026-06-05 08:15 CT] Feature shipped — commit bf0d0d9: Rewrite 30-day campaign to match live store reality (no ghost products)
 - [2026-06-05 08:00 CT] Feature shipped — commit e4cb360: docs(master-context): Nathan append [REVENUE]
@@ -200,6 +201,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-05 09:18 CT] DISPATCH SYSTEM approved 6/5 (ends the copy-paste game) — Sam build task: extend solomon-mcp server with a dispatch tool so Nathan can push tasks to the team from chat. Architecture: Nathan (CSO) → MCP dispatch tool → Solomon's task queue (COO owns + routes) → Solomon routes to Sam (sam-queue) or Caleb (caleb-task endpoint) → result posts back. Same safe append-style pattern as append_master_context. Guardrails REQUIRED: confidence ladder governs auto-execute vs escalate; ALL irreversibles (money/legal/publish/delete/UAC) hard-escalate to Jed every time; every dispatch logs to activity_log. Verification gates (Gate 0 Nathan self-check / Gate 1 Gabriel / Gate 2 executor) still apply. Full Sam build prompt to be drafted in a fresh lean thread.
 - [2026-06-05 08:58 CT] ElevenLabs AI phone support QUEUED (6/5): Clone Jed's voice, cadence, and personality via ElevenLabs so the AI answers inbound calls as Jed — contractors, clients, app support — without Jed picking up. Foundation is the Manus AI_Phone_Support_Persona.md (in archive at C:\Users\Ashle\Desktop\Shultz Scripts\manus\). Build components: (1) ElevenLabs voice clone from Jed's audio samples; (2) phone routing (Twilio or similar); (3) AI response logic via Solomon or a dedicated agent; (4) the Jed persona (cadence, 4 hats, buddy mentality). Parked until Solomon's core systems are stable and revenue covers ElevenLabs subscription. Read AI_Phone_Support_Persona.md before building — that file has Jed's original spec.
 - [2026-06-05 07:50 CT] Sam task (6/5): build a live product catalog into Solomon's campaign pipeline so campaigns never advertise ghost products. The catalog is a structured store (JSON or SQLite) of every Shultz Enterprises product: name, platform, direct purchase URL, status (live/draft/coming-soon). Build: (1) initial catalog populated from Caleb's Spreadshop verification results + confirmed Gumroad products; (2) campaign generator pulls direct URLs from catalog — never placeholder or link-in-bio CTAs; (3) pre-fire check confirms all campaign URLs resolve before any post goes out; (4) heartbeat checks catalog URLs on each tick; (5) add-product command (Solomon or Nathan) for when new products launch. Pairs with the product-first marketing rule locked 6/5. Sequence: wait for Caleb's store-verification results first, then build and populate.
 - [2026-06-04 20:11 CT] Sam task (6/4, queued for tomorrow AM): raw-vs-edited content classification pass on the footage inventory. Folder names are unreliable — raw footage is stashed in folders labeled "edited" (Jed moved clips around to save them), so we need a content-based "likely_raw" flag independent of folder. Run on the EXISTING Shultz_Footage_Inventory.csv (no drive re-walk needed): derive likely_raw from filename pattern (camera-native naming like DJI_, GX, GOPR, C0001, MVI_, IMG_), bitrate, and long uncut duration. Goal = the TRUE total of raw licensable footage across all 985 files before building the Troveo submission (raw continuous footage is what AI/robotics buyers want most). Output: add likely_raw column to the CSV + a summary count of raw hours/GB across all top-level folders. Pairs with the footage rollout plan.
