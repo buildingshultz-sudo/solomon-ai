@@ -1205,6 +1205,35 @@ bot.on('callback_query', async (cq) => {
       return;
     }
     const data = cq.data || '';
+
+    // ── Nathan dispatch Approve/Cancel (dispatch-core owns the logic) ───────
+    const dm = data.match(/^dispatch_(approve|cancel)_(dispatch_\d+)$/);
+    if (dm) {
+      const [, verb, dispatchId] = dm;
+      bot.answerCallbackQuery(cq.id, { text: verb === 'approve' ? 'Approving…' : 'Cancelling…' }).catch(() => {});
+      const core = require('./dispatch-core.js');
+      const rec = core.readDispatch(dispatchId);
+      const editOpts = { chat_id: cq.message.chat.id, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } };
+      if (!rec) {
+        await bot.editMessageText('⚠️ Dispatch file not found — check sam-queue manually', editOpts).catch(() => {});
+        return;
+      }
+      if (rec.status !== 'pending_approval') {
+        bot.answerCallbackQuery(cq.id, { text: `Already ${rec.status}.` }).catch(() => {});
+        return;
+      }
+      let cardText;
+      try {
+        if (verb === 'cancel') cardText = core.cancelDispatch(rec);
+        else cardText = (await core.routeOnApprove(rec)).cardText;
+      } catch (e) {
+        log('ERROR', 'DISPATCH', 'dispatch callback failed', { id: dispatchId, error: e.message });
+        cardText = `⚠️ Dispatch error — ${rec.title || dispatchId}`;
+      }
+      await bot.editMessageText(cardText, editOpts).catch(() => {});
+      return;
+    }
+
     const m = data.match(/^act:([a-zA-Z0-9_-]+):(post|edit|skip)$/);
     if (!m) { bot.answerCallbackQuery(cq.id, { text: 'Unknown action.' }).catch(() => {}); return; }
     const [, actionId, verb] = m;

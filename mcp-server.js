@@ -142,6 +142,23 @@ const TOOLS = [
       },
       required: ['section', 'entry']
     }
+  },
+  {
+    name: 'dispatch_task',
+    description: 'Dispatch a task from Nathan to Sam or Caleb via Solomon. Solomon owns routing and approval. ALL irreversibles hard-escalate to Jed regardless of other flags.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', enum: ['sam', 'caleb', 'gabriel'], description: 'sam=CTO (build/shell/git/deploy), caleb=VP Ops (browser/gmail/spreadshop/etc), gabriel=auto-route by task_type.' },
+        task_type: { type: 'string', description: 'build/fix/deploy/shell/git/browser/verify/click/capture/gmail/spreadshop/kdp/youtube' },
+        title: { type: 'string', description: 'short Telegram label' },
+        description: { type: 'string', description: 'full context Sam or Caleb needs — NO credentials' },
+        priority: { type: 'string', enum: ['high', 'normal', 'low'], default: 'normal' },
+        requires_approval: { type: 'boolean', default: true },
+        is_irreversible: { type: 'boolean', default: false, description: 'money/legal/publish/delete/UAC/deploy-to-prod; if true hard-escalates to Jed regardless of requires_approval.' }
+      },
+      required: ['target', 'task_type', 'title', 'description']
+    }
   }
 ];
 
@@ -335,6 +352,34 @@ async function _toolAppendMasterContext(args) {
   return { ok: true, section: r.section, entry: r.entry, committed, commit: commitHash, pushed };
 }
 
+// ── dispatch_task — Nathan → Solomon → Sam/Caleb ──────────────────────────
+// All routing/approval logic lives in dispatch-core.js (shared with bot.js).
+// Gate 0 runs inside prepareDispatch(): a credential hit THROWS, which the
+// CallTool handler surfaces as an error — no file written, no Telegram sent.
+async function _toolDispatchTask(args) {
+  const core = require(path.join(SOLOMON_DIR, 'dispatch-core.js'));
+  const { record, autoProceed } = core.prepareDispatch(args || {});
+  // Auto-queue path (requires_approval=false AND not irreversible): route now.
+  if (autoProceed) {
+    try { await core.routeOnApprove(record); }
+    catch (e) { console.error(`[${APP_NAME}] dispatch_task auto-route failed:`, e.message); }
+  }
+  // Telegram card — Approve/Cancel buttons only while pending_approval.
+  if (tgBot) {
+    try {
+      const card = core.buildCard(record);
+      await tgBot.sendMessage(OWNER_ID, card.text, card.reply_markup ? { reply_markup: card.reply_markup } : {});
+    } catch (e) {
+      console.error(`[${APP_NAME}] dispatch_task telegram send failed:`, e.message);
+    }
+  }
+  return {
+    ok: true, id: record.id, target: record.target, requested_target: record.requested_target,
+    rerouted: record.rerouted, status: record.status, hard_escalated: record.hard_escalated,
+    auto_proceeded: autoProceed
+  };
+}
+
 const TOOL_IMPLS = {
   get_master_context:   _toolGetMasterContext,
   get_pm2_status:       _toolGetPm2Status,
@@ -343,7 +388,8 @@ const TOOL_IMPLS = {
   get_activity_log:     _toolGetActivityLog,
   get_morning_scorecard:_toolGetMorningScorecard,
   send_telegram:        _toolSendTelegram,
-  append_master_context:_toolAppendMasterContext
+  append_master_context:_toolAppendMasterContext,
+  dispatch_task:        _toolDispatchTask
 };
 
 // ── MCP SERVER FACTORY ────────────────────────────────────────────────────
