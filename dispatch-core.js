@@ -99,14 +99,17 @@ function prepareDispatch(input) {
   const priority = ['high', 'normal', 'low'].includes(input && input.priority) ? input.priority : 'normal';
   let requires_approval = (input && input.requires_approval === false) ? false : true;
   const is_irreversible = !!(input && input.is_irreversible);
+  // Task-specific fields forwarded to the executor (url, book_title, kdp_section,
+  // file_path, wait_ms, …). NEVER put credentials here — scanned below.
+  const params = (input && input.params && typeof input.params === 'object') ? input.params : {};
 
   if (!['sam', 'caleb', 'gabriel'].includes(target)) throw new Error("target must be one of sam|caleb|gabriel");
   if (!task_type) throw new Error('task_type required');
   if (!title) throw new Error('title required');
   if (!description.trim()) throw new Error('description required');
 
-  // GATE 0.1 — credential guard FIRST. No file, no Telegram.
-  const cred = scanCredential(description);
+  // GATE 0.1 — credential guard FIRST (description AND params). No file, no Telegram.
+  const cred = scanCredential(description) || scanCredential(JSON.stringify(params));
   if (cred) throw new Error('⚠️ Dispatch blocked — possible credential in description. Clean the payload.');
 
   // GATE 0.2 — irreversible hard-stop forces approval.
@@ -139,6 +142,7 @@ function prepareDispatch(input) {
     dispatched_by: 'nathan',
     timestamp_ct: new Date().toISOString(),
     status,
+    params,
     // sam-queue compatibility (get_sam_queue reads .task; Sam watcher reads .handler)
     task: title,
     handler: finalTarget
@@ -225,6 +229,7 @@ async function routeOnApprove(rec) {
       // Body satisfies BOTH the spec and the live /caleb-task contract
       // (handler/task/template_id are required by the PC relay or it 400s).
       const body = {
+        ...(rec.params || {}), // task-specific fields (url, book_title, file_path, …) — fixed fields below win
         handler: 'caleb',
         task: rec.title,
         template_id: 'nathan_dispatch_' + rec.task_type,

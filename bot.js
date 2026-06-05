@@ -2115,7 +2115,8 @@ app.post('/caleb-result', async (req, res) => {
     const core = require('./dispatch-core.js');
     const rec = core.recordCalebResult(dispatch_id, status, summary);
     const label = (rec && rec.title) || title || dispatch_id;
-    const icon = status === 'failed' ? '⚠️' : '✅';
+    const ICONS = { done: '✅', failed: '⚠️', error: '⚠️', timeout: '⏱️', needs_login: '🔐', needs_jed_approval: '🛑', progress: '🤖', acknowledged: 'ℹ️' };
+    const icon = ICONS[status] || 'ℹ️';
     const finalStatus = rec ? rec.status : ('caleb_' + (status || 'reported'));
     await bot.sendMessage(OWNER_ID, `${icon} Caleb ${status || 'reported'} · ${label}\nstatus: ${finalStatus}\n${String(summary || '').slice(0, 500)}`)
       .catch(() => {});

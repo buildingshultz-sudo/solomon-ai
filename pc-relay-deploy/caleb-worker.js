@@ -20,8 +20,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
+const { PlaywrightExecutor } = require('./caleb-playwright.js');
 
 try { require('dotenv').config(); } catch (_) { /* dotenv optional; env may be pre-set */ }
+
+// Single shared Playwright executor (persistent browser profile across tasks).
+const PW_TYPES = new Set(['browser', 'kdp', 'capture']);
+let _executor = null;
+function executor() { if (!_executor) _executor = new PlaywrightExecutor(); return _executor; }
 
 const QUEUE_DIR = process.env.CALEB_QUEUE_DIR || 'C:\\Users\\Ashle\\Solomon\\caleb-queue';
 const POLL_MS = parseInt(process.env.CALEB_WORKER_POLL_MS || '60000', 10);
@@ -51,15 +57,19 @@ function execCapture() {
   execFileSync('powershell', ['-NonInteractive', '-NoProfile', '-Command', ps], { timeout: 15000 });
   return { status: 'done', worker_status: 'executed', summary: `screenshot captured: ${out} (${fs.statSync(out).size} bytes)` };
 }
-function execute(job) {
+async function execute(job) {
   const tt = String(job.task_type || job.template_id || '').toLowerCase();
   try {
     if (tt === 'verify' || tt === 'ping') return execVerify();
-    if (tt === 'capture' || tt === 'screenshot') return execCapture();
+    if (PW_TYPES.has(tt)) {
+      // STEP 6(a): task-start Telegram, then run the Playwright handler.
+      reportBack(job, { status: 'progress', summary: `🤖 Caleb starting ${tt}: ${job.title || job.task || ''} @ ${new Date().toISOString()}` });
+      return await executor().execute(job);
+    }
     return { status: 'acknowledged', worker_status: 'queued_needs_desktop_agent',
-      summary: `Received '${tt || 'unknown'}' task '${job.title || job.task || ''}'. Full execution needs the Cowork/Playwright desktop agent (not wired yet) — quarantined.` };
+      summary: `Received '${tt || 'unknown'}' task '${job.title || job.task || ''}'. No worker handler for this type yet.` };
   } catch (e) {
-    return { status: 'failed', worker_status: 'failed', summary: ('executor error: ' + e.message).slice(0, 400) };
+    return { status: 'error', worker_status: 'caleb_error', summary: ('executor error: ' + e.message).slice(0, 400) };
   }
 }
 
@@ -83,7 +93,7 @@ function pickJob() {
   const entries = fs.readdirSync(QUEUE_DIR).filter(f => f.endsWith('.json') && !f.startsWith('.')).sort();
   return entries.length ? entries[0] : null;
 }
-function processOne() {
+async function processOne() {
   const fname = pickJob();
   if (!fname) return false;
   const src = path.join(QUEUE_DIR, fname);
@@ -93,7 +103,7 @@ function processOne() {
   try { job = JSON.parse(fs.readFileSync(claimed, 'utf8')); }
   catch (e) { logLine(`parse failed ${fname}: ${e.message}`); try { fs.renameSync(claimed, path.join(QUEUE_DIR, 'failed', fname)); } catch (_) {} return true; }
 
-  const result = execute(job);
+  const result = await execute(job);
   logLine(`job ${fname} type=${job.task_type || job.template_id || '?'} dispatch_id=${job.dispatch_id || '-'} -> ${result.status} (${result.worker_status})`);
   job.worker_picked_at = new Date().toISOString();
   job.worker_status = result.worker_status;
@@ -106,9 +116,13 @@ function processOne() {
 }
 
 logLine(`caleb-worker starting. queue=${QUEUE_DIR} poll=${POLL_MS}ms report=${REPORT_URL} secret=${SECRET ? 'set' : 'MISSING'} pid=${process.pid}`);
-function tick() {
-  try { let n = 0; while (processOne()) { if (++n >= 10) break; } }
+let _busy = false; // serialize ticks so a long Playwright task isn't re-entered
+async function tick() {
+  if (_busy) return;
+  _busy = true;
+  try { let n = 0; while (await processOne()) { if (++n >= 10) break; } }
   catch (e) { logLine(`tick error: ${e.message}`); }
+  finally { _busy = false; }
 }
 tick();
 setInterval(tick, POLL_MS);
