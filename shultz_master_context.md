@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 07:44 CT — [REVENUE] Marketing friction rule LOCKED (6/5): campaign posts must include DIRECT product <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 07:50 CT — [GENERAL] MARKETING RULE — product-first, link-first (6/5, locked): no campaign fires unti <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-05 07:45 CT] Feature shipped — commit f0515e1: docs(master-context): Nathan append [REVENUE]
 - [2026-06-04 20:15 CT] Feature shipped — commit 5384dd6: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-04 17:00 CT] Feature shipped — commit 4ecb023: docs(master-context): Nathan append [STACK]
 - [2026-06-04 16:47 CT] Heartbeat self-healing ops layer deployed (6/4): PM2 process solomon-health (pid 523379, 0 restarts, persisted via pm2 save) running every 5 min. Clean first tick: all checks pass, err.log empty, silent on green — exception-only confirmed. Tool-reload + idempotent-retry escalate-only per locked decision. All 5 protected core files untouched. Commit a3663ae pushed to master. Total PM2 processes now 11.
@@ -256,6 +257,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-05 07:50 CT] MARKETING RULE — product-first, link-first (6/5, locked): no campaign fires until every product it advertises (a) exists as a live purchasable listing and (b) has its direct purchase URL written into the campaign plan. "Link in bio" is never acceptable — zero clicks to purchase is the standard. Applies to Gumroad, Spreadshop, KDP, apps, or any future product. Design order: lock products → verify each is live with a direct URL → THEN write campaign copy with those URLs baked in. If a product has no live listing, it does not appear in the campaign. This is foundational, not a per-campaign checklist item — it is a hard gate the campaign cannot pass without going through.
 - [2026-06-05 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-04 12:43 CT] OPERATING PRINCIPLE — One live brain, read by all (6/4, locked): the master context is the single source of truth; every agent reads it fresh at the start of every interaction and writes confirmed decisions back (append-only). Solomon: every conversation (24/7 = effectively real-time); Sam: every session; Caleb: relay pull at task start; Gabriel: read the live file, no private memory copy; Nathan: live read/write. Sync is event-driven, not per-minute polling — a decision committing to master context is the trigger; agents read fresh at next action (no pool/API waste). Nathan and Gabriel fact-check each other mutually, but checks ALWAYS resolve against ground truth (live PM2/files/relay), never against each other's agreement (avoids shared blind spots). Stopping rule: each checks once on infra/irreversible; unresolved disagreement escalates to Jed as a Decision.
 - [2026-06-04 12:36 CT] OPERATING PRINCIPLE — Prompt pre-flight check / verification ladder (6/4, locked): every prompt Nathan issues gets verified before execution, tiered like the confidence ladder. Gate 0 — Nathan self-checks any infra/build prompt against live master context + PM2 before handing it over (right paths, process names, state). Gate 1 — Gabriel fact-checks prompts routed through him (right agent for the job, no stale refs, paths match; e.g. Caleb can't type terminals or touch elevated, Sam Bash can). Gate 2 — executor pre-flights: Sam states plan + flags blockers before running; Caleb states what it will click before clicking. Tiering: trivial/reversible skip the gates; infra/build/multi-step get Gate 0+1; irreversible/elevated get all three + Jed approval. None of this routes through Jed — he only sees a flag that needs a real decision.
