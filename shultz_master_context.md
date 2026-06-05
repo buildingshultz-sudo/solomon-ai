@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 14:38 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP nav test (no upload)' (status: dispatched_to_caleb <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 14:40 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP nav test v2 (no upload)' (status: dispatched_to_ca <!-- LASTUPDATED -->
 
 ---
 
@@ -207,6 +207,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-05 14:40 CT] Nathan dispatch → caleb: 'KDP nav test v2 (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688415116)
 - [2026-06-05 14:38 CT] Nathan dispatch → caleb: 'KDP nav test (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688312289)
 - [2026-06-05 14:37 CT] Nathan dispatch → caleb: 'KDP nav test (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688275620)
 - [2026-06-05 14:37 CT] Nathan dispatch → caleb: 'KDP nav test (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688239723)
