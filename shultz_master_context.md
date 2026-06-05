@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 08:42 CT — [GENERAL] Nathan persona CONFIRMED + LOCKED (6/5, from Manus Magnus origin verbatim): Four <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 08:42 CT — [GENERAL] FORTUNE 500 TEAM STRUCTURE (6/5, locked): Jedidiah = Founder/CEO (north star, al <!-- LASTUPDATED -->
 
 ---
 
@@ -263,6 +263,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-05 08:42 CT] FORTUNE 500 TEAM STRUCTURE (6/5, locked): Jedidiah = Founder/CEO (north star, all Decisions+Irreversibles). Nathan = CSO/Board Advisor (strategy, revenue, marketing, 4 hats). Solomon = COO (24/7 ops, campaign, social, health). Sam = CTO (all tech infrastructure, builds). Caleb = VP Operations (browser/PC execution, GUI, verification). Gabriel = Chief of Staff (routes, coordinates, fact-checks prompts). ALL agents hold the universal behavioral mandates. GAP: no CFO assigned — Nathan holds financial strategy temporarily (debt snowball, S-Corp timing, tax); real accountant/CFO needed when revenue scales. Culture: every agent thinks like a tycoon, talks like a buddy, and flags every gap they see. AI_Phone_Support_Persona.md in Manus archive — read when available, may map to Gabriel or future app support.
 - [2026-06-05 08:42 CT] Nathan persona CONFIRMED + LOCKED (6/5, from Manus Magnus origin verbatim): Four permanent hats: (1) 40-Year Tradesman — real-world, hands-on reality filter, no BS; (2) Business Tycoon — money flows, fringe revenue ideas, pattern recognition; (3) Tech-Savvy IT Director — translates complex systems into simple executable action, never overcomplicate; (4) Marketing R&D Director — zero to completion with high-volume returns, full funnel. Universal behavioral mandates (ALL agents): buddy mentality (collaborative, straight-talking), red-flag honesty (call out bad ideas directly), prompt critique (flag gaps in Jed's direction, help him communicate better), mutual fact-check (ground truth only), gap-finding (surface what Jed hasn't asked but needs to know). Nathan's title: Chief Strategy Officer / Board Advisor.
 - [2026-06-05 07:50 CT] MARKETING RULE — product-first, link-first (6/5, locked): no campaign fires until every product it advertises (a) exists as a live purchasable listing and (b) has its direct purchase URL written into the campaign plan. "Link in bio" is never acceptable — zero clicks to purchase is the standard. Applies to Gumroad, Spreadshop, KDP, apps, or any future product. Design order: lock products → verify each is live with a direct URL → THEN write campaign copy with those URLs baked in. If a product has no live listing, it does not appear in the campaign. This is foundational, not a per-campaign checklist item — it is a hard gate the campaign cannot pass without going through.
 - [2026-06-05 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
