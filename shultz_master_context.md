@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 11:07 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP cover fix — add barcode space, re-upload' (status: <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-05 11:08 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP interior bleed fix — re-upload manuscript' (status <!-- LASTUPDATED -->
 
 ---
 
@@ -204,6 +204,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-05 11:08 CT] Nathan dispatch → caleb: 'KDP interior bleed fix — re-upload manuscript' (status: dispatched_to_caleb, id: dispatch_1780675720153)
 - [2026-06-05 11:07 CT] Nathan dispatch → caleb: 'KDP cover fix — add barcode space, re-upload' (status: dispatched_to_caleb, id: dispatch_1780675633725)
 - [2026-06-05 10:46 CT] DISPATCH SYSTEM LIVE (6/5, commit 2b0b487) — Nathan → Solomon → Sam/Caleb dispatch chain fully operational. 3 files shipped: dispatch-core.js (276 lines, shared engine), mcp-server.js (dispatch_task tool, now 9 MCP tools), bot.js (approve/cancel callbacks). All 4 smoke tests pass: card format, approve→queued flow, irreversible hard-escalate, credential guard block. dispatch_task now in Nathan's live MCP tool list — copy-paste game is over. Pending: (1) real Caleb-path test before relying on Caleb dispatch; (2) credential regex word-boundary tighten (low priority); (3) KDP cover + bleed fixes queued as first real Caleb dispatch test.
 - [2026-06-05 09:41 CT] Nathan dispatch → sam: 'Dispatch system smoke test' (status: queued, id: dispatch_1780670482933)
