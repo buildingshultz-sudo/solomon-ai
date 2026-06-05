@@ -269,8 +269,24 @@ function cancelDispatch(rec) {
   return `❌ Cancelled · ${rec.title}`;
 }
 
+// ── Caleb report-back — PC worker → VPS /caleb-result closes the loop ────────
+// status: 'done' | 'failed' | 'acknowledged' (or any short string). Updates the
+// dispatch JSON and logs. Returns the updated record (or null if unknown id).
+function recordCalebResult(id, status, summary) {
+  const rec = readDispatch(id);
+  if (!rec) return null;
+  rec.status = status === 'done' ? 'caleb_done'
+    : status === 'failed' ? 'caleb_failed'
+    : 'caleb_' + String(status || 'reported').replace(/[^a-z0-9_]/gi, '_');
+  rec.caleb_summary = String(summary || '').slice(0, 500);
+  rec.caleb_reported_at = new Date().toISOString();
+  writeRecord(rec);
+  logActivity(`[${ctStamp()}] Nathan dispatch ${id} ${rec.status}: ${rec.title} — ${rec.caleb_summary}`);
+  return rec;
+}
+
 module.exports = {
   scanCredential, resolveRouting, prepareDispatch, buildCard,
   routeOnApprove, cancelDispatch, readDispatch, appendSamQueueLog,
-  SAM_QUEUE_DIR
+  recordCalebResult, SAM_QUEUE_DIR
 };

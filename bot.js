@@ -1200,6 +1200,10 @@ function _setActionStatus(actionId, status, patch) {
 
 bot.on('callback_query', async (cq) => {
   try {
+    // FIX 1: ack the callback IMMEDIATELY (no await) so Telegram never shows an
+    // endless loading spinner. Must fire within 2-3s of arrival, before any other
+    // async work. Subsequent answerCallbackQuery calls below become harmless no-ops.
+    bot.answerCallbackQuery(cq.id).catch(() => {});
     if (!cq.from || cq.from.id !== OWNER_ID) {
       bot.answerCallbackQuery(cq.id, { text: 'Not authorized.' }).catch(() => {});
       return;
@@ -2097,6 +2101,30 @@ app.get('/cowork/status', (req, res) => {
   const busy = !!(until && new Date(until).getTime() > Date.now());
   const queueSize = mem.getCategory('pc_queue').length;
   res.json({ busy, busy_until: until, note, pc_queue: queueSize });
+});
+
+// ── CALEB RESULT REPORT-BACK (FIX 2) ──────────────────────────────────────
+// The PC-side caleb-worker POSTs job results here to close the dispatch loop
+// (the PC has no Telegram token). Auth: X-Secret == PC_RELAY_SECRET (same shared
+// secret as /cowork/busy). Updates the dispatch JSON status and notifies Jed.
+app.post('/caleb-result', async (req, res) => {
+  if (req.get('X-Secret') !== process.env.PC_RELAY_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  const { dispatch_id, status, summary, title } = req.body || {};
+  if (!dispatch_id) return res.status(400).json({ error: 'dispatch_id required' });
+  try {
+    const core = require('./dispatch-core.js');
+    const rec = core.recordCalebResult(dispatch_id, status, summary);
+    const label = (rec && rec.title) || title || dispatch_id;
+    const icon = status === 'failed' ? '⚠️' : '✅';
+    const finalStatus = rec ? rec.status : ('caleb_' + (status || 'reported'));
+    await bot.sendMessage(OWNER_ID, `${icon} Caleb ${status || 'reported'} · ${label}\nstatus: ${finalStatus}\n${String(summary || '').slice(0, 500)}`)
+      .catch(() => {});
+    log('INFO', 'CALEB', 'result report-back', { dispatch_id, status, found: !!rec });
+    res.json({ ok: true, status: finalStatus, found: !!rec });
+  } catch (e) {
+    log('ERROR', 'CALEB', 'caleb-result handler failed', { error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 // ── API ENDPOINTS (Phase 8B) ─────────────────────────────────────────────
