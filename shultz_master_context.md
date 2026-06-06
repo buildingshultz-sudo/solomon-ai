@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 17:18 CT — [SAMQUEUE] Nathan dispatch → sam: 'Fix Caleb browser task — about:blank false completion +  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 17:28 CT — [SAMQUEUE] Nathan dispatch → sam: 'Build contractor survey response monitor + auto thank-yo <!-- LASTUPDATED -->
 
 ---
 
@@ -208,6 +208,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 17:28 CT] Nathan dispatch → sam: 'Build contractor survey response monitor + auto thank-you + Nathan report' (status: queued, id: dispatch_1780784789086)
 - [2026-06-06 17:18 CT] Nathan dispatch → sam: 'Fix Caleb browser task — about:blank false completion + re-run contractor scrape' (status: queued, id: dispatch_1780784314817)
 - [2026-06-06 17:15 CT] Nathan dispatch → caleb: 'Scrape contact emails for NWI contractor outreach list' (status: dispatched_to_caleb, id: dispatch_1780784102785)
 - [2026-06-05 14:41 CT] Nathan dispatch → caleb: 'KDP nav test v3 (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688494142)
