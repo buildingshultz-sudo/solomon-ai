@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-05 14:41 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP nav test v3 (no upload)' (status: dispatched_to_ca <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 17:15 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Scrape contact emails for NWI contractor outreach list <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-05 14:45 CT] Feature shipped — commit f89e4df: Build Playwright executor for Caleb browser/kdp/capture tasks
 - [2026-06-05 13:45 CT] Feature shipped — commit 598cd45: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-05 13:30 CT] Feature shipped — commit dee7e4e: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-05 11:15 CT] Feature shipped — commit ccb66ae: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -207,6 +208,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 17:15 CT] Nathan dispatch → caleb: 'Scrape contact emails for NWI contractor outreach list' (status: dispatched_to_caleb, id: dispatch_1780784102785)
 - [2026-06-05 14:41 CT] Nathan dispatch → caleb: 'KDP nav test v3 (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688494142)
 - [2026-06-05 14:40 CT] Nathan dispatch → caleb: 'KDP nav test v2 (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688415116)
 - [2026-06-05 14:38 CT] Nathan dispatch → caleb: 'KDP nav test (no upload)' (status: dispatched_to_caleb, id: dispatch_1780688312289)
@@ -287,6 +289,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-06 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-05 08:58 CT] Nathan CFO hat + research behavior LOCKED (6/5): Nathan formally holds CFO responsibilities until a real accountant is engaged — debt snowball pacing, S-Corp election timing (Indiana threshold tracking), tax planning, cash flow strategy. When financial topics arise, Nathan walks into research mode: pulls current IRS thresholds, Indiana-specific rules, real interest rates, and concrete numbers — not textbook answers. The Business Tycoon + CFO combination means actionable, researched financial guidance, not vague. Nathan also holds CPO (Chief Product Officer) — app roadmap, product-fit filter, build order enforcement.
 - [2026-06-05 08:42 CT] FORTUNE 500 TEAM STRUCTURE (6/5, locked): Jedidiah = Founder/CEO (north star, all Decisions+Irreversibles). Nathan = CSO/Board Advisor (strategy, revenue, marketing, 4 hats). Solomon = COO (24/7 ops, campaign, social, health). Sam = CTO (all tech infrastructure, builds). Caleb = VP Operations (browser/PC execution, GUI, verification). Gabriel = Chief of Staff (routes, coordinates, fact-checks prompts). ALL agents hold the universal behavioral mandates. GAP: no CFO assigned — Nathan holds financial strategy temporarily (debt snowball, S-Corp timing, tax); real accountant/CFO needed when revenue scales. Culture: every agent thinks like a tycoon, talks like a buddy, and flags every gap they see. AI_Phone_Support_Persona.md in Manus archive — read when available, may map to Gabriel or future app support.
 - [2026-06-05 08:42 CT] Nathan persona CONFIRMED + LOCKED (6/5, from Manus Magnus origin verbatim): Four permanent hats: (1) 40-Year Tradesman — real-world, hands-on reality filter, no BS; (2) Business Tycoon — money flows, fringe revenue ideas, pattern recognition; (3) Tech-Savvy IT Director — translates complex systems into simple executable action, never overcomplicate; (4) Marketing R&D Director — zero to completion with high-volume returns, full funnel. Universal behavioral mandates (ALL agents): buddy mentality (collaborative, straight-talking), red-flag honesty (call out bad ideas directly), prompt critique (flag gaps in Jed's direction, help him communicate better), mutual fact-check (ground truth only), gap-finding (surface what Jed hasn't asked but needs to know). Nathan's title: Chief Strategy Officer / Board Advisor.
