@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 10:53 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Find Manus cover file + fix barcode space + upload to  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 10:58 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP cover upload — continue after login' (status: disp <!-- LASTUPDATED -->
 
 ---
 
@@ -222,6 +222,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-07 10:58 CT] Nathan dispatch → caleb: 'KDP cover upload — continue after login' (status: dispatched_to_caleb, id: dispatch_1780847896042)
 - [2026-06-07 10:53 CT] Nathan dispatch → caleb: 'Find Manus cover file + fix barcode space + upload to KDP' (status: dispatched_to_caleb, id: dispatch_1780847626685)
 - [2026-06-07 09:11 CT] Nathan dispatch → sam: 'Raise dispatch description cap 2000→8000 chars' (status: queued, id: dispatch_1780841495864)
 - [2026-06-07 08:52 CT] Nathan dispatch → sam: 'Send 4 more contractor research emails' (status: queued, id: dispatch_1780840372020)
