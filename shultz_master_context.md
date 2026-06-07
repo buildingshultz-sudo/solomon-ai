@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 10:58 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP cover upload — continue after login' (status: disp <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 11:07 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP paperback cover upload — correct to paperback row' <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-07 11:00 CT] Feature shipped — commit 4898fa3: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 10:45 CT] Feature shipped — commit 5ea1f44: docs(master-context): Nathan append [GENERAL]
 - [2026-06-07 09:15 CT] Feature shipped — commit 6a12f64: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 09:00 CT] Feature shipped — commit 6e40604: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -222,6 +223,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-07 11:07 CT] Nathan dispatch → caleb: 'KDP paperback cover upload — correct to paperback row' (status: dispatched_to_caleb, id: dispatch_1780848456296)
 - [2026-06-07 10:58 CT] Nathan dispatch → caleb: 'KDP cover upload — continue after login' (status: dispatched_to_caleb, id: dispatch_1780847896042)
 - [2026-06-07 10:53 CT] Nathan dispatch → caleb: 'Find Manus cover file + fix barcode space + upload to KDP' (status: dispatched_to_caleb, id: dispatch_1780847626685)
 - [2026-06-07 09:11 CT] Nathan dispatch → sam: 'Raise dispatch description cap 2000→8000 chars' (status: queued, id: dispatch_1780841495864)
