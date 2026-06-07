@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 20:02 CT — [SAMQUEUE] Nathan dispatch → sam: 'Send 5 TradeQuote research emails via Solomon SMTP' (sta <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 20:04 CT — [GENERAL] Caleb contractor scrape (fix dispatch_1780784314817): 11 NWI sites scraped, 4 em <!-- LASTUPDATED -->
 
 ---
 
@@ -298,6 +298,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-06 20:04 CT] Caleb contractor scrape (fix dispatch_1780784314817): 11 NWI sites scraped, 4 emails found - hksremodeling=hksremcompany@gmail.com, nwibuildersinc=office@nwibuildersinc.com, goodwinconstructionnwi=jgoodwinconstruction.llc@gmail.com, lighthouseelectricservice=lighthouseelectric007@gmail.com. Contact forms: prestige-construction-llc, servicedoctor, sub-cooled, naughtonmechanical, q-extra, ampselectric. crownbuilds=none. Castle Rock (219-663-6158) needs manual lookup (no domain).
 - [2026-06-06 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-05 08:58 CT] Nathan CFO hat + research behavior LOCKED (6/5): Nathan formally holds CFO responsibilities until a real accountant is engaged — debt snowball pacing, S-Corp election timing (Indiana threshold tracking), tax planning, cash flow strategy. When financial topics arise, Nathan walks into research mode: pulls current IRS thresholds, Indiana-specific rules, real interest rates, and concrete numbers — not textbook answers. The Business Tycoon + CFO combination means actionable, researched financial guidance, not vague. Nathan also holds CPO (Chief Product Officer) — app roadmap, product-fit filter, build order enforcement.
 - [2026-06-05 08:42 CT] FORTUNE 500 TEAM STRUCTURE (6/5, locked): Jedidiah = Founder/CEO (north star, all Decisions+Irreversibles). Nathan = CSO/Board Advisor (strategy, revenue, marketing, 4 hats). Solomon = COO (24/7 ops, campaign, social, health). Sam = CTO (all tech infrastructure, builds). Caleb = VP Operations (browser/PC execution, GUI, verification). Gabriel = Chief of Staff (routes, coordinates, fact-checks prompts). ALL agents hold the universal behavioral mandates. GAP: no CFO assigned — Nathan holds financial strategy temporarily (debt snowball, S-Corp timing, tax); real accountant/CFO needed when revenue scales. Culture: every agent thinks like a tycoon, talks like a buddy, and flags every gap they see. AI_Phone_Support_Persona.md in Manus archive — read when available, may map to Gabriel or future app support.
