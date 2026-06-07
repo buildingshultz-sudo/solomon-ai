@@ -1290,13 +1290,46 @@ bot.on('callback_query', async (cq) => {
   }
 });
 
-// ── TELEGRAM MESSAGE HANDLER ─────────────────────────────────────────────
-bot.on('message', async (msg) => {
-  // Only respond to Jed
-  if (msg.chat.id !== OWNER_ID) {
-    bot.sendMessage(msg.chat.id, 'This is a private assistant. Unauthorized access logged.');
+// ── TASIA RECEIVE-ONLY CHANNEL (dispatch_1780799562798 / dispatch_1780800279119) ──
+// Tasia (Jed's wife) gets sale notifications ONLY — never operational messages,
+// and her messages NEVER trigger commands/dispatches. Her chat ID lives in mem
+// (config/tasia_chat_id), NOT .env (honors the no-.env rule). The bot previously
+// discarded unauthorized senders without logging, so her first message was lost —
+// she is auto-captured (keyword-matched) on her NEXT message.
+function _tasiaId() { try { return mem.get('config', 'tasia_chat_id') || null; } catch (_) { return null; } }
+function notifyTasia(text) {
+  const id = _tasiaId();
+  if (!id) return;
+  if (String(process.env.TASIA_NOTIFY || 'true').toLowerCase() === 'false') return;
+  bot.sendMessage(id, text).catch(() => {});
+}
+async function handleNonOwnerMessage(msg) {
+  const id = msg.chat.id;
+  const tasiaId = _tasiaId();
+  // Already Tasia → receive-only; acknowledge gently, never process as a command.
+  if (tasiaId && String(id) === String(tasiaId)) {
+    log('INFO', 'TASIA', 'receive-only message ignored', { id });
+    bot.sendMessage(id, "Hey Tasia! 👋 I only send the good news here — a ping every time a sale lands. — Solomon").catch(() => {});
     return;
   }
+  // Auto-capture Tasia on her first (keyword-matched) message if not yet set.
+  if (!tasiaId && /tasia/i.test(msg.text || '')) {
+    try { mem.set('config', 'tasia_chat_id', String(id)); } catch (_) {}
+    bot.sendMessage(id, "Hey Tasia! 👋 You're all set. Jed set this up so you'll get a message here every time a sale lands for Building Shultz. That's it — no spam, just the good news. — Solomon").catch(() => {});
+    bot.sendMessage(OWNER_ID, `✅ Tasia is connected (chat ID ${id}). She'll receive sale notifications only — no operational access.`).catch(() => {});
+    log('INFO', 'TASIA', 'captured chat id', { id });
+    return;
+  }
+  // Any other unknown sender → reject, but now actually LOG the id (was discarded).
+  log('WARN', 'AUTH', 'unauthorized message', { id, from: msg.chat.first_name || msg.chat.username || '', text: (msg.text || '').slice(0, 80) });
+  bot.sendMessage(id, 'This is a private assistant. Unauthorized access logged.').catch(() => {});
+}
+
+// ── TELEGRAM MESSAGE HANDLER ─────────────────────────────────────────────
+bot.on('message', async (msg) => {
+  // Only Jed runs commands; everyone else routes through the non-owner handler
+  // (Tasia receive-only capture/ack, all others rejected + logged).
+  if (msg.chat.id !== OWNER_ID) { return handleNonOwnerMessage(msg); }
   // Deduplication: ignore retried/duplicate Telegram message deliveries
   if (_processedMsgIds.has(msg.message_id)) return;
   _processedMsgIds.add(msg.message_id);
@@ -2382,6 +2415,15 @@ app.post('/webhooks/gumroad/:secret', express.urlencoded({ extended: true }), as
   const message = `${header}\n\n*Product:* ${product}\n*Amount:* ${currency} $${amount}${quantity !== '1' ? ` × ${quantity}` : ''}\n*Buyer:* ${buyer}`;
   bot.sendMessage(OWNER_ID, message, { parse_mode: 'Markdown' })
     .catch(() => bot.sendMessage(OWNER_ID, message.replace(/[*_`]/g, '')));
+  // Tasia gets ONLY real-sale celebrations (no refunds/tests/ops). Slightly varied.
+  if (!refunded && !test) {
+    const variants = [
+      `🎉 Someone just bought ${product} — ${currency} $${amount}. Building Shultz is working, babe. — Solomon`,
+      `🎉 ${product} sold — ${currency} $${amount}. The system is running. — Solomon`,
+      `🎉 New sale: ${product} — ${currency} $${amount}. Jed's building something real. — Solomon`
+    ];
+    notifyTasia(variants[(product.length + Math.round(parseFloat(amount) || 0)) % variants.length]);
+  }
   log('INFO', 'GUMROAD', 'Sale celebrated', { product, amount, currency, test, refunded });
   activityLogger.logActivity('gumroad_sale', { summary: `${product} ${currency} $${amount}` });
   // T0-C: enrol buyer in post-purchase email drip (skip refunds + test pings).
