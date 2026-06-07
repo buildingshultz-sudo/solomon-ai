@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 21:32 CT — [SAMQUEUE] Nathan dispatch → sam: 'Build Tasia sale notification system — all revenue strea <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 21:44 CT — [SAMQUEUE] Nathan dispatch → sam: 'Whitelist Tasia on Solomon — receive-only sale notificat <!-- LASTUPDATED -->
 
 ---
 
@@ -217,6 +217,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 21:44 CT] Nathan dispatch → sam: 'Whitelist Tasia on Solomon — receive-only sale notifications' (status: queued, id: dispatch_1780800279119)
 - [2026-06-06 21:32 CT] Nathan dispatch → sam: 'Build Tasia sale notification system — all revenue streams' (status: queued, id: dispatch_1780799562798)
 - [2026-06-06 21:24 CT] Nathan dispatch → sam: 'Fix autonomous queue — process dispatch tasks without manual invoke' (status: queued, id: dispatch_1780799046736)
 - [2026-06-06 21:23 CT] Nathan dispatch → sam: 'Wire survey responses to auto-update Google Sheets lead tracker' (status: queued, id: dispatch_1780799036228)
