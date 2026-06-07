@@ -1687,6 +1687,44 @@ async function routePriorityActionV2(pick, idleH) {
   }
 }
 
+// ── SAM-QUEUE BACKLOG NUDGE ────────────────────────────────────────────────
+// The autonomous priority cron is a PRODUCER (it reads master-context standing
+// priorities and writes NEW sam-queue jobs) — it never consumed existing
+// dispatch_*.json files, so Nathan-created dispatches sat queued until Sam was
+// run manually. This surfaces them on the idle window and skips new work so the
+// backlog isn't compounded. Reuses fs/path/mem/_tg (no new imports).
+function _queuedSamDispatches() {
+  const dir = '/root/solomon-v4/sam-queue';
+  const out = [];
+  let files = [];
+  try { files = fs.readdirSync(dir).filter(f => /^dispatch_.*\.json$/.test(f)); } catch (_) { return out; }
+  for (const f of files) {
+    try {
+      const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      if (j && j.status === 'queued' && j.target === 'sam') {
+        const ts = j.timestamp_ct ? new Date(j.timestamp_ct).getTime() : 0;
+        out.push({ title: String(j.title || j.task || f), ageH: ts ? (Date.now() - ts) / 3_600_000 : 0 });
+      }
+    } catch (_) { /* skip unreadable/partial files */ }
+  }
+  return out;
+}
+// Returns true if a backlog exists (caller skips the pick this tick). Telegram
+// alert is deduped to once per 6h window.
+async function _checkSamBacklog() {
+  const backlog = _queuedSamDispatches();
+  if (!backlog.length) return false;
+  const lastAlert = mem.get('autonomous_priority_v2', 'last_backlog_alert');
+  if (!lastAlert || (Date.now() - new Date(lastAlert).getTime()) >= 6 * 3_600_000) {
+    const oldestH = Math.round(Math.max(0, ...backlog.map(b => b.ageH)));
+    const titles = backlog.map(b => `• ${b.title.slice(0, 80)}`).join('\n');
+    await _tg(`⏰ ${backlog.length} dispatch task${backlog.length === 1 ? '' : 's'} queued for Sam ≥${oldestH}h — run Sam to process\n${titles}`);
+    mem.set('autonomous_priority_v2', 'last_backlog_alert', new Date().toISOString());
+    console.log(`[SCHEDULER] autonomous_priority_v2 backlog nudge: ${backlog.length} queued sam dispatch(es)`);
+  }
+  return true;
+}
+
 cron.schedule('*/30 * * * *', async () => {
   try {
     // 1. Idle check (unchanged from v1)
@@ -1694,6 +1732,11 @@ cron.schedule('*/30 * * * *', async () => {
     const lastTs = (last && last.t) ? new Date(last.t).getTime() : 0;
     const idleH = lastTs ? (Date.now() - lastTs) / 3_600_000 : 0;
     if (idleH < 6) return;
+
+    // 1b. BACKLOG NUDGE: if Nathan dispatches are queued for Sam, surface them and
+    // skip generating new autonomous work this tick (don't compound the backlog).
+    if (await _checkSamBacklog()) return;
+
     // 2. 24h cooldown (shared with v1 last_fired_at so we don't double-fire if both somehow ran)
     const lastFired = mem.get('autonomous_priority', 'last_fired_at');
     if (lastFired && (Date.now() - new Date(lastFired).getTime()) < 24 * 3_600_000) return;
@@ -2383,6 +2426,8 @@ module.exports = {
   loadCampaignDays,
   getStaleTaskCount,
   loadStandingPriorities,
+  _queuedSamDispatches,
+  _checkSamBacklog,
   generateWeeklyPatternDigest,
   loadCampaignConfig,
   saveCampaignConfig,
