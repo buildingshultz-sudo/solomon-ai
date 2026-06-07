@@ -86,33 +86,114 @@ class PlaywrightExecutor {
   async execute(task) {
     await this.launch();
     let timer;
-    const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('task exceeded 120s'), { _timeout: true })), TASK_TIMEOUT_MS); });
+    // Per-task timeout override (multi-URL scrapes need more than the 120s default).
+    const taskTimeout = Number.isFinite(task.timeout_ms) ? Math.max(10000, Math.min(task.timeout_ms, 600000)) : TASK_TIMEOUT_MS;
+    const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej(Object.assign(new Error('task exceeded ' + taskTimeout + 'ms'), { _timeout: true })), taskTimeout); });
     try {
       return await Promise.race([this._route(task), timeout]);
     } catch (e) {
       let shot = null;
       try { shot = await this._shot(await this._page(), 'error'); } catch (_) {}
-      if (e._timeout) { try { await this.close(); } catch (_) {} return { status: 'timeout', worker_status: 'caleb_timeout', summary: 'task exceeded 120s — browser closed', screenshot: shot }; }
+      if (e._timeout) { try { await this.close(); } catch (_) {} return { status: 'timeout', worker_status: 'caleb_timeout', summary: 'task exceeded time limit — browser closed', screenshot: shot }; }
       return { status: 'error', worker_status: 'caleb_error', summary: ('error: ' + e.message).slice(0, 400), screenshot: shot };
     } finally { clearTimeout(timer); this._touchIdle(); }
   }
 
   async _route(task) {
     const tt = String(task.task_type || '').toLowerCase();
-    if (tt === 'browser') return this._handleBrowser(task);
+    if (tt === 'browser' || tt === 'scrape') return this._handleBrowser(task);
     if (tt === 'kdp') return this._handleKdp(task);
     if (tt === 'capture') return this._handleCapture(task);
     return { status: 'error', worker_status: 'caleb_error', summary: 'no playwright handler for task_type=' + tt };
   }
 
-  // HANDLER 1 — general navigation
+  // HANDLER 1 — general navigation + multi-URL contact scrape.
+  // FIX (dispatch_1780784314817): the old handler only navigated task.url, so a
+  // task with URLs only in the description opened about:blank and FALSE-reported
+  // done. Now: collect targets from task.urls[] → task.url → URLs parsed from the
+  // description; if none, report caleb_error (never false-complete on about:blank).
   async _handleBrowser(task) {
-    const page = await this._page();
-    if (task.url) await page.goto(task.url, { waitUntil: 'load' });
-    const shot = await this._shot(page, 'browser');
+    let urls = Array.isArray(task.urls) ? task.urls.filter(u => typeof u === 'string' && u.trim()) : [];
+    if (!urls.length && task.url) urls = [task.url];
+    if (!urls.length && task.description) urls = this._extractUrls(task.description);
+    if (!urls.length) {
+      const page = await this._page();
+      const shot = await this._shot(page, 'browser_nourl');
+      return { status: 'error', worker_status: 'caleb_error',
+        summary: 'browser task had no url, no urls[], and no URL in the description — nothing to navigate to (refusing to false-complete on about:blank).', screenshot: shot };
+    }
+    // Single plain navigation (no scrape intent) keeps the old shape.
+    if (urls.length === 1 && task.task_type !== 'scrape' && !task.scrape) {
+      const page = await this._page();
+      const u = /^https?:\/\//i.test(urls[0]) ? urls[0] : 'https://' + urls[0];
+      await page.goto(u, { waitUntil: 'load', timeout: 30000 });
+      const shot = await this._shot(page, 'browser');
+      return { status: 'done', worker_status: 'caleb_done',
+        summary: `browser: title='${(await page.title()).slice(0, 120)}' url=${page.url()} shot=${shot}`,
+        screenshot: shot, title: await page.title(), url: page.url() };
+    }
+    // Multi-URL contact scrape.
+    const dispatchId = task.dispatch_id;
+    const results = [];
+    for (let i = 0; i < urls.length; i++) {
+      this.reportProgress(dispatchId, `🌐 [${i + 1}/${urls.length}] scraping ${urls[i]}`);
+      results.push(await this._scrapeContact(urls[i]));
+    }
+    const found = results.filter(r => r.email).length;
+    const lines = results.map(r => `${r.site}: ${r.email || (r.contact_url ? 'form ' + r.contact_url : (r.error || 'no contact found'))}`);
     return { status: 'done', worker_status: 'caleb_done',
-      summary: `browser: title='${(await page.title()).slice(0, 120)}' url=${page.url()} shot=${shot}`,
-      screenshot: shot, title: await page.title(), url: page.url() };
+      summary: `scraped ${urls.length} site(s), found ${found} email(s):\n` + lines.join('\n'), results };
+  }
+
+  _extractUrls(text) {
+    const out = new Set();
+    const re = /\b((?:https?:\/\/)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s,"')]*)?)/gi;
+    let m;
+    while ((m = re.exec(String(text)))) {
+      const u = m[1];
+      if (/@/.test(u)) continue;                                  // skip emails
+      if (/\.(png|jpe?g|gif|svg|js|json|md|css)$/i.test(u)) continue;
+      out.add(u);
+    }
+    return [...out];
+  }
+
+  async _findEmail(page) {
+    try {
+      const mailtos = await page.$$eval('a[href^="mailto:"]', as => as.map(a => a.getAttribute('href').replace(/^mailto:/i, '').split('?')[0].trim()).filter(Boolean));
+      if (mailtos.length) return mailtos[0];
+    } catch (_) {}
+    try {
+      const body = await page.evaluate(() => (document.body ? document.body.innerText : ''));
+      const m = body.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+      if (m && !/\.(png|jpg|gif)$/i.test(m[0])) return m[0];
+    } catch (_) {}
+    return null;
+  }
+
+  async _scrapeContact(rawUrl) {
+    const page = await this._page();
+    const url = /^https?:\/\//i.test(rawUrl) ? rawUrl : 'https://' + rawUrl;
+    let site; try { site = new URL(url).hostname.replace(/^www\./, ''); } catch (_) { site = rawUrl; }
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 18000 });
+      await page.waitForTimeout(1200);
+      let email = await this._findEmail(page);
+      let contactUrl = null;
+      if (!email) {
+        let links = [];
+        try { links = await page.$$eval('a', as => as.map(a => ({ href: a.href, text: (a.textContent || '').toLowerCase() }))); } catch (_) {}
+        const cand = links.find(l => /contact/i.test(l.href) || /contact/i.test(l.text))
+          || links.find(l => /about/i.test(l.href) || /about/i.test(l.text));
+        if (cand && cand.href) {
+          contactUrl = cand.href;
+          try { await page.goto(cand.href, { waitUntil: 'domcontentloaded', timeout: 15000 }); await page.waitForTimeout(1000); email = await this._findEmail(page); } catch (_) {}
+        }
+      }
+      return { site, url, email: email || null, contact_url: email ? null : contactUrl };
+    } catch (e) {
+      return { site, url, email: null, error: String(e.message).slice(0, 100) };
+    }
   }
 
   // HANDLER 3 — capture

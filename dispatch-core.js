@@ -101,7 +101,10 @@ function prepareDispatch(input) {
   const is_irreversible = !!(input && input.is_irreversible);
   // Task-specific fields forwarded to the executor (url, book_title, kdp_section,
   // file_path, wait_ms, …). NEVER put credentials here — scanned below.
-  const params = (input && input.params && typeof input.params === 'object') ? input.params : {};
+  const params = (input && input.params && typeof input.params === 'object') ? { ...input.params } : {};
+  // Top-level convenience fields fold into params so the executor sees them.
+  if (input && Array.isArray(input.urls)) params.urls = input.urls;
+  if (input && Number.isFinite(input.timeout_ms)) params.timeout_ms = input.timeout_ms;
 
   if (!['sam', 'caleb', 'gabriel'].includes(target)) throw new Error("target must be one of sam|caleb|gabriel");
   if (!task_type) throw new Error('task_type required');

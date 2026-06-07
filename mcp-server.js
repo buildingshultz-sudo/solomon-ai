@@ -156,7 +156,8 @@ const TOOLS = [
         priority: { type: 'string', enum: ['high', 'normal', 'low'], default: 'normal' },
         requires_approval: { type: 'boolean', default: true },
         is_irreversible: { type: 'boolean', default: false, description: 'money/legal/publish/delete/UAC/deploy-to-prod; if true hard-escalates to Jed regardless of requires_approval.' },
-        params: { type: 'object', description: 'task-specific fields forwarded to the Caleb/Playwright executor, e.g. {url, book_title, kdp_section, file_path, wait_ms}. NO credentials.' }
+        params: { type: 'object', description: 'task-specific fields forwarded to the Caleb/Playwright executor, e.g. {url, book_title, kdp_section, file_path, wait_ms}. NO credentials.' },
+        urls: { type: 'array', items: { type: 'string' }, description: 'optional list of URLs for multi-site browser/scrape tasks. The executor iterates each, finds the contact email (mailto/contact/about) or contact-form URL, and returns results for all.' }
       },
       required: ['target', 'task_type', 'title', 'description']
     }

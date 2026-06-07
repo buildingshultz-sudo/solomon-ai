@@ -25,7 +25,7 @@ const { PlaywrightExecutor } = require('./caleb-playwright.js');
 try { require('dotenv').config(); } catch (_) { /* dotenv optional; env may be pre-set */ }
 
 // Single shared Playwright executor (persistent browser profile across tasks).
-const PW_TYPES = new Set(['browser', 'kdp', 'capture']);
+const PW_TYPES = new Set(['browser', 'scrape', 'kdp', 'capture']);
 let _executor = null;
 function executor() { if (!_executor) _executor = new PlaywrightExecutor(); return _executor; }
 
