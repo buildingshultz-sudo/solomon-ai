@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 20:12 CT — [GENERAL] TradeQuote survey response #1 — Mike, Castle Rock Construction (2026-06-07): Q1: <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 20:19 CT — [SAMQUEUE] Nathan dispatch → sam: 'Reply to Mike — Castle Rock Construction survey response <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-06 20:15 CT] Feature shipped — commit 064dda8: Add get_recent_activity MCP tool + recent-activity on master-context pull
 - [2026-06-06 20:00 CT] Feature shipped — commit 69a2c1f: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 19:15 CT] Feature shipped — commit 9b485c2: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 17:30 CT] Feature shipped — commit f40236e: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -211,6 +212,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 20:19 CT] Nathan dispatch → sam: 'Reply to Mike — Castle Rock Construction survey response' (status: queued, id: dispatch_1780794893369)
 - [2026-06-06 20:02 CT] Nathan dispatch → sam: 'Send 5 TradeQuote research emails via Solomon SMTP' (status: queued, id: dispatch_1780794160200)
 - [2026-06-06 20:01 CT] Nathan dispatch → caleb: 'Contractor contact scrape (re-run v2)' (status: dispatched_to_caleb, id: dispatch_1780794107748)
 - [2026-06-06 19:57 CT] Nathan dispatch → caleb: 'Contractor contact scrape (re-run)' (status: dispatched_to_caleb, id: dispatch_1780793830110)
