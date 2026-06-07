@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 20:04 CT — [GENERAL] Caleb contractor scrape (fix dispatch_1780784314817): 11 NWI sites scraped, 4 em <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 20:12 CT — [GENERAL] TradeQuote survey response #1 — Mike, Castle Rock Construction (2026-06-07): Q1: <!-- LASTUPDATED -->
 
 ---
 
@@ -298,6 +298,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-06 20:12 CT] TradeQuote survey response #1 — Mike, Castle Rock Construction (2026-06-07): Q1: bathroom remodel, forgot subfloor rot, ate ~$3k. Q2: spreadsheet + gut feel, couple hours per bid at night. Q3: chasing material prices + writing quotes. Q4: estimating paperwork. Q5: tried Joist, didn't stick. Follow-up: "will it handle change orders?" Key insights: hidden structural costs (subfloor rot) = the missed-spec problem confirmed. Estimating is the #1 pain. Joist is the known competitor — failed on stickiness. Change orders = an unprompted feature request, potential add-on module for TradeQuote.
 - [2026-06-06 20:04 CT] Caleb contractor scrape (fix dispatch_1780784314817): 11 NWI sites scraped, 4 emails found - hksremodeling=hksremcompany@gmail.com, nwibuildersinc=office@nwibuildersinc.com, goodwinconstructionnwi=jgoodwinconstruction.llc@gmail.com, lighthouseelectricservice=lighthouseelectric007@gmail.com. Contact forms: prestige-construction-llc, servicedoctor, sub-cooled, naughtonmechanical, q-extra, ampselectric. crownbuilds=none. Castle Rock (219-663-6158) needs manual lookup (no domain).
 - [2026-06-06 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-05 08:58 CT] Nathan CFO hat + research behavior LOCKED (6/5): Nathan formally holds CFO responsibilities until a real accountant is engaged — debt snowball pacing, S-Corp election timing (Indiana threshold tracking), tax planning, cash flow strategy. When financial topics arise, Nathan walks into research mode: pulls current IRS thresholds, Indiana-specific rules, real interest rates, and concrete numbers — not textbook answers. The Business Tycoon + CFO combination means actionable, researched financial guidance, not vague. Nathan also holds CPO (Chief Product Officer) — app roadmap, product-fit filter, build order enforcement.
