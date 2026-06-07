@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 17:28 CT — [SAMQUEUE] Nathan dispatch → sam: 'Build contractor survey response monitor + auto thank-yo <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 19:09 CT — [SAMQUEUE] Nathan dispatch → sam: 'Build Gabriel → Nathan feedback channel + get_recent_act <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-06 17:30 CT] Feature shipped — commit f40236e: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-05 14:45 CT] Feature shipped — commit f89e4df: Build Playwright executor for Caleb browser/kdp/capture tasks
 - [2026-06-05 13:45 CT] Feature shipped — commit 598cd45: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-05 13:30 CT] Feature shipped — commit dee7e4e: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -208,6 +209,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 19:09 CT] Nathan dispatch → sam: 'Build Gabriel → Nathan feedback channel + get_recent_activity MCP tool' (status: queued, id: dispatch_1780790862462)
 - [2026-06-06 17:28 CT] Nathan dispatch → sam: 'Build contractor survey response monitor + auto thank-you + Nathan report' (status: queued, id: dispatch_1780784789086)
 - [2026-06-06 17:18 CT] Nathan dispatch → sam: 'Fix Caleb browser task — about:blank false completion + re-run contractor scrape' (status: queued, id: dispatch_1780784314817)
 - [2026-06-06 17:15 CT] Nathan dispatch → caleb: 'Scrape contact emails for NWI contractor outreach list' (status: dispatched_to_caleb, id: dispatch_1780784102785)
