@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 08:52 CT — [SAMQUEUE] Nathan dispatch → sam: 'Send 4 more contractor research emails' (status: queued, <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 09:06 CT — [REVENUE] Amazon Associates activated (6/7): Amazon store ID buildingshu0e-20 added to top <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-07 09:00 CT] Feature shipped — commit 6e40604: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:45 CT] Feature shipped — commit 3d9d6ff: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:30 CT] Feature shipped — commit 50dde9c: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:00 CT] Feature shipped — commit e607ac9: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -189,6 +190,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-07 09:06 CT] Amazon Associates activated (6/7): Amazon store ID buildingshu0e-20 added to top 5 YouTube video descriptions manually by Jed. 230k+ combined views now monetized. First zero-liability revenue stream fully live. Affiliate commissions earning on all future clicks from those videos.
 - [2026-06-06 21:15 CT] Revenue/billing email from Stripe: "Unrecognized device signed in to your Stripe account"
 - [2026-06-06 21:15 CT] Revenue/billing email from Google: "You shared some Google Account data with Stripe"
 - [2026-06-05 08:13 CT] SPREADSHOP UNLOCK (6/5, locked): Spreadshop offers hundreds of product blank types — any design already uploaded (The Moto, Building What Matters, The Hitchcock) can be applied to virtually any product type (mugs, tumblers, aprons, beanies, wall clocks, hats, phone cases, art prints, etc.) and published WITHOUT Jed uploading new designs. Team curates and publishes new product types autonomously within an authenticated Spreadshop session — Jed logs in once, Caleb navigates and publishes within that session. This removes the ghost-products blocker entirely. Curation guideline: blue-collar/builder audience only — YES to mugs, tumblers, aprons, beanies, wall clocks, caps; NO to off-brand items. The Moto design is the anchor for all new products. "Nobody cares. Figure it out." stays held for a future drop — do NOT publish it yet.
