@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const klein = require('./klein-newsletter-watcher');
+const survey = require('./survey-monitor'); // dispatch_1780784789086 — TradeQuote survey response handler
 const { consultNathan } = require('./nathan-bridge');
 
 // ── DUAL-USE GUARD ──────────────────────────────────────────────────────────
@@ -434,6 +435,14 @@ cron.schedule("*/5 * * * *", async () => {
       // Klein newsletter auto-click (no-op for any non-klein email).
       try { await klein.processKleinEmail(em, { db, mem, bot, OWNER_ID }); }
       catch (e) { console.error('[SCHEDULER] klein watcher error:', e.message); }
+      // TradeQuote survey response handler (no-op for non-survey email). If it
+      // handles a survey reply, skip the normal triage/classify for this email.
+      try {
+        if (await survey.processSurveyEmail(em, { db, mem, bot, OWNER_ID })) {
+          console.log('[SCHEDULER] survey reply handled:', em.from_email);
+          continue;
+        }
+      } catch (e) { console.error('[SCHEDULER] survey monitor error:', e.message); }
       let classification = "normal";
       let summary = "";
       try {
