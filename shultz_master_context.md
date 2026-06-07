@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 09:11 CT — [SAMQUEUE] Nathan dispatch → sam: 'Raise dispatch description cap 2000→8000 chars' (status: <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 10:31 CT — [GENERAL] TradeQuote survey #2 — AJ (Jed's brother-in-law, GC, 6/7): Q1: eat it or talk to <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-07 09:15 CT] Feature shipped — commit 6a12f64: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 09:00 CT] Feature shipped — commit 6e40604: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:45 CT] Feature shipped — commit 3d9d6ff: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:30 CT] Feature shipped — commit 50dde9c: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -317,6 +318,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-07 10:31 CT] TradeQuote survey #2 — AJ (Jed's brother-in-law, GC, 6/7): Q1: eat it or talk to customer — hidden conditions always put you upside-down. Q2: material list + photos for reference → price out → figure labor. Q3: all business side — permits, writing legit quotes. Q4: wants to show up and work without office headache. Q5: Menards app for quick material cost; Grok to talk through on-site problems. Insights: photo workflow natural — TradeQuote should integrate; "legit-looking quotes" = professionalism gap; Menards app = estimating workaround not a real tool; AI already in workflow via Grok unstructured.
 - [2026-06-07 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-06 20:12 CT] TradeQuote survey response #1 — Mike, Castle Rock Construction (2026-06-07): Q1: bathroom remodel, forgot subfloor rot, ate ~$3k. Q2: spreadsheet + gut feel, couple hours per bid at night. Q3: chasing material prices + writing quotes. Q4: estimating paperwork. Q5: tried Joist, didn't stick. Follow-up: "will it handle change orders?" Key insights: hidden structural costs (subfloor rot) = the missed-spec problem confirmed. Estimating is the #1 pain. Joist is the known competitor — failed on stickiness. Change orders = an unprompted feature request, potential add-on module for TradeQuote.
 - [2026-06-06 20:04 CT] Caleb contractor scrape (fix dispatch_1780784314817): 11 NWI sites scraped, 4 emails found - hksremodeling=hksremcompany@gmail.com, nwibuildersinc=office@nwibuildersinc.com, goodwinconstructionnwi=jgoodwinconstruction.llc@gmail.com, lighthouseelectricservice=lighthouseelectric007@gmail.com. Contact forms: prestige-construction-llc, servicedoctor, sub-cooled, naughtonmechanical, q-extra, ampselectric. crownbuilds=none. Castle Rock (219-663-6158) needs manual lookup (no domain).
