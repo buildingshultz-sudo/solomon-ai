@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 20:52 CT — [SAMQUEUE] Nathan dispatch → sam: 'Send 8 emails + submit 11 contractor contact forms' (sta <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 21:23 CT — [SAMQUEUE] Nathan dispatch → sam: 'Stripe audit + Make check + product catalog setup' (stat <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-06 21:00 CT] Feature shipped — commit e607ac9: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 20:30 CT] Feature shipped — commit a52a5bf: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 20:15 CT] Feature shipped — commit 064dda8: Add get_recent_activity MCP tool + recent-activity on master-context pull
 - [2026-06-06 20:00 CT] Feature shipped — commit 69a2c1f: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -186,6 +187,8 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-06 21:15 CT] Revenue/billing email from Stripe: "Unrecognized device signed in to your Stripe account"
+- [2026-06-06 21:15 CT] Revenue/billing email from Google: "You shared some Google Account data with Stripe"
 - [2026-06-05 08:13 CT] SPREADSHOP UNLOCK (6/5, locked): Spreadshop offers hundreds of product blank types — any design already uploaded (The Moto, Building What Matters, The Hitchcock) can be applied to virtually any product type (mugs, tumblers, aprons, beanies, wall clocks, hats, phone cases, art prints, etc.) and published WITHOUT Jed uploading new designs. Team curates and publishes new product types autonomously within an authenticated Spreadshop session — Jed logs in once, Caleb navigates and publishes within that session. This removes the ghost-products blocker entirely. Curation guideline: blue-collar/builder audience only — YES to mugs, tumblers, aprons, beanies, wall clocks, caps; NO to off-brand items. The Moto design is the anchor for all new products. "Nobody cares. Figure it out." stays held for a future drop — do NOT publish it yet.
 - [2026-06-05 08:08 CT] Merch brand strategy LOCKED (6/5, Jed's call): The Moto design ("Be Inspired. Stay Humble. And Build.") is the campaign anchor — the brand's core identity and foundation line. Already live in Spreadshop across 8 blanks (tees, hoodies, cap, bodysuit, long-sleeve) with verified URLs in Caleb's CSV. Campaign rewrites to center on The Moto with direct Spreadshop URLs. "Nobody cares. Figure it out." is SAVED for a future merch drop — held deliberately, not missing. Building What Matters and The Hitchcock are supporting designs. Ghost products (mugs, aprons, stickers, journals, clocks, trucker hats) remain paused until actually published in the store.
 - [2026-06-05 07:58 CT] Spreadshop store verified (6/5, Caleb): 5 designs x 8 blanks = 40 live listings. Designs: Building What Matters (white+black), The Hitchcock (white+black), The Moto. Blanks: Men's/Women's/Kids' Premium Tees, Men's/Women's Premium Hoodies, Snapback Cap, Organic Baby Bodysuit, Premium Long-Sleeve. NO mugs, aprons, stickers, journals, clocks, or trucker hats. CRITICAL GAP: "Nobody cares. Figure it out." design — the book's flagship quote — does not exist in the store. 7 of 8 campaign items are ghost products. Action: (1) Sam rewrites campaign immediately to promote only the 40 live listings with direct URLs from Caleb's CSV; (2) Jed uploads "Nobody cares." design to Spreadshop ASAP — highest priority missing item; (3) mugs/aprons/journals/stickers deferred. Gumroad URL shultzbuilds.gumroad.com/l/ihjobd from prior work, unverified this pass (Chrome extension disconnected). Full 40-row URL CSV held by Caleb.
@@ -213,6 +216,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 21:23 CT] Nathan dispatch → sam: 'Stripe audit + Make check + product catalog setup' (status: queued, id: dispatch_1780798999578)
 - [2026-06-06 20:52 CT] Nathan dispatch → sam: 'Send 8 emails + submit 11 contractor contact forms' (status: queued, id: dispatch_1780797136084)
 - [2026-06-06 20:19 CT] Nathan dispatch → sam: 'Reply to Mike — Castle Rock Construction survey response' (status: queued, id: dispatch_1780794893369)
 - [2026-06-06 20:02 CT] Nathan dispatch → sam: 'Send 5 TradeQuote research emails via Solomon SMTP' (status: queued, id: dispatch_1780794160200)
