@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 11:14 CT — [SAMQUEUE] Nathan dispatch → sam: 'Verify Manus archive file count before organization' (st <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 11:16 CT — [SAMQUEUE] Nathan dispatch → sam: 'Check if Manus app data survived uninstall' (status: que <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-07 11:15 CT] Feature shipped — commit c278d79: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 11:00 CT] Feature shipped — commit 4898fa3: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 10:45 CT] Feature shipped — commit 5ea1f44: docs(master-context): Nathan append [GENERAL]
 - [2026-06-07 09:15 CT] Feature shipped — commit 6a12f64: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -223,6 +224,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-07 11:16 CT] Nathan dispatch → sam: 'Check if Manus app data survived uninstall' (status: queued, id: dispatch_1780848967334)
 - [2026-06-07 11:14 CT] Nathan dispatch → sam: 'Verify Manus archive file count before organization' (status: queued, id: dispatch_1780848871800)
 - [2026-06-07 11:13 CT] Nathan dispatch → sam: 'Full Manus archive inventory — categorize all 515 files' (status: queued, id: dispatch_1780848817217)
 - [2026-06-07 11:10 CT] Nathan dispatch → sam: 'Fix KDP cover upload selector + find journal file' (status: queued, id: dispatch_1780848607621)
