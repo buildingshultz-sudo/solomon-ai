@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 21:24 CT — [SAMQUEUE] Nathan dispatch → sam: 'Fix autonomous queue — process dispatch tasks without ma <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 21:32 CT — [SAMQUEUE] Nathan dispatch → sam: 'Build Tasia sale notification system — all revenue strea <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-06 21:30 CT] Feature shipped — commit 50dde9c: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:00 CT] Feature shipped — commit e607ac9: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 20:30 CT] Feature shipped — commit a52a5bf: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 20:15 CT] Feature shipped — commit 064dda8: Add get_recent_activity MCP tool + recent-activity on master-context pull
@@ -216,6 +217,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 21:32 CT] Nathan dispatch → sam: 'Build Tasia sale notification system — all revenue streams' (status: queued, id: dispatch_1780799562798)
 - [2026-06-06 21:24 CT] Nathan dispatch → sam: 'Fix autonomous queue — process dispatch tasks without manual invoke' (status: queued, id: dispatch_1780799046736)
 - [2026-06-06 21:23 CT] Nathan dispatch → sam: 'Wire survey responses to auto-update Google Sheets lead tracker' (status: queued, id: dispatch_1780799036228)
 - [2026-06-06 21:23 CT] Nathan dispatch → sam: 'Build research lead tracker in Google Sheets' (status: queued, id: dispatch_1780799021210)
