@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 20:01 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Contractor contact scrape (re-run v2)' (status: dispat <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-06 20:02 CT — [SAMQUEUE] Nathan dispatch → sam: 'Send 5 TradeQuote research emails via Solomon SMTP' (sta <!-- LASTUPDATED -->
 
 ---
 
@@ -211,6 +211,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-06 20:02 CT] Nathan dispatch → sam: 'Send 5 TradeQuote research emails via Solomon SMTP' (status: queued, id: dispatch_1780794160200)
 - [2026-06-06 20:01 CT] Nathan dispatch → caleb: 'Contractor contact scrape (re-run v2)' (status: dispatched_to_caleb, id: dispatch_1780794107748)
 - [2026-06-06 19:57 CT] Nathan dispatch → caleb: 'Contractor contact scrape (re-run)' (status: dispatched_to_caleb, id: dispatch_1780793830110)
 - [2026-06-06 19:09 CT] Nathan dispatch → sam: 'Build Gabriel → Nathan feedback channel + get_recent_activity MCP tool' (status: queued, id: dispatch_1780790862462)
