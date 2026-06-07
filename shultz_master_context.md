@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 11:10 CT — [SAMQUEUE] Nathan dispatch → sam: 'Fix KDP cover upload selector + find journal file' (stat <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 11:13 CT — [SAMQUEUE] Nathan dispatch → sam: 'Full Manus archive inventory — categorize all 515 files' <!-- LASTUPDATED -->
 
 ---
 
@@ -223,6 +223,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-07 11:13 CT] Nathan dispatch → sam: 'Full Manus archive inventory — categorize all 515 files' (status: queued, id: dispatch_1780848817217)
 - [2026-06-07 11:10 CT] Nathan dispatch → sam: 'Fix KDP cover upload selector + find journal file' (status: queued, id: dispatch_1780848607621)
 - [2026-06-07 11:07 CT] Nathan dispatch → sam: 'Find Motivation for Tough Guys journal file in Manus archive' (status: queued, id: dispatch_1780848468141)
 - [2026-06-07 11:07 CT] Nathan dispatch → caleb: 'KDP paperback cover upload — correct to paperback row' (status: dispatched_to_caleb, id: dispatch_1780848456296)
