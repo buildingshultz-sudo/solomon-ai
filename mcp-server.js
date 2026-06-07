@@ -161,13 +161,31 @@ const TOOLS = [
       },
       required: ['target', 'task_type', 'title', 'description']
     }
+  },
+  {
+    name: 'get_recent_activity',
+    description: 'Get recent team activity — dispatch events, task completions, Caleb results. Use to check what Sam and Caleb completed since last session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 }
+      }
+    }
   }
 ];
 
 // ── TOOL IMPLEMENTATIONS ──────────────────────────────────────────────────
 async function _toolGetMasterContext() {
   const text = fs.readFileSync(MASTER_CONTEXT_PATH, 'utf8');
-  return { bytes: text.length, content: text };
+  // STEP 3 (dispatch_1780790862462): Nathan session-startup hook — surface the
+  // last 10 dispatch/team events so Nathan sees recent work without a separate call.
+  let recent = '';
+  try {
+    const rows = db.prepare("SELECT timestamp, summary FROM activity_log WHERE type='nathan_dispatch' OR type='survey_response' ORDER BY id DESC LIMIT 10").all();
+    if (rows.length) recent = '\n\n## RECENT TEAM ACTIVITY (last 10 dispatch/team events — auto-appended by get_master_context)\n'
+      + rows.map(r => `- [${r.timestamp}] ${String(r.summary || '').slice(0, 200)}`).join('\n');
+  } catch (_) {}
+  return { bytes: text.length + recent.length, content: text + recent };
 }
 
 async function _toolGetPm2Status() {
@@ -382,6 +400,32 @@ async function _toolDispatchTask(args) {
   };
 }
 
+// ── get_recent_activity — Nathan's queryable team-activity feed ─────────────
+// dispatch_1780790862462 STEP 2. Returns recent dispatch/Caleb/survey events from
+// activity_log so Nathan can see what Sam and Caleb did without the full context.
+async function _toolGetRecentActivity(args) {
+  let limit = (args && Number.isInteger(args.limit)) ? args.limit : 20;
+  limit = Math.max(1, Math.min(limit, 100));
+  const rows = db.prepare(`
+    SELECT timestamp, type, status, summary FROM activity_log
+    WHERE type IN ('nathan_dispatch','survey_response','self_heal','health_check') OR type LIKE '%dispatch%'
+    ORDER BY id DESC LIMIT ?
+  `).all(limit);
+  const events = rows.map(r => {
+    const s = r.summary || '';
+    let title = s, status = r.status || null, target = null;
+    const m = s.match(/Nathan dispatch (?:\S+) (\w+)(?:\s*[:]\s*(.*))?$/);
+    if (m) { status = m[1]; if (m[2]) title = m[2]; }
+    const tm = s.match(/target=(\w+)/); if (tm) target = tm[1];
+    return {
+      timestamp: r.timestamp, event_type: r.type,
+      title: String(title).slice(0, 160), status, target,
+      notes: s.slice(0, 240)
+    };
+  });
+  return { count: events.length, events };
+}
+
 const TOOL_IMPLS = {
   get_master_context:   _toolGetMasterContext,
   get_pm2_status:       _toolGetPm2Status,
@@ -391,7 +435,8 @@ const TOOL_IMPLS = {
   get_morning_scorecard:_toolGetMorningScorecard,
   send_telegram:        _toolSendTelegram,
   append_master_context:_toolAppendMasterContext,
-  dispatch_task:        _toolDispatchTask
+  dispatch_task:        _toolDispatchTask,
+  get_recent_activity:  _toolGetRecentActivity
 };
 
 // ── MCP SERVER FACTORY ────────────────────────────────────────────────────
