@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-06 21:44 CT — [SAMQUEUE] Nathan dispatch → sam: 'Whitelist Tasia on Solomon — receive-only sale notificat <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-07 08:52 CT — [SAMQUEUE] Nathan dispatch → sam: 'Send 4 more contractor research emails' (status: queued, <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-06 21:45 CT] Feature shipped — commit 3d9d6ff: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:30 CT] Feature shipped — commit 50dde9c: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 21:00 CT] Feature shipped — commit e607ac9: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-06 20:30 CT] Feature shipped — commit a52a5bf: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -217,6 +218,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-07 08:52 CT] Nathan dispatch → sam: 'Send 4 more contractor research emails' (status: queued, id: dispatch_1780840372020)
 - [2026-06-06 21:44 CT] Nathan dispatch → sam: 'Whitelist Tasia on Solomon — receive-only sale notifications' (status: queued, id: dispatch_1780800279119)
 - [2026-06-06 21:32 CT] Nathan dispatch → sam: 'Build Tasia sale notification system — all revenue streams' (status: queued, id: dispatch_1780799562798)
 - [2026-06-06 21:24 CT] Nathan dispatch → sam: 'Fix autonomous queue — process dispatch tasks without manual invoke' (status: queued, id: dispatch_1780799046736)
@@ -312,6 +314,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-07 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-06 20:12 CT] TradeQuote survey response #1 — Mike, Castle Rock Construction (2026-06-07): Q1: bathroom remodel, forgot subfloor rot, ate ~$3k. Q2: spreadsheet + gut feel, couple hours per bid at night. Q3: chasing material prices + writing quotes. Q4: estimating paperwork. Q5: tried Joist, didn't stick. Follow-up: "will it handle change orders?" Key insights: hidden structural costs (subfloor rot) = the missed-spec problem confirmed. Estimating is the #1 pain. Joist is the known competitor — failed on stickiness. Change orders = an unprompted feature request, potential add-on module for TradeQuote.
 - [2026-06-06 20:04 CT] Caleb contractor scrape (fix dispatch_1780784314817): 11 NWI sites scraped, 4 emails found - hksremodeling=hksremcompany@gmail.com, nwibuildersinc=office@nwibuildersinc.com, goodwinconstructionnwi=jgoodwinconstruction.llc@gmail.com, lighthouseelectricservice=lighthouseelectric007@gmail.com. Contact forms: prestige-construction-llc, servicedoctor, sub-cooled, naughtonmechanical, q-extra, ampselectric. crownbuilds=none. Castle Rock (219-663-6158) needs manual lookup (no domain).
 - [2026-06-06 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
