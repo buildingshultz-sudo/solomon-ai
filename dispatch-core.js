@@ -146,7 +146,7 @@ function prepareDispatch(input) {
     timestamp_ct: new Date().toISOString(),
     status,
     params,
-    // sam-queue compatibility (get_sam_queue reads .task; Sam watcher reads .handler)
+    // sam-queue compatibility (get_sam_queue reads .task). NOTE: there is NO autonomous "Sam watcher" — that was never built. build/fix dispatches require the Claude Code agent (manual/orchestrated); verify/ping auto-run via parallel_task_manager.processDispatchQueue; caleb tasks route to the relay->worker.
     task: title,
     handler: finalTarget
   };
