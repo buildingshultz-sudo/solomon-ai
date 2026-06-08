@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 15:09 CT — [GENERAL] STANDING RULE — FACT-CHECK EVERY TURN, ALL PERSONNEL (locked 6/8, Jed directive) <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 15:15 CT — [PROJECTS] Feature shipped — commit 2d2cfd1: docs(master-context): Nathan append [GENERAL] <!-- LASTUPDATED -->
 
 ---
 
@@ -83,6 +83,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 15:15 CT] Feature shipped — commit 2d2cfd1: docs(master-context): Nathan append [GENERAL]
 - [2026-06-08 14:45 CT] Feature shipped — commit 5b3eee9: docs(dispatch-core): quarantine phantom "Sam watcher" comment
 - [2026-06-08 14:30 CT] Feature shipped — commit 8c9a351: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-08 14:15 CT] Feature shipped — commit 56c3e2c: Real sam-queue executor (verify/ping) + revert off-peak gate
@@ -404,3 +405,6 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 **Top approved:** campaign_preview (2/2)
 **Top rejected:** campaign_preview (0/2)
 **Threshold adjustments:** none — every template within the [0.40, 0.85] approval band or below 3 samples.
+
+## EXECUTION LEDGER (append-only — one line per lifecycle event)
+<!-- LOG:LEDGER -->
