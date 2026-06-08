@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 07:36 CT — [SAMQUEUE] Nathan dispatch → sam: 'Send Troveo pitch email to sarah@troveo.ai' (status: que <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 12:48 CT — [PROJECTS] TRADEQUOTE voice walkthrough test 6/8 — Jed's shop extension (12x34 two-story, r <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 12:48 CT] TRADEQUOTE voice walkthrough test 6/8 — Jed's shop extension (12x34 two-story, radiant slab, post-frame). 6 questions validated. Key findings: solo 20hrs/week = 6-9mo timeline; Permit Scout flagged 6 Porter County items contractor missed; wood-stove radiant tie-in flagged as highest risk (must be listed for water heating); core insight confirmed: solo contractors undervalue their own time. Quote must function as project management plan. Paydirt validated for phased cash-flow jobs. IronEdit vision: dump D-drive footage → autonomous YouTube pipeline → zero editing hours.
+- [2026-06-08 07:45 CT] Feature shipped — commit d6254b2: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 13:15 CT] Feature shipped — commit d634dc2: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 12:30 CT] Feature shipped — commit 5e6bf7d: docs(master-context): Nathan append [GENERAL]
 - [2026-06-07 11:30 CT] Feature shipped — commit 463f773: docs(master-context): Nathan dispatch [SAMQUEUE]
