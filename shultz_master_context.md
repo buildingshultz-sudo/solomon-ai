@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 13:16 CT — [STACK] Sam correction (confirmed): parallel_task_manager.js is required by bot.js and r <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 13:16 CT — [PROJECTS] IronEdit unlock trigger (locked by Jed): verify DaVinci Resolve FREE version sup <!-- LASTUPDATED -->
 
 ---
 
@@ -82,6 +82,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 13:16 CT] IronEdit unlock trigger (locked by Jed): verify DaVinci Resolve FREE version supports the target workflow bug-free BEFORE purchasing Studio ($295). No cash gate — it is a capability verification gate. Once free version confirms viability, Studio purchase is authorized. IronEdit pricing philosophy: tiered, accessible entry point for individuals scaling up to enterprise/corporate pricing. No comparable product exists in market.
 - [2026-06-08 13:15 CT] Feature shipped — commit f179e31: Queue processor: 45s pacing, off-peak gate, orphaned-running recovery
 - [2026-06-08 13:00 CT] Feature shipped — commit 04a9bc9: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-08 12:48 CT] TRADEQUOTE voice walkthrough test 6/8 — Jed's shop extension (12x34 two-story, radiant slab, post-frame). 6 questions validated. Key findings: solo 20hrs/week = 6-9mo timeline; Permit Scout flagged 6 Porter County items contractor missed; wood-stove radiant tie-in flagged as highest risk (must be listed for water heating); core insight confirmed: solo contractors undervalue their own time. Quote must function as project management plan. Paydirt validated for phased cash-flow jobs. IronEdit vision: dump D-drive footage → autonomous YouTube pipeline → zero editing hours.
