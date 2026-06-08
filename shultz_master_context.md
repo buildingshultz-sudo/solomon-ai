@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 12:48 CT — [PROJECTS] TRADEQUOTE voice walkthrough test 6/8 — Jed's shop extension (12x34 two-story, r <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 13:01 CT — [STACK] OPERATING RULE (Queue Scheduling): Solomon's batch queue processor must only run <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,7 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-08 13:01 CT] OPERATING RULE (Queue Scheduling): Solomon's batch queue processor must only run during off-peak hours — before 7 AM CT or after 6 PM CT. Do not execute batch queue tasks during peak hours (7 AM–6 PM CT) unless a task is manually flagged as urgent/forced. Reason: Anthropic API server-side rate limiting hits consistently during midday peak windows. Applies to Gabriel-triggered batch runs, autonomous scheduler-triggered queue drains, and any multi-task dispatch sequences. Inter-task delay minimum is 45 seconds.
 - [2026-06-05 07:44 CT] FACEBOOK POSTING ALIVE — corrected 6/5: Jed verified directly on Facebook that campaign posts ARE landing on both pages (thread shows Day 6 → Day 2 as most recent). The long-lived Page credentials Jed set a couple days ago are working. Solomon's morning escalation claiming fberrorcode 190 / expired-June-1 is a FALSE NEGATIVE from stale state — its Facebook auth check reports dead while posting actually works. Ground truth (Jed viewing the live FB page) overrides Solomon's report. Sam fix (low priority, posting works): correct Solomon's Facebook auth check to validate the live credential actually in use, not a stale/spare reference, so it stops crying wolf. ALL AGENTS: Facebook distribution is WORKING on both pages.
 - [2026-06-04 16:47 CT] Security action PENDING Jed (6/4): GitHub PAT plaintext in VPS git remote URL — Sam flagged, credential still live in git config. Fix: (1) Sam generates SSH keypair on VPS, Jed adds public key at github.com/settings/keys, Sam switches remote to git@github.com permanently. (2) Rotate Anthropic key at console.anthropic.com — Sam updates .env on VPS, new value typed directly into Sam terminal only, never through chat or Telegram. Both blocked on Jed's next PC session.
 - [2026-06-04 12:30 CT] Relay runs non-elevated (medium integrity) after one-time admin restart on 6/4 — final admin restart for this relay stack. Future relay restarts go via Sam Bash, no Jed paste needed. Screen-access grant for Claude desktop app now active (full tier, survives) — Caleb can screenshot + click visible UI elements (Chrome, Settings, file dialogs, app windows) without re-requesting approval each session.
@@ -80,6 +81,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 13:00 CT] Feature shipped — commit 04a9bc9: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-08 12:48 CT] TRADEQUOTE voice walkthrough test 6/8 — Jed's shop extension (12x34 two-story, radiant slab, post-frame). 6 questions validated. Key findings: solo 20hrs/week = 6-9mo timeline; Permit Scout flagged 6 Porter County items contractor missed; wood-stove radiant tie-in flagged as highest risk (must be listed for water heating); core insight confirmed: solo contractors undervalue their own time. Quote must function as project management plan. Paydirt validated for phased cash-flow jobs. IronEdit vision: dump D-drive footage → autonomous YouTube pipeline → zero editing hours.
 - [2026-06-08 07:45 CT] Feature shipped — commit d6254b2: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 13:15 CT] Feature shipped — commit d634dc2: docs(master-context): Nathan dispatch [SAMQUEUE]
