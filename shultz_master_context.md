@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 13:29 CT — [PROJECTS] IronEdit pricing — supporting tactics (locked 6/8): (1) Launch-only capped found <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 13:31 CT — [REVENUE] Affiliate links VERIFIED (Jed visually checked 6/7): Amazon Associates (store ID <!-- LASTUPDATED -->
 
 ---
 
@@ -82,6 +82,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 13:30 CT] Feature shipped — commit 816f280: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-08 13:29 CT] IronEdit pricing — supporting tactics (locked 6/8): (1) Launch-only capped founder/lifetime deal $199-399, first 60-90 days then sunset — cash injection + evangelists, NOT the standing price; cap quantity, price at ≥2-3yrs of subscription value to avoid a zero-margin compute-draining cohort. (2) "Pause subscription" button to retain seasonal users — critical for wedding/event videographers, the segment most resistant to recurring fees. (3) Free-forever tier + 7-day full-feature Pro trial (no card) as dual top-of-funnel. (4) Flat tiers w/ generous monthly minutes allowance — NOT credit/usage-based (credit pricing drives churn). (5) Differentiator that justifies the premium: nobody bundles AI rough-cut + full YouTube SEO pipeline + auto-post + affiliate injection end-to-end. Targets ALL video processors: YouTubers, wedding/event, commercial/ad, agencies, corporate. Pricing is ready now; build order still holds — DaVinci free viability check → Studio → ship. Do NOT build ahead of order.
 - [2026-06-08 13:29 CT] IronEdit PRICING LOCKED (market-researched 6/8): Subscription model, freemium-led — NOT one-time purchase (one-time only fits local desktop editors w/ zero per-export cost; IronEdit's AI rough-cut + SEO pipeline + auto-post + affiliate injection burn recurring compute, so recurring price is mandatory for a bootstrapped vendor). Tier ladder: Free forever (watermarked, limited minutes, no auto-post — viral top-of-funnel) → Creator $19/mo → Pro $49/mo → Agency/Studio $149/mo per seat → Enterprise custom (~$8-15k/yr). Default ALL paid tiers to annual billing ("2 months free", ~17-20% off) — annual ~doubles customer lifespan and the upfront cash funds the build w/o dilution. Prices anchored to market: CapCut $7.99, Opus Clip $15-29, Descript $24-65, Munch $49-220, Adobe $22.99.
 - [2026-06-08 13:16 CT] KDP BLOCKER: cover-upload selector in caleb-playwright.js fails with "no file input found" — the DOM selector does not match KDP's actual file input element. This has failed on multiple attempts (nav tests + publish attempt dispatch_1780855684544). Real-DOM selector tuning is required before ANY KDP upload or publish attempt can succeed. Needs focused Sam fix-it task.
@@ -207,6 +208,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-08 13:31 CT] Affiliate links VERIFIED (Jed visually checked 6/7): Amazon Associates (store ID buildingshu0e-20), Acme Tools, and Spreadshop merch links are all LIVE and correct in the YouTube main upload default template — applied to every LONGFORM video. NOT on Shorts. Status: good to go, no action needed on longform. OPEN REVENUE GAP: channel is 96% Shorts, so the bulk of views land on videos with no affiliate/monetization in the description. Future task — add a default Shorts description block (short Amazon link or link-in-bio) to capture Shorts traffic.
 - [2026-06-07 09:06 CT] Amazon Associates activated (6/7): Amazon store ID buildingshu0e-20 added to top 5 YouTube video descriptions manually by Jed. 230k+ combined views now monetized. First zero-liability revenue stream fully live. Affiliate commissions earning on all future clicks from those videos.
 - [2026-06-06 21:15 CT] Revenue/billing email from Stripe: "Unrecognized device signed in to your Stripe account"
 - [2026-06-06 21:15 CT] Revenue/billing email from Google: "You shared some Google Account data with Stripe"
