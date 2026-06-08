@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 17:46 CT — [SAMQUEUE] QUEUE TRIAGE (6/8, Jed-approved): KILL ~12 dead/superseded — 9 legacy June1-4 ge <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 18:04 CT — [PROJECTS] IMMINAV OUTREACH (6/8) — 5 drafts found sitting UNSENT in Gmail (June 1 + June 7 <!-- LASTUPDATED -->
 
 ---
 
@@ -83,6 +83,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 18:04 CT] IMMINAV OUTREACH (6/8) — 5 drafts found sitting UNSENT in Gmail (June 1 + June 7), never sent (same illusion pattern). 4 CLEAN + on-scope, approved to send: Amani Family Services, Latin American Chamber of Commerce/St Joseph County (laccsjc), La Casa de Amistad, ISBDC Northwest — all strictly business compliance (LLC/EIN/licenses/permits/tax), research-framed, free. 1 BLOCKED + rewritten: USHCC draft (info@ushcc.com, June 1) VIOLATED the ImmiNav scope guardrail — claimed ImmiNav answers "visa" questions and framed it as replacing "legal fees" (= immigration status / unauthorized practice of law, the one uninsurable risk) AND linked a raw IP (167.99.237.26:4002, reads as phishing to a national org). Held; scope-safe rewrite created as draft r-2160389988542857281; OLD bad draft must be deleted. RULE REINFORCED: every ImmiNav-facing message MUST be read against the no-legal-advice / no-immigration-status guardrail before sending. Caught by fact-check-every-turn.
+- [2026-06-08 18:00 CT] Feature shipped — commit bc7f4d0: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-08 15:45 CT] Feature shipped — commit f732aa4: feat(ledger): add EXECUTION LEDGER section to master context
 - [2026-06-08 15:15 CT] Feature shipped — commit 2d2cfd1: docs(master-context): Nathan append [GENERAL]
 - [2026-06-08 14:45 CT] Feature shipped — commit 5b3eee9: docs(dispatch-core): quarantine phantom "Sam watcher" comment
