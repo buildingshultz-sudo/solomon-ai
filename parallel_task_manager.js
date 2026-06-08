@@ -11,6 +11,16 @@ const axios = require('axios');
 const MAX_CONCURRENT_TASKS = 5;
 let runningTasks = 0;
 
+// Pacing + off-peak scheduling (throttle-aware): ≥45s between task starts, and
+// the queue only auto-runs off-peak (before 7 AM or after 6 PM CT) unless a task
+// is urgent (urgent:true in tool_args, or priority 0) or it's a manualForce run.
+const INTER_TASK_DELAY_MS = 45000;
+function isOffPeakCT() {
+  let h = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', hour12: false }).format(new Date()), 10);
+  h = ((h % 24) + 24) % 24;
+  return h < 7 || h >= 18; // before 7 AM CT, or 6 PM CT and later
+}
+
 // ── TELEGRAM NOTIFICATION (direct API, no bot instance needed) ───────────
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const OWNER_ID = process.env.OWNER_CHAT_ID;
@@ -29,7 +39,7 @@ async function notifyOwner(message) {
 }
 
 // ── TASK QUEUE PROCESSOR ─────────────────────────────────────────────────
-async function processTaskQueue() {
+async function processTaskQueue(opts = {}) {
   if (runningTasks >= MAX_CONCURRENT_TASKS) return;
 
   const task = db.prepare(
@@ -37,6 +47,15 @@ async function processTaskQueue() {
   ).get();
 
   if (!task) return;
+
+  // OFF-PEAK GATE: during peak hours (7 AM–6 PM CT) the queue only auto-runs
+  // urgent tasks (urgent:true in tool_args, or priority 0) or a manualForce run.
+  let _urgent = false;
+  try { _urgent = JSON.parse(task.tool_args || '{}').urgent === true; } catch (_) {}
+  if (task.priority === 0) _urgent = true;
+  if (!isOffPeakCT() && !_urgent && !opts.manualForce) {
+    return; // skip during peak; an off-peak tick (or urgent/force) picks it up
+  }
 
   // Mark as running
   db.prepare(`UPDATE parallel_tasks SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ?`).run(task.id);
@@ -61,8 +80,8 @@ async function processTaskQueue() {
     notifyOwner(`⚠️ <b>Parallel Task Failed</b>\nTask: ${task.task_name}\nTool: ${task.tool_name}\nError: ${error.message.slice(0, 200)}`);
   } finally {
     runningTasks--;
-    // Immediately check for more tasks
-    processTaskQueue();
+    // Pace consecutive tasks (≥45s apart) so we never hammer the Anthropic API.
+    setTimeout(() => processTaskQueue(), INTER_TASK_DELAY_MS);
   }
 }
 
@@ -94,8 +113,17 @@ async function pollBatchJobs() {
   }
 }
 
+// ── STARTUP RECOVERY ─────────────────────────────────────────────────────
+// Bug fix: tasks left in 'running' when the process crashed/restarted were never
+// marked done/failed (the queue query only selects 'queued'), so they stuck in
+// 'running' forever. On boot, fail any orphaned 'running' task so it's resolved.
+try {
+  const orphaned = db.prepare(`UPDATE parallel_tasks SET status='failed', error_message='interrupted by process restart', completed_at=CURRENT_TIMESTAMP WHERE status='running'`).run();
+  if (orphaned.changes) console.log(`[PARALLEL] startup recovery: reset ${orphaned.changes} orphaned running task(s) -> failed`);
+} catch (e) { console.error('[PARALLEL] startup recovery failed:', e.message); }
+
 // ── START THE PROCESSING LOOP ────────────────────────────────────────────
-const POLL_INTERVAL_MS = 5000;
+const POLL_INTERVAL_MS = 45000; // throttle-aware: ≥45s between auto-poll ticks
 const BATCH_POLL_INTERVAL_MS = 300000; // 5 minutes
 const intervalId = setInterval(processTaskQueue, POLL_INTERVAL_MS);
 const batchIntervalId = setInterval(pollBatchJobs, BATCH_POLL_INTERVAL_MS);
@@ -137,4 +165,7 @@ function cancelTask(taskId) {
   return { ok: true, message: `Task #${taskId} cancelled.` };
 }
 
-module.exports = { enqueueTask, getTaskStatus, getAllTasks, cancelTask };
+// manualForce run (bypasses the off-peak gate) — for an on-demand drain.
+function runQueueNow() { return processTaskQueue({ manualForce: true }); }
+
+module.exports = { enqueueTask, getTaskStatus, getAllTasks, cancelTask, runQueueNow, isOffPeakCT };
