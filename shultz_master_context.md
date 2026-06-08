@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 14:18 CT — [STACK] DISPATCH CHAIN — ARCHITECTURE TRUTH (6/8 audit, proven): There was NEVER an auto <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 14:19 CT — [SAMQUEUE] GUMROAD STILL BROKEN + caleb-worker fragility (6/8): Urgent Gumroad 404 fix (dis <!-- LASTUPDATED -->
 
 ---
 
@@ -245,6 +245,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-08 14:19 CT] GUMROAD STILL BROKEN + caleb-worker fragility (6/8): Urgent Gumroad 404 fix (dispatch_1780944446155) ran ONLY because Sam restarted the dead caleb-worker (pid 23060) — but output was a generic scrape ("0 emails"), NOT a real fix. Browser handler CANNOT "verify live handle + relink." Gumroad links STILL DEAD; campaign still posting 404s. Needs a real browser-handler build (Sam) before fix can happen. caleb-worker PERSISTENCE FRAGILE — runs once on logon trigger, no watchdog, dies silently and stalls Caleb dispatches (this is how Gumroad got stuck). FIX PRIORITY (Nathan rec, Jed confirms): (1) caleb-worker persistence — fold into always-on relay or add watchdog; (2) real Gumroad relink browser handler (the revenue blocker); (3) triage the 20 never-executed dispatches w/ Jed (keep/kill — orphans likely dead weight; re-verify vital: Stripe audit, Tasia notifications, Sheets lead tracker, survey-to-Sheets).
 - [2026-06-08 13:47 CT] Nathan dispatch → caleb: 'Fix Gumroad 404 — verify live URLs + relink campaign' (status: dispatched_to_caleb, id: dispatch_1780944446155)
 - [2026-06-08 07:36 CT] Nathan dispatch → sam: 'Send Troveo pitch email to sarah@troveo.ai' (status: queued, id: dispatch_1780922168875)
 - [2026-06-08 07:35 CT] Nathan dispatch → sam: 'Master cleanup — all queued tasks from June 6-7' (status: queued, id: dispatch_1780922131620)
