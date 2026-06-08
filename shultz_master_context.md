@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 15:15 CT — [PROJECTS] Feature shipped — commit 2d2cfd1: docs(master-context): Nathan append [GENERAL] <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 17:46 CT — [REVENUE] CORRECTION — contractor/TradeQuote outreach almost certainly NEVER SENT (6/8): t <!-- LASTUPDATED -->
 
 ---
 
@@ -83,6 +83,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 15:45 CT] Feature shipped — commit f732aa4: feat(ledger): add EXECUTION LEDGER section to master context
 - [2026-06-08 15:15 CT] Feature shipped — commit 2d2cfd1: docs(master-context): Nathan append [GENERAL]
 - [2026-06-08 14:45 CT] Feature shipped — commit 5b3eee9: docs(dispatch-core): quarantine phantom "Sam watcher" comment
 - [2026-06-08 14:30 CT] Feature shipped — commit 8c9a351: docs(master-context): Nathan append [SAMQUEUE]
@@ -215,6 +216,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-08 17:46 CT] CORRECTION — contractor/TradeQuote outreach almost certainly NEVER SENT (6/8): the "send 5 / send 8 / send 4 more" contractor research emails + scrape re-runs are STILL pending files in sam-queue (1780794160200, 1780797136084, 1780840372020, etc.). Per the no-executor architecture truth, pending = never consumed = never sent. The belief "23 contractor outreach touchpoints sent" is almost certainly the same illusion as the Troveo pitch (Gabriel confirmed unsent, zero send_email rows). DO NOT trust "23 sent." This is a FIRST send, not a re-send. Before/after sending, verify against the Gmail Sent folder and require send_email rows in activity_log — send only through a live verified Solomon/Caleb session, confirm each delivery, never assume.
 - [2026-06-08 14:10 CT] Revenue/billing email from Google One: "Changes to your Google One Premium subscription"
 - [2026-06-08 13:46 CT] GUMROAD ZERO-SALES ROOT CAUSE FOUND (6/8 research): ALL Gumroad URLs return HTTP 404 — storefront shultzbuilds.gumroad.com, both products (/l/ihjobd book, /l/ygmuv Blueprint), AND older buildingshultz.gumroad.com. No live purchasable page exists; nothing indexed. Zero working destinations = zero possible sales. Every campaign post is driving clicks to a dead "Page not found" — actively burning audience trust. URGENT. Likely cause: products unpublished/deleted, subdomain never claimed/renamed, or links point to a defunct handle (two conflicting handles on record). FIX SEQUENCE — (1) Caleb verifies real live storefront handle, confirms both products Published, grabs exact Share URLs, mobile-tests, updates catalog + all posted links; THEN (2) funnel optimization (lead magnet + email capture, reviews via free copies, problem-first page rewrite, guest checkout on, link in FB first comment, UTM tracking). Do NOT do step 2 before step 1.
 - [2026-06-08 13:31 CT] Affiliate links VERIFIED (Jed visually checked 6/7): Amazon Associates (store ID buildingshu0e-20), Acme Tools, and Spreadshop merch links are all LIVE and correct in the YouTube main upload default template — applied to every LONGFORM video. NOT on Shorts. Status: good to go, no action needed on longform. OPEN REVENUE GAP: channel is 96% Shorts, so the bulk of views land on videos with no affiliate/monetization in the description. Future task — add a default Shorts description block (short Amazon link or link-in-bio) to capture Shorts traffic.
