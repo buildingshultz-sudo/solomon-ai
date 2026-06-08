@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-07 13:08 CT — [SAMQUEUE] Nathan dispatch → caleb: 'KDP Publish authorized — paperback + Kindle for Motiva <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 07:35 CT — [SAMQUEUE] Nathan dispatch → sam: 'Master cleanup — all queued tasks from June 6-7' (status <!-- LASTUPDATED -->
 
 ---
 
@@ -80,6 +80,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-07 13:15 CT] Feature shipped — commit d634dc2: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 12:30 CT] Feature shipped — commit 5e6bf7d: docs(master-context): Nathan append [GENERAL]
 - [2026-06-07 11:30 CT] Feature shipped — commit 463f773: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-07 11:15 CT] Feature shipped — commit c278d79: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -226,6 +227,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-08 07:35 CT] Nathan dispatch → sam: 'Master cleanup — all queued tasks from June 6-7' (status: queued, id: dispatch_1780922131620)
 - [2026-06-07 13:08 CT] Nathan dispatch → caleb: 'KDP Publish authorized — paperback + Kindle for Motivation for Tough Guys' (status: dispatched_to_caleb, id: dispatch_1780855684544)
 - [2026-06-07 11:25 CT] Nathan dispatch → caleb: 'Export all 580 Manus files before June 19 expiry' (status: dispatched_to_caleb, id: dispatch_1780849550866)
 - [2026-06-07 11:16 CT] Nathan dispatch → sam: 'Check if Manus app data survived uninstall' (status: queued, id: dispatch_1780848967334)
@@ -333,6 +335,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-08 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-07 12:19 CT] MOTIVATION FOR TOUGH GUYS assets confirmed in Google Drive (6/7): Journal V1 (chapter-based, quote+lined format), Journal V2 (52-week format), KINDLE EPUB (use for KDP upload — fixes fixed-format error). Products: main book paperback+hardcover $24.99+Kindle, Journal hardcover $29.99, Sequel concept "Motivation for Tougher Guys" exists in Manus. BRAND: Iron sharpens iron (Proverbs 27:17) is Jed's foundational creed — painted on his shop wall. Core to Building Shultz identity.
 - [2026-06-07 10:31 CT] TradeQuote survey #2 — AJ (Jed's brother-in-law, GC, 6/7): Q1: eat it or talk to customer — hidden conditions always put you upside-down. Q2: material list + photos for reference → price out → figure labor. Q3: all business side — permits, writing legit quotes. Q4: wants to show up and work without office headache. Q5: Menards app for quick material cost; Grok to talk through on-site problems. Insights: photo workflow natural — TradeQuote should integrate; "legit-looking quotes" = professionalism gap; Menards app = estimating workaround not a real tool; AI already in workflow via Grok unstructured.
 - [2026-06-07 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -368,3 +371,11 @@
 
 ---
 _End of master context. Source file: /root/solomon-v4/shultz_master_context.md — never delete or compress._
+
+## AUTONOMY_LEARNINGS
+<!-- Solomon writes here weekly via generateWeeklyPatternDigest. Append-only. -->
+
+### 2026-06-08 — Weekly Pattern Digest (7-day window)
+**Top approved:** campaign_preview (2/2)
+**Top rejected:** campaign_preview (0/2)
+**Threshold adjustments:** none — every template within the [0.40, 0.85] approval band or below 3 samples.
