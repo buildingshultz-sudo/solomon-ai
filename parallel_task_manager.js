@@ -11,15 +11,10 @@ const axios = require('axios');
 const MAX_CONCURRENT_TASKS = 5;
 let runningTasks = 0;
 
-// Pacing + off-peak scheduling (throttle-aware): ≥45s between task starts, and
-// the queue only auto-runs off-peak (before 7 AM or after 6 PM CT) unless a task
-// is urgent (urgent:true in tool_args, or priority 0) or it's a manualForce run.
+// Throttle-aware pacing: ≥45s between task starts. (Off-peak time-window gate
+// was reverted — it risked silently skipping every tick during business hours
+// and didn't address the real dispatch-execution gap. 45s pacing was the fix.)
 const INTER_TASK_DELAY_MS = 45000;
-function isOffPeakCT() {
-  let h = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: '2-digit', hour12: false }).format(new Date()), 10);
-  h = ((h % 24) + 24) % 24;
-  return h < 7 || h >= 18; // before 7 AM CT, or 6 PM CT and later
-}
 
 // ── TELEGRAM NOTIFICATION (direct API, no bot instance needed) ───────────
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -39,7 +34,7 @@ async function notifyOwner(message) {
 }
 
 // ── TASK QUEUE PROCESSOR ─────────────────────────────────────────────────
-async function processTaskQueue(opts = {}) {
+async function processTaskQueue() {
   if (runningTasks >= MAX_CONCURRENT_TASKS) return;
 
   const task = db.prepare(
@@ -47,15 +42,6 @@ async function processTaskQueue(opts = {}) {
   ).get();
 
   if (!task) return;
-
-  // OFF-PEAK GATE: during peak hours (7 AM–6 PM CT) the queue only auto-runs
-  // urgent tasks (urgent:true in tool_args, or priority 0) or a manualForce run.
-  let _urgent = false;
-  try { _urgent = JSON.parse(task.tool_args || '{}').urgent === true; } catch (_) {}
-  if (task.priority === 0) _urgent = true;
-  if (!isOffPeakCT() && !_urgent && !opts.manualForce) {
-    return; // skip during peak; an off-peak tick (or urgent/force) picks it up
-  }
 
   // Mark as running
   db.prepare(`UPDATE parallel_tasks SET status = 'running', started_at = CURRENT_TIMESTAMP WHERE id = ?`).run(task.id);
@@ -122,12 +108,49 @@ try {
   if (orphaned.changes) console.log(`[PARALLEL] startup recovery: reset ${orphaned.changes} orphaned running task(s) -> failed`);
 } catch (e) { console.error('[PARALLEL] startup recovery failed:', e.message); }
 
+// ── SAM-QUEUE DISPATCH EXECUTOR (verify/ping ONLY) ───────────────────────
+// Audit finding: nothing consumed sam-queue dispatch_*.json — the "Sam watcher"
+// referenced in dispatch-core was phantom and never built. This is the FIRST real
+// autonomous executor for sam-queue, DELIBERATELY scoped to harmless verify/ping
+// tasks so it cannot bulk-fire the real build/fix/browser backlog. It picks up a
+// queued verify/ping dispatch, runs a system probe, marks it done, logs to
+// activity_log — no manual invoke. (build/fix/deploy still need the Claude Code
+// agent; caleb browser tasks still route via the relay->worker path.)
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const SAM_QUEUE_DIR = '/root/solomon-v4/sam-queue';
+const AUTO_EXEC_TYPES = new Set(['verify', 'ping']);
+function processDispatchQueue() {
+  let files = [];
+  try { files = fs.readdirSync(SAM_QUEUE_DIR).filter(f => /^dispatch_.*\.json$/.test(f)); } catch (_) { return; }
+  for (const f of files) {
+    const fp = path.join(SAM_QUEUE_DIR, f);
+    let j; try { j = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { continue; }
+    if (j.status !== 'queued') continue;
+    const tt = String(j.task_type || '').toLowerCase();
+    // SAFETY (hardened after a real-backlog false-complete): a dispatch must be a
+    // harmless type AND explicitly flagged params.autoexec===true. Real tasks (even
+    // task_type 'verify' like the Manus checks) lack this flag and are NEVER touched.
+    if (!AUTO_EXEC_TYPES.has(tt)) continue;
+    if (!(j.params && j.params.autoexec === true)) continue;
+    const summary = `verify OK on ${os.hostname()} (${os.platform()}); free ${Math.round(os.freemem() / 1048576)}MB; uptime ${Math.round(os.uptime())}s`;
+    j.status = 'done'; j.completed_at = new Date().toISOString(); j.result_summary = summary; j.executed_by = 'dispatch_executor';
+    try { fs.writeFileSync(fp, JSON.stringify(j, null, 2)); } catch (e) { console.error('[DISPATCH-EXEC] write failed', f, e.message); continue; }
+    try { db.prepare('INSERT INTO activity_log (type, status, summary) VALUES (?,?,?)').run('dispatch_executed', 'ok', `${j.id || f}: ${tt} -> done | ${summary}`); } catch (_) {}
+    console.log(`[DISPATCH-EXEC] executed ${tt} dispatch ${j.id || f} -> done`);
+    notifyOwner(`✅ <b>Dispatch executed</b> (autonomous)\n${j.title || j.id}\n${summary}`);
+  }
+}
+
 // ── START THE PROCESSING LOOP ────────────────────────────────────────────
 const POLL_INTERVAL_MS = 45000; // throttle-aware: ≥45s between auto-poll ticks
 const BATCH_POLL_INTERVAL_MS = 300000; // 5 minutes
 const intervalId = setInterval(processTaskQueue, POLL_INTERVAL_MS);
 const batchIntervalId = setInterval(pollBatchJobs, BATCH_POLL_INTERVAL_MS);
-console.log(`[PARALLEL] Task manager started. Polling every ${POLL_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_TASKS} concurrent.`);
+const dispatchIntervalId = setInterval(processDispatchQueue, POLL_INTERVAL_MS);
+processDispatchQueue(); // immediate first pass so a freshly-queued verify/ping runs without waiting
+console.log(`[PARALLEL] Task manager started. Polling every ${POLL_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_TASKS} concurrent. Dispatch executor (verify/ping) active.`);
 console.log(`[BATCH] Polling pending batch jobs every ${BATCH_POLL_INTERVAL_MS / 60000}m.`);
 
 // ── EXPORTED FUNCTIONS ───────────────────────────────────────────────────
@@ -165,7 +188,4 @@ function cancelTask(taskId) {
   return { ok: true, message: `Task #${taskId} cancelled.` };
 }
 
-// manualForce run (bypasses the off-peak gate) — for an on-demand drain.
-function runQueueNow() { return processTaskQueue({ manualForce: true }); }
-
-module.exports = { enqueueTask, getTaskStatus, getAllTasks, cancelTask, runQueueNow, isOffPeakCT };
+module.exports = { enqueueTask, getTaskStatus, getAllTasks, cancelTask, processDispatchQueue };
