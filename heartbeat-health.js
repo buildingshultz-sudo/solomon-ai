@@ -25,6 +25,18 @@ const TelegramBot = require('node-telegram-bot-api');
 
 const { db, mem, budget } = require('./memory');
 const { EXECUTE_THRESHOLD, CONSULT_THRESHOLD } = require('./dispatch');
+const fs = require('fs');
+const path = require('path');
+const SAM_QUEUE_DIR = '/root/solomon-v4/sam-queue';
+
+// In-memory alert dedup (resets on restart) so a sustained outage doesn't spam.
+const _alertDedup = new Map();
+function _shouldAlert(key, minMs) {
+  const last = _alertDedup.get(key) || 0;
+  if (Date.now() - last < minMs) return false;
+  _alertDedup.set(key, Date.now());
+  return true;
+}
 let logActivity;
 try { logActivity = require('./activity-logger').logActivity; } catch (_) {}
 // Fallback writer if activity-logger doesn't export logActivity — uses the
@@ -157,6 +169,15 @@ async function checkRelay(findings, surfaced) {
     if (s.status !== 200) { surfaced.relay = `relay /status → ${s.status}`; return; } // reachable-but-bad: WARN only
     version = (s.data && s.data.relay_version) || 'unknown';
     surfaced.relay = `relay ${version} reachable`;
+    // PART 2: caleb-worker liveness via the relay's heartbeat field.
+    const cw = (s.data && s.data.caleb_worker) || null;
+    surfaced.caleb_worker = cw ? `alive=${cw.alive} hb=${cw.heartbeat_age_s}s pid=${cw.child_pid}` : 'field absent';
+    if (cw && cw.alive === false && _shouldAlert('caleb_worker_dead', 30 * 60000)) {
+      findings.push(`caleb-worker DOWN (heartbeat ${cw.heartbeat_age_s}s stale)`);
+      await tgEscalate('Caleb worker DOWN',
+        `caleb-worker heartbeat is stale (${cw.heartbeat_age_s}s old, >120s threshold). Caleb dispatches will stall.`,
+        `The relay supervisor should auto-respawn it within seconds. If still down, restart the PC relay.`);
+    }
   } catch (e) {
     // Unreachable: could be PC offline / network. WARN-level, not an escalation.
     surfaced.relay = `relay unreachable (${e.code || e.message})`;
@@ -223,6 +244,35 @@ function checkBudget(findings) {
   // else: silent (healthy headroom).
 }
 
+// ── CHECK: dispatch-chain health (PART 2 — no transitive trust) ──────────────
+// Asserts ground truth on the dispatch queue: (a) nothing stuck in 'queued' past
+// 30 min, (b) every 'done' dispatch is backed by an activity_log artifact — a
+// 'done' with NO corroborating log row is CLAIMED-UNVERIFIED, never trusted.
+function checkDispatchHealth(findings, surfaced) {
+  let files = [];
+  try { files = fs.readdirSync(SAM_QUEUE_DIR).filter(f => /^dispatch_.*\.json$/.test(f)); } catch (_) { return; }
+  const now = Date.now();
+  const stuck = [], unverified = [];
+  for (const f of files) {
+    let j; try { j = JSON.parse(fs.readFileSync(path.join(SAM_QUEUE_DIR, f), 'utf8')); } catch (_) { continue; }
+    const id = j.id || f;
+    const ageMin = j.timestamp_ct ? (now - new Date(j.timestamp_ct).getTime()) / 60000 : 0;
+    if (j.status === 'queued' && ageMin > 30) stuck.push(`${id}(${Math.round(ageMin)}m)`);
+    if (j.status === 'done') {
+      let hasArtifact = false;
+      try { hasArtifact = !!db.prepare('SELECT 1 FROM activity_log WHERE summary LIKE ? LIMIT 1').get('%' + id + '%'); } catch (_) {}
+      if (!hasArtifact) unverified.push(id);
+    }
+  }
+  surfaced.dispatch = `stuck>30m:${stuck.length} done-unverified:${unverified.length}`;
+  if (stuck.length && _shouldAlert('stuck_queued', 30 * 60000)) {
+    findings.push(`${stuck.length} dispatch(es) stuck in queued >30m: ${stuck.slice(0, 5).join(', ')}`);
+  }
+  if (unverified.length && _shouldAlert('claimed_unverified', 60 * 60000)) {
+    findings.push(`${unverified.length} dispatch(es) DONE with NO activity_log artifact → claimed-unverified: ${unverified.slice(0, 5).join(', ')}`);
+  }
+}
+
 // ── ORCHESTRATION ───────────────────────────────────────────────────────────
 async function runHealthChecks() {
   const findings = [];   // anything not-healthy (drives exception-only alert)
@@ -235,6 +285,7 @@ async function runHealthChecks() {
     await checkRelay(findings, surfaced);
     await checkCampaign(findings);
     checkBudget(findings);
+    checkDispatchHealth(findings, surfaced);
   } catch (e) {
     findings.push('health-check crashed: ' + e.message);
   }

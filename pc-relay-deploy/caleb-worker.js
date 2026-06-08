@@ -126,5 +126,14 @@ async function tick() {
 }
 tick();
 setInterval(tick, POLL_MS);
+
+// ── HEARTBEAT ──────────────────────────────────────────────────────────────
+// Write epoch-ms to caleb-worker.heartbeat every 30s. The relay reads this for
+// /status.caleb_worker.alive; solomon-health (VPS) probes it and alerts if stale.
+const HEARTBEAT_PATH = path.join(__dirname, 'caleb-worker.heartbeat');
+function writeHeartbeat() { try { fs.writeFileSync(HEARTBEAT_PATH, String(Date.now())); } catch (_) {} }
+writeHeartbeat();
+setInterval(writeHeartbeat, 30000);
+
 process.on('SIGINT', () => { logLine('SIGINT — exiting'); process.exit(0); });
 process.on('SIGTERM', () => { logLine('SIGTERM — exiting'); process.exit(0); });
