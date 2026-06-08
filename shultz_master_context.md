@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 13:16 CT — [PROJECTS] KDP BLOCKER: cover-upload selector in caleb-playwright.js fails with "no file in <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 13:29 CT — [PROJECTS] IronEdit PRICING LOCKED (market-researched 6/8): Subscription model, freemium-le <!-- LASTUPDATED -->
 
 ---
 
@@ -82,6 +82,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 13:29 CT] IronEdit PRICING LOCKED (market-researched 6/8): Subscription model, freemium-led — NOT one-time purchase (one-time only fits local desktop editors w/ zero per-export cost; IronEdit's AI rough-cut + SEO pipeline + auto-post + affiliate injection burn recurring compute, so recurring price is mandatory for a bootstrapped vendor). Tier ladder: Free forever (watermarked, limited minutes, no auto-post — viral top-of-funnel) → Creator $19/mo → Pro $49/mo → Agency/Studio $149/mo per seat → Enterprise custom (~$8-15k/yr). Default ALL paid tiers to annual billing ("2 months free", ~17-20% off) — annual ~doubles customer lifespan and the upfront cash funds the build w/o dilution. Prices anchored to market: CapCut $7.99, Opus Clip $15-29, Descript $24-65, Munch $49-220, Adobe $22.99.
 - [2026-06-08 13:16 CT] KDP BLOCKER: cover-upload selector in caleb-playwright.js fails with "no file input found" — the DOM selector does not match KDP's actual file input element. This has failed on multiple attempts (nav tests + publish attempt dispatch_1780855684544). Real-DOM selector tuning is required before ANY KDP upload or publish attempt can succeed. Needs focused Sam fix-it task.
 - [2026-06-08 13:16 CT] IronEdit unlock trigger (locked by Jed): verify DaVinci Resolve FREE version supports the target workflow bug-free BEFORE purchasing Studio ($295). No cash gate — it is a capability verification gate. Once free version confirms viability, Studio purchase is authorized. IronEdit pricing philosophy: tiered, accessible entry point for individuals scaling up to enterprise/corporate pricing. No comparable product exists in market.
 - [2026-06-08 13:15 CT] Feature shipped — commit f179e31: Queue processor: 45s pacing, off-peak gate, orphaned-running recovery
