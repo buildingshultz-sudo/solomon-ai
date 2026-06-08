@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 18:10 CT — [STACK] FOUNDATION REBUILD SHIPPED (6/8, 5 parts, tests PASS). execution-ledger.js: sing <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 18:10 CT — [GENERAL] JED-ONLY PENDING — two elevated PowerShell commands to run at the PC (admin) to  <!-- LASTUPDATED -->
 
 ---
 
@@ -219,6 +219,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-08 18:10 CT] Revenue/billing email from Cloudflare: "Your additional plan addons for buildingshultz.com subscription has been canceled"
 - [2026-06-08 17:46 CT] CORRECTION — contractor/TradeQuote outreach almost certainly NEVER SENT (6/8): the "send 5 / send 8 / send 4 more" contractor research emails + scrape re-runs are STILL pending files in sam-queue (1780794160200, 1780797136084, 1780840372020, etc.). Per the no-executor architecture truth, pending = never consumed = never sent. The belief "23 contractor outreach touchpoints sent" is almost certainly the same illusion as the Troveo pitch (Gabriel confirmed unsent, zero send_email rows). DO NOT trust "23 sent." This is a FIRST send, not a re-send. Before/after sending, verify against the Gmail Sent folder and require send_email rows in activity_log — send only through a live verified Solomon/Caleb session, confirm each delivery, never assume.
 - [2026-06-08 14:10 CT] Revenue/billing email from Google One: "Changes to your Google One Premium subscription"
 - [2026-06-08 13:46 CT] GUMROAD ZERO-SALES ROOT CAUSE FOUND (6/8 research): ALL Gumroad URLs return HTTP 404 — storefront shultzbuilds.gumroad.com, both products (/l/ihjobd book, /l/ygmuv Blueprint), AND older buildingshultz.gumroad.com. No live purchasable page exists; nothing indexed. Zero working destinations = zero possible sales. Every campaign post is driving clicks to a dead "Page not found" — actively burning audience trust. URGENT. Likely cause: products unpublished/deleted, subdomain never claimed/renamed, or links point to a defunct handle (two conflicting handles on record). FIX SEQUENCE — (1) Caleb verifies real live storefront handle, confirms both products Published, grabs exact Share URLs, mobile-tests, updates catalog + all posted links; THEN (2) funnel optimization (lead magnet + email capture, reviews via free copies, problem-first page rewrite, guest checkout on, link in FB first comment, UTM tracking). Do NOT do step 2 before step 1.
@@ -366,6 +367,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-08 18:10 CT] JED-ONLY PENDING — two elevated PowerShell commands to run at the PC (admin) to kill legacy logon tasks for good and remove the duplicate-worker risk: schtasks /Change /TN "CalebWorker" /DISABLE  AND  schtasks /Change /TN "SolomonRelay" /DISABLE. Not urgent — the new supervisor self-corrects the race via port takeover — but until disabled there is a latent duplicate-worker risk at every logon. Run next time at the keyboard.
 - [2026-06-08 15:09 CT] STANDING RULE — FACT-CHECK EVERY TURN, ALL PERSONNEL (locked 6/8, Jed directive): Before any agent (Nathan, Gabriel, Sam, Caleb, Solomon) executes or hands off a prompt/task, fact-check it against live ground truth — right agent for the job; paths/IPs/process names/commits match master context + live state; no stale/hallucinated refs; and no REGRESSION of a past deliberate fix (e.g. re-enabling something we intentionally disabled). Checks ALWAYS resolve to ground truth (PM2/files/activity_log/HTTP/master context), NEVER to another agent's agreement — two agents must never co-sign the same false belief. Tiered: trivial light; infra/build/multi-step full; irreversible/elevated full + Jed approval. Must catch regressions. Same verify-don't-trust principle as the execution ledger, applied at the prompt/handoff stage. Example win: Gabriel caught that re-enabling SolomonRelayWatchdog as-is would reintroduce the flashing-PowerShell window deliberately killed in June.
 - [2026-06-08 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-07 12:19 CT] MOTIVATION FOR TOUGH GUYS assets confirmed in Google Drive (6/7): Journal V1 (chapter-based, quote+lined format), Journal V2 (52-week format), KINDLE EPUB (use for KDP upload — fixes fixed-format error). Products: main book paperback+hardcover $24.99+Kindle, Journal hardcover $29.99, Sequel concept "Motivation for Tougher Guys" exists in Manus. BRAND: Iron sharpens iron (Proverbs 27:17) is Jed's foundational creed — painted on his shop wall. Core to Building Shultz identity.
