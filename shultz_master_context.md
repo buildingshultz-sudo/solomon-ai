@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 14:42 CT — [SAMQUEUE] Nathan dispatch → caleb: 'reliability test — caleb verify e2e' (status: dispatch <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-08 15:09 CT — [GENERAL] STANDING RULE — FACT-CHECK EVERY TURN, ALL PERSONNEL (locked 6/8, Jed directive) <!-- LASTUPDATED -->
 
 ---
 
@@ -83,6 +83,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 14:45 CT] Feature shipped — commit 5b3eee9: docs(dispatch-core): quarantine phantom "Sam watcher" comment
 - [2026-06-08 14:30 CT] Feature shipped — commit 8c9a351: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-08 14:15 CT] Feature shipped — commit 56c3e2c: Real sam-queue executor (verify/ping) + revert off-peak gate
 - [2026-06-08 14:00 CT] Feature shipped — commit 2606140: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -358,6 +359,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-08 15:09 CT] STANDING RULE — FACT-CHECK EVERY TURN, ALL PERSONNEL (locked 6/8, Jed directive): Before any agent (Nathan, Gabriel, Sam, Caleb, Solomon) executes or hands off a prompt/task, fact-check it against live ground truth — right agent for the job; paths/IPs/process names/commits match master context + live state; no stale/hallucinated refs; and no REGRESSION of a past deliberate fix (e.g. re-enabling something we intentionally disabled). Checks ALWAYS resolve to ground truth (PM2/files/activity_log/HTTP/master context), NEVER to another agent's agreement — two agents must never co-sign the same false belief. Tiered: trivial light; infra/build/multi-step full; irreversible/elevated full + Jed approval. Must catch regressions. Same verify-don't-trust principle as the execution ledger, applied at the prompt/handoff stage. Example win: Gabriel caught that re-enabling SolomonRelayWatchdog as-is would reintroduce the flashing-PowerShell window deliberately killed in June.
 - [2026-06-08 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-07 12:19 CT] MOTIVATION FOR TOUGH GUYS assets confirmed in Google Drive (6/7): Journal V1 (chapter-based, quote+lined format), Journal V2 (52-week format), KINDLE EPUB (use for KDP upload — fixes fixed-format error). Products: main book paperback+hardcover $24.99+Kindle, Journal hardcover $29.99, Sequel concept "Motivation for Tougher Guys" exists in Manus. BRAND: Iron sharpens iron (Proverbs 27:17) is Jed's foundational creed — painted on his shop wall. Core to Building Shultz identity.
 - [2026-06-07 10:31 CT] TradeQuote survey #2 — AJ (Jed's brother-in-law, GC, 6/7): Q1: eat it or talk to customer — hidden conditions always put you upside-down. Q2: material list + photos for reference → price out → figure labor. Q3: all business side — permits, writing legit quotes. Q4: wants to show up and work without office headache. Q5: Menards app for quick material cost; Grok to talk through on-site problems. Insights: photo workflow natural — TradeQuote should integrate; "legit-looking quotes" = professionalism gap; Menards app = estimating workaround not a real tool; AI already in workflow via Grok unstructured.
