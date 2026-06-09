@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 07:15 CT — [STACK] SAM EFFORT-LEVEL RULE (locked 6/9, Jed): Keep Sam (Claude Code) at LOW/default e <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 07:39 CT — [GENERAL] SOCIAL ARCHITECTURE (locked 6/9, Jed clarified): Jed is NOT a social media perso <!-- LASTUPDATED -->
 
 ---
 
@@ -86,6 +86,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 07:30 CT] Feature shipped — commit a8fa79a: docs(master-context): Nathan append [STACK]
 - [2026-06-08 19:15 CT] Feature shipped — commit ff5538f: docs(master-context): Nathan append [STACK]
 - [2026-06-08 18:15 CT] Feature shipped — commit a22a9b5: docs(master-context): Nathan append [GENERAL]
 - [2026-06-08 18:04 CT] IMMINAV OUTREACH (6/8) — 5 drafts found sitting UNSENT in Gmail (June 1 + June 7), never sent (same illusion pattern). 4 CLEAN + on-scope, approved to send: Amani Family Services, Latin American Chamber of Commerce/St Joseph County (laccsjc), La Casa de Amistad, ISBDC Northwest — all strictly business compliance (LLC/EIN/licenses/permits/tax), research-framed, free. 1 BLOCKED + rewritten: USHCC draft (info@ushcc.com, June 1) VIOLATED the ImmiNav scope guardrail — claimed ImmiNav answers "visa" questions and framed it as replacing "legal fees" (= immigration status / unauthorized practice of law, the one uninsurable risk) AND linked a raw IP (167.99.237.26:4002, reads as phishing to a national org). Held; scope-safe rewrite created as draft r-2160389988542857281; OLD bad draft must be deleted. RULE REINFORCED: every ImmiNav-facing message MUST be read against the no-legal-advice / no-immigration-status guardrail before sending. Caught by fact-check-every-turn.
@@ -371,6 +372,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-09 07:39 CT] SOCIAL ARCHITECTURE (locked 6/9, Jed clarified): Jed is NOT a social media person — near-zero personal engagement, doesn't post about his life, phone is business-ONLY, goal is minimum phone time (Tuesday vision). So: (1) Building Shultz FB page = the single automated hub, Solomon posts here, primary funnel. (2) Irish Craftsman FB page = light fully-automated cross-post amplifier ONLY because it has the bigger follower count — zero effort from Jed; if its upkeep becomes a hassle, pause it without hesitation. (3) Personal Jedidiah Facebook + personal Instagram = LEAVE ALONE — not manual, not automated, not a channel. Do NOT propose turning the personal profile into a marketing/warm-reach surface; it would pull Jed back onto his phone for no return and contradicts the mission. Distribution = YouTube + brand page + products + the apps, NOT Jed personally performing online. The system does the social work on BRAND surfaces so Jed never touches personal social media.
 - [2026-06-09 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-08 18:10 CT] JED-ONLY PENDING — two elevated PowerShell commands to run at the PC (admin) to kill legacy logon tasks for good and remove the duplicate-worker risk: schtasks /Change /TN "CalebWorker" /DISABLE  AND  schtasks /Change /TN "SolomonRelay" /DISABLE. Not urgent — the new supervisor self-corrects the race via port takeover — but until disabled there is a latent duplicate-worker risk at every logon. Run next time at the keyboard.
 - [2026-06-08 15:09 CT] STANDING RULE — FACT-CHECK EVERY TURN, ALL PERSONNEL (locked 6/8, Jed directive): Before any agent (Nathan, Gabriel, Sam, Caleb, Solomon) executes or hands off a prompt/task, fact-check it against live ground truth — right agent for the job; paths/IPs/process names/commits match master context + live state; no stale/hallucinated refs; and no REGRESSION of a past deliberate fix (e.g. re-enabling something we intentionally disabled). Checks ALWAYS resolve to ground truth (PM2/files/activity_log/HTTP/master context), NEVER to another agent's agreement — two agents must never co-sign the same false belief. Tiered: trivial light; infra/build/multi-step full; irreversible/elevated full + Jed approval. Must catch regressions. Same verify-don't-trust principle as the execution ledger, applied at the prompt/handoff stage. Example win: Gabriel caught that re-enabling SolomonRelayWatchdog as-is would reintroduce the flashing-PowerShell window deliberately killed in June.
