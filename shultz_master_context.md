@@ -438,6 +438,9 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5301
+- [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5299
+- [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5297
 - [2026-06-09 12:48 CT] solomon · dispatch_1781027311486 · "Deploy + run Gumroad relink handler (read-only, 404 root cause)" · DISPATCHED · file:dispatch_1781027311486.json
 - [2026-06-09 12:48 CT] nathan · dispatch_1781027311486 · "Deploy + run Gumroad relink handler (read-only, 404 root cause)" · DISPATCHED · file:dispatch_1781027311486.json
 - [2026-06-09 12:34 CT] caleb · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · COMPLETED · activity_log#5280
