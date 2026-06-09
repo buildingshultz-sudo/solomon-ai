@@ -456,6 +456,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 18:06 CT] caleb · dispatch_1781046377001 · "Smoke test — relay verify probe" · COMPLETED · activity_log#5452
 - [2026-06-09 18:06 CT] solomon · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · http:200
 - [2026-06-09 18:06 CT] nathan · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · file:dispatch_1781046377001.json
 - [2026-06-09 17:20 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNRE
