@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 16:45 CT — [PROJECTS] Feature shipped — commit 68fbedc: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 16:55 CT — [PROJECTS] GUMROAD ZERO-SALES ROOT CAUSE (6/9, Jed at PC): products were NEVER broken. Both <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 16:55 CT] GUMROAD ZERO-SALES ROOT CAUSE (6/9, Jed at PC): products were NEVER broken. Both Published, pages load fine: Motivation for Tough Guys ($10), Builder's AI Blueprint Founder's Access ($19). REAL store handle has a TYPO: buuldingshultz.gumroad.com (two u letters). Campaign has posted the WRONG handle (shultzbuilds.gumroad.com) all along = true zero-sales cause. REAL URLs: buuldingshultz.gumroad.com/l/ihjobd (book), buuldingshultz.gumroad.com/l/ygmuv (Blueprint). Fix = find and replace the store URL everywhere links live (campaign, YouTube descriptions, link in bio, docs). Not a code or Sam build. DECIDE FIRST: keep buuldingshultz as permanent handle or correct the spelling? Changing later re-breaks corrected links, so decide before mass replacing. FLAG: Caleb/Cowork path genuinely flaky (buried tabs plus an instant error tonight; Jed suspected since the Claude switch). Diagnose worker and delivery handoff in a clean window after Florida.
 - [2026-06-09 16:45 CT] Feature shipped — commit 68fbedc: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 16:30 CT] Feature shipped — commit ddc76c4: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 16:29 CT] FLORIDA GOAL (6/9, Jed): by the time Jed is back from Daytona (leaves Fri 6/12 AM, back Mon 6/22), target = REAL SALES the crew executed end-to-end: Gumroad live + links fixed → 30-day campaign posting REAL (HTTP-200) URLs → a sale lands → Solomon pings Jed + Tasia on Telegram → logged in the new financial tracking. The real-world test of the autonomy Jed built: he's away, system stays up, revenue happens without his hands. TASIA ON-RAMP: she already gets a Telegram sale ping every sale (Solomon Forge) — that zero-pressure, always-good-news ping is the natural seed her future financial money-doc grows from; do NOT add to it yet. ROCKET MONEY: do NOT wire the crew into Rocket Money (no real consumer API; credentialed scraping of a financial account = the high-risk automation we avoid). When building the business money-flow view, match the clean/readable FEEL Tasia likes in Rocket Money's UI; Rocket Money stays their personal app, business dashboard sits alongside, never entangled.
