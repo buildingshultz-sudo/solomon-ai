@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 18:51 CT — [PROJECTS] COMMS TOPOLOGY AUDIT (6/9 eve). PROVEN OK: Nathan→Solomon dispatch; Nathan→Solom <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:52 CT — [SAMQUEUE] Nathan dispatch → sam: 'Prove Sam PC task executes (autonomy + comms test)' (sta <!-- LASTUPDATED -->
 
 ---
 
@@ -297,6 +297,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 18:52 CT] Nathan dispatch → sam: 'Prove Sam PC task executes (autonomy + comms test)' (status: queued, id: dispatch_1781049168913)
 - [2026-06-09 18:46 CT] Nathan dispatch → caleb: 'Audit YouTube/bio for wrong Gumroad handle (autonomy test)' (status: dispatched_to_caleb, id: dispatch_1781048760703)
 - [2026-06-09 18:45 CT] Nathan dispatch → sam: 'Clear 2 stale stuck dispatches (autonomy test)' (status: queued, id: dispatch_1781048740529)
 - [2026-06-09 18:06 CT] Nathan dispatch → caleb: 'Smoke test — relay verify probe' (status: dispatched_to_caleb, id: dispatch_1781046377001)
@@ -470,6 +471,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 18:52 CT] solomon · dispatch_1781049168913 · "Prove Sam PC task executes (autonomy + comms test)" · DISPATCHED · file:dispatch_1781049168913.json
+- [2026-06-09 18:52 CT] nathan · dispatch_1781049168913 · "Prove Sam PC task executes (autonomy + comms test)" · DISPATCHED · file:dispatch_1781049168913.json
 - [2026-06-09 18:46 CT] caleb · dispatch_1781048760703 · "Audit YouTube/bio for wrong Gumroad handle (autonomy test)" · COMPLETED · activity_log#5493
 - [2026-06-09 18:46 CT] caleb · dispatch_1781048760703 · "Audit YouTube/bio for wrong Gumroad handle (autonomy test)" · STARTED · activity_log#5491
 - [2026-06-09 18:46 CT] solomon · dispatch_1781048760703 · "Audit YouTube/bio for wrong Gumroad handle (autonomy test)" · DISPATCHED · http:200
