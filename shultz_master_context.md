@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 12:34 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (retry, wit <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 12:48 CT — [SAMQUEUE] Nathan dispatch → sam: 'Deploy + run Gumroad relink handler (read-only, 404 root <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 12:45 CT] Feature shipped — commit 9592197: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 12:15 CT] Feature shipped — commit 46e85f0: docs(master-context): Nathan append [STACK]
 - [2026-06-09 10:00 CT] Feature shipped — commit 0907e6c: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 09:48 CT] BOOK MARKETING — execution split (6/9). PHASE 0 (assistant, pre-launch): finalize covers + content-rich interiors; own ISBNs if retail planned; KDP series page + A+ Content all volumes + Author Central/Follow + 7 keyword fields + categories; Beehiiv free-PDF lead magnet ("25 Tough-Guy Truths", $0) + launch email sequence; wire book/newsletter links into all YouTube touchpoints; recruit 20-40 ARC/launch team. PHASE 1 (4-wk launch, assistant-run): email sequence pre-launch→launch→follow-up→weekly sustain; launch-team buys + HONEST reviews (10-15 wk1 then drip; NEVER pay/swap/incentivize/family — TOS, earned ONLY); optional KDP Select Countdown Vol 1. BIG-BOX: SKIP national chains (returnable + 55% + slotting $1k-10k/store = can go negative; BN paid placement = scam). JED-ONLY high-margin: bulk/relationship convos (church men's group, union, contractors). KDP publish gated on Sam cover-selector fix (PC session).
@@ -269,6 +270,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 12:48 CT] Nathan dispatch → sam: 'Deploy + run Gumroad relink handler (read-only, 404 root cause)' (status: queued, id: dispatch_1781027311486)
 - [2026-06-09 12:34 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (retry, with URL)' (status: dispatched_to_caleb, id: dispatch_1781026447218)
 - [2026-06-09 09:48 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (book launch backbone)' (status: dispatched_to_caleb, id: dispatch_1781016502102)
 - [2026-06-08 17:46 CT] QUEUE TRIAGE (6/8, Jed-approved): KILL ~12 dead/superseded — 9 legacy June1-4 generic "build feature" orphans; "Fix autonomous queue" (1780799046736, replaced by today's real executor); master-cleanup (1780922131620); reliability-test (1780947744182); dispatch-cap-raise (1780841495864, done). KILL-AFTER-VERIFY (confirm feature live, then purge): Tasia notification (1780799562798) + whitelist (1780800279119); build-caleb-runner; Gabriel→Nathan channel + get_recent_activity (1780790862462). CONSOLIDATE: 7 KDP dispatches → ONE KDP task gated behind a real cover-selector fix; 5 Manus dispatches → ONE export-before-June-19 task. KEEP: Manus export (June 19 deadline); 2 today Manus verify tasks; Stripe audit (still open); Gumroad 404 (needs REAL browser handler, not a scrape); Sheets lead tracker + survey-to-Sheets wiring. Execution = Sam filesystem cleanup, runs AFTER the foundation task lands.
@@ -436,6 +438,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 12:48 CT] solomon · dispatch_1781027311486 · "Deploy + run Gumroad relink handler (read-only, 404 root cause)" · DISPATCHED · file:dispatch_1781027311486.json
+- [2026-06-09 12:48 CT] nathan · dispatch_1781027311486 · "Deploy + run Gumroad relink handler (read-only, 404 root cause)" · DISPATCHED · file:dispatch_1781027311486.json
 - [2026-06-09 12:34 CT] caleb · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · COMPLETED · activity_log#5280
 - [2026-06-09 12:34 CT] caleb · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · STARTED · activity_log#5278
 - [2026-06-09 12:34 CT] solomon · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · DISPATCHED · http:200
