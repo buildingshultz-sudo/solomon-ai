@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 18:40 CT — [PROJECTS] TEST #5 PASS (6/9 eve, PC-targeted re-run). Live kill-and-recover on the PC: bas <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:45 CT — [SAMQUEUE] Nathan dispatch → sam: 'Clear 2 stale stuck dispatches (autonomy test)' (status: <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 18:45 CT] Feature shipped — commit 71ed3d6: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 18:40 CT] TEST #5 PASS (6/9 eve, PC-targeted re-run). Live kill-and-recover on the PC: baseline 7777 LISTENING owned by relay PID 20528, tree supervisor→relay→worker. Killed relay PID 20528 only at 18:37:54.374; supervisor auto-respawned with NO logon/no manual start, 7777 LISTENING again at 18:37:55.723 under new PID = FULL RECOVERY 1.35 SECONDS. Exactly one relay/supervisor/worker after, no duplicates. Architecture note: caleb-worker is parented by the RELAY (not supervisor), so killing the relay cascades the worker down; new relay brings worker back — both recovered inside the 1.35s. No code/settings/files changed beyond the single intentional kill. This is the Florida safety proof: relay self-heals fast without a human. (Smoke-test's 38.9s was the harder whole-chain kill incl. supervisor; this 1.35s is the relay-only case.)
 - [2026-06-09 18:38 CT] TEST #7 STATUS + MERCH GAP (6/9 eve). The most recent FB campaign post (day 6 evening) links to SPREADSHOP, not Gumroad — correct, because the 30-day campaign ALTERNATES book/Blueprint (Gumroad) posts with merch (Spreadshop) posts; day 6 evening was a merch/hat post. So #7 (verify corrected buuldingshultz handle in a live post) is NOT yet confirmed — need to eyeball the next BOOK/Blueprint post in rotation to see the corrected Gumroad link fire live. Fix is in source (Sam verified diff) but unconfirmed in a real Gumroad-linked post. SURFACED GAP: the campaign actively drives traffic to Spreadshop merch, but merch sales fire NO Solomon alert (Spreadshop not connected) and don't log — so a hat sale from a campaign post = invisible. Close after Florida: connect Spreadshop sale notifications so campaign-driven merch sales are tracked like Gumroad sales.
 - [2026-06-09 18:36 CT] VERIFICATION (6/9 eve). FIRST SALE CONFIRMED: Jed bought Motivation for Tough Guys ($10) via live buuldingshultz link; Solomon fired NEW SALE Telegram alert = money loop works end-to-end. SALE-ALERT COVERAGE: Gumroad (book+Blueprint) DOES alert (webhook wired). Merch/Spreadshop does NOT alert yet (not connected) — gap, needs webhook. Affiliate (Amazon/Acme) canNOT be real-time (no per-sale webhook) — pull via reports. Tasia's future sale-view = Gumroad-only today. TEST #5 LESSON: fresh Sam session ran kill-recover against VPS, correctly found nothing on 7777 there — relay is PC-SIDE (pc-relay.js, C:\Users\Ashle\Solomon\pc-relay\). Sam refused to kill a nonexistent target (good guardrail) but mis-routed to VPS because prompt led with "VPS IP." LESSON: fresh Sam sessions don't inherit build context — state target MACHINE explicitly (PC vs VPS); Sam's Code host IS the PC. Re-running #5 PC-targeted.
@@ -294,6 +295,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 18:45 CT] Nathan dispatch → sam: 'Clear 2 stale stuck dispatches (autonomy test)' (status: queued, id: dispatch_1781048740529)
 - [2026-06-09 18:06 CT] Nathan dispatch → caleb: 'Smoke test — relay verify probe' (status: dispatched_to_caleb, id: dispatch_1781046377001)
 - [2026-06-09 16:58 CT] Nathan dispatch → sam: 'Fix Gumroad handle in campaign source (stop dead links)' (status: queued, id: dispatch_1781042255453)
 - [2026-06-09 16:39 CT] Nathan dispatch → caleb: 'Open Gumroad login + wait for Jed to sign in by hand' (status: dispatched_to_caleb, id: dispatch_1781041162937)
@@ -465,6 +467,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 18:45 CT] solomon · dispatch_1781048740529 · "Clear 2 stale stuck dispatches (autonomy test)" · DISPATCHED · file:dispatch_1781048740529.json
+- [2026-06-09 18:45 CT] nathan · dispatch_1781048740529 · "Clear 2 stale stuck dispatches (autonomy test)" · DISPATCHED · file:dispatch_1781048740529.json
 - [2026-06-09 18:08 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://127.0.0.1:9 is unreachable (ECONNREFUSED)
 - [2026-06-09 18:06 CT] caleb · dispatch_1781046377001 · "Smoke test — relay verify probe" · COMPLETED · activity_log#5452
 - [2026-06-09 18:06 CT] solomon · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · http:200
