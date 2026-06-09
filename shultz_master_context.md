@@ -436,6 +436,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 12:34 CT] caleb · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · COMPLETED · activity_log#5280
+- [2026-06-09 12:34 CT] caleb · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · STARTED · activity_log#5278
 - [2026-06-09 12:34 CT] solomon · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · DISPATCHED · http:200
 - [2026-06-09 12:34 CT] nathan · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · DISPATCHED · file:dispatch_1781026447218.json
 - [2026-06-09 09:48 CT] caleb · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · STARTED · activity_log#5205
