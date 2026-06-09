@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-08 19:06 CT — [STACK] DONE (6/8, Jed elevated PS): schtasks /Change /TN "CalebWorker" /DISABLE → SUCCE <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 07:15 CT — [STACK] SAM EFFORT-LEVEL RULE (locked 6/9, Jed): Keep Sam (Claude Code) at LOW/default e <!-- LASTUPDATED -->
 
 ---
 
@@ -41,6 +41,7 @@
 - **Connected-service status (as of 2026-05-29):** YouTube OAuth — VALID (uploads; no community-post API). Facebook — Building Shultz WORKING via spare `FACEBOOK_PAGE_TOKEN`; **Irish Craftsman DOWN** (token expired). Instagram — NOT CONNECTED. Gmail IMAP triage — WORKING. Telegram — WORKING. Serper (web search) + BFL/Black Forest Labs (pay-as-you-go images) — in `.env`.
 - **CREDENTIALS:** API keys, the PC relay secret, and the INBiz password are **NOT in this committed file** — they live in `.env` / a password manager. (Anthropic key was exposed in chat earlier — **rotate it.**)
 <!-- LOG:STACK -->
+- [2026-06-09 07:15 CT] SAM EFFORT-LEVEL RULE (locked 6/9, Jed): Keep Sam (Claude Code) at LOW/default effort as the standard — he rebuilt the whole dispatch foundation, caught the orphan-worker race + false-completion bugs, and stayed honest, all on low effort, so it's proven sufficient. Do NOT default to UltraCode (xhigh + dynamic workflows): it consumes dramatically more API usage, and Jed is on a $100/mo Max plan with a hard budget + debt — uncontrolled spend would stall the operation mid-task. NATHAN STANDING DUTY: proactively flag to Jed when a specific task genuinely warrants UltraCode — large, correctness-critical, hard-to-catch-if-wrong work (relay/lifecycle surgery, money-touching handlers, tricky DOM-selector builds, codebase-wide audits/migrations). Routine work stays low. When used: scope small first, watch /usage. UltraCode = surgical exception, never default. Never switch Sam's effort mid-task on something already working.
 - [2026-06-08 19:06 CT] DONE (6/8, Jed elevated PS): schtasks /Change /TN "CalebWorker" /DISABLE → SUCCESS. schtasks /Change /TN "SolomonRelay" /DISABLE → SUCCESS. Legacy logon tasks disabled — duplicate-worker risk eliminated. Supervisor (relay-supervisor.js + start-relay-hidden.vbs) is now the sole lifecycle owner for relay + worker. No further action needed.
 - [2026-06-08 18:10 CT] FOUNDATION REBUILD SHIPPED (6/8, 5 parts, tests PASS). execution-ledger.js: single chokepoint all dispatch/execution flows call; uniform line per event to activity_log + compact mirror in master_context "## EXECUTION LEDGER"; verification AT WRITE TIME — a "done" with no checkable artifact written UNVERIFIED on the spot (closes audit-vs-inline gap). 4 CORE_PROTECTED files untouched; Caleb via dispatch-core.recordCalebResult. Flash-free relay supervisor: relay-supervisor.js + start-relay-hidden.vbs (supervisor→relay→worker, node→node respawn, wscript VBS autostart, ZERO PowerShell). solomon-health alerts if relay down. Fixed en route: orphan-worker duplicate race (pidfile guard). Tests: 10/10 ledger, fake-done→UNVERIFIED, relay kill→1s respawn single worker, dead-relay→alert. RESIDUALS: supervisor's OWN death recovers only at next logon (but relay-down IS detected); relay/worker need Jed logged in. Enforcement code-forced for Sam/Caleb/Solomon, instruction-only Nathan/Gabriel.
 - [2026-06-08 14:18 CT] DISPATCH CHAIN — ARCHITECTURE TRUTH (6/8 audit, proven): There was NEVER an autonomous executor for sam-queue. dispatch-core.js:149 described a "Sam watcher" never built; parallel_task_manager used a different empty table. Pipeline died at: dispatch writes JSON → status=queued → nobody consumed it. Commits 86faf37 + 24a07fe together FAKED an autonomous queue that ran nothing. Result: 20 of 41 dispatches NEVER executed. CORRECTED RULE: build/fix/deploy/browser dispatches CANNOT auto-execute — they need a live Claude Code (Sam) session started by Jed/Nathan, or a running caleb-worker. A "dispatched" build task is NOT done — it is queued for a session someone must start. Nathan STOPS reporting dispatched build tasks as self-executing. Only verify/ping tasks w/ params.autoexec===true auto-run (executor commit 56c3e2c, tested smoke 1/1 stress 5/5). f179e31 off-peak gate was silently blocking the queue — REVERTED in 56c3e2c; 45s pacing + orphaned-recovery kept.
@@ -85,6 +86,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-08 19:15 CT] Feature shipped — commit ff5538f: docs(master-context): Nathan append [STACK]
 - [2026-06-08 18:15 CT] Feature shipped — commit a22a9b5: docs(master-context): Nathan append [GENERAL]
 - [2026-06-08 18:04 CT] IMMINAV OUTREACH (6/8) — 5 drafts found sitting UNSENT in Gmail (June 1 + June 7), never sent (same illusion pattern). 4 CLEAN + on-scope, approved to send: Amani Family Services, Latin American Chamber of Commerce/St Joseph County (laccsjc), La Casa de Amistad, ISBDC Northwest — all strictly business compliance (LLC/EIN/licenses/permits/tax), research-framed, free. 1 BLOCKED + rewritten: USHCC draft (info@ushcc.com, June 1) VIOLATED the ImmiNav scope guardrail — claimed ImmiNav answers "visa" questions and framed it as replacing "legal fees" (= immigration status / unauthorized practice of law, the one uninsurable risk) AND linked a raw IP (167.99.237.26:4002, reads as phishing to a national org). Held; scope-safe rewrite created as draft r-2160389988542857281; OLD bad draft must be deleted. RULE REINFORCED: every ImmiNav-facing message MUST be read against the no-legal-advice / no-immigration-status guardrail before sending. Caught by fact-check-every-turn.
 - [2026-06-08 18:00 CT] Feature shipped — commit bc7f4d0: docs(master-context): Nathan append [SAMQUEUE]
@@ -369,6 +371,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-09 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-08 18:10 CT] JED-ONLY PENDING — two elevated PowerShell commands to run at the PC (admin) to kill legacy logon tasks for good and remove the duplicate-worker risk: schtasks /Change /TN "CalebWorker" /DISABLE  AND  schtasks /Change /TN "SolomonRelay" /DISABLE. Not urgent — the new supervisor self-corrects the race via port takeover — but until disabled there is a latent duplicate-worker risk at every logon. Run next time at the keyboard.
 - [2026-06-08 15:09 CT] STANDING RULE — FACT-CHECK EVERY TURN, ALL PERSONNEL (locked 6/8, Jed directive): Before any agent (Nathan, Gabriel, Sam, Caleb, Solomon) executes or hands off a prompt/task, fact-check it against live ground truth — right agent for the job; paths/IPs/process names/commits match master context + live state; no stale/hallucinated refs; and no REGRESSION of a past deliberate fix (e.g. re-enabling something we intentionally disabled). Checks ALWAYS resolve to ground truth (PM2/files/activity_log/HTTP/master context), NEVER to another agent's agreement — two agents must never co-sign the same false belief. Tiered: trivial light; infra/build/multi-step full; irreversible/elevated full + Jed approval. Must catch regressions. Same verify-don't-trust principle as the execution ledger, applied at the prompt/handoff stage. Example win: Gabriel caught that re-enabling SolomonRelayWatchdog as-is would reintroduce the flashing-PowerShell window deliberately killed in June.
 - [2026-06-08 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -418,3 +421,30 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-08 20:56 CT] sam · dispatch_1780799036228 · "Wire survey responses to auto-update Google Sheets lead tracker" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780799021210 · "Build research lead tracker in Google Sheets" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780798999578 · "Stripe audit + Make check + product catalog setup" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780797136084 · "Send 8 emails + submit 11 contractor contact forms" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780794893369 · "Reply to Mike — Castle Rock Construction survey response" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780794160200 · "Send 5 TradeQuote research emails via Solomon SMTP" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780922168875 · "Send Troveo pitch email to sarah@troveo.ai" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_1780840372020 · "Send 4 more contractor research emails" · DEFERRED · deferred (held)
+- [2026-06-08 20:56 CT] sam · dispatch_consolidated_manus_1780970164972 · "Manus — export ALL files before June 19 expiry (single consolidated task)" · DISPATCHED · file:dispatch_consolidated_manus_1780970164972.json
+- [2026-06-08 20:56 CT] sam · dispatch_consolidated_kdp_1780970164967 · "KDP — upload corrected cover + publish "Motivation for Tough Guys" (GATED on cover-selector fix)" · DISPATCHED · file:dispatch_consolidated_kdp_1780970164967.json
+- [2026-06-08 20:56 CT] sam · dispatch_1780790862462 · "Build Gabriel → Nathan feedback channel + get_recent_activity MCP tool" · BLOCKED · purged KILL-VERIFIED
+- [2026-06-08 20:56 CT] sam · 2026-06-02T11-12-46-571Z-build-caleb-runner · "(template/parse-na)" · BLOCKED · purged KILL-VERIFIED
+- [2026-06-08 20:56 CT] sam · dispatch_1780800279119 · "Whitelist Tasia on Solomon — receive-only sale notifications" · BLOCKED · purged KILL-VERIFIED
+- [2026-06-08 20:56 CT] sam · dispatch_1780799562798 · "Build Tasia sale notification system — all revenue streams" · BLOCKED · purged KILL-VERIFIED
+- [2026-06-08 20:56 CT] sam · dispatch_1780841495864 · "Raise dispatch description cap 2000→8000 chars" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · dispatch_1780947744182 · "reliability test — caleb verify e2e" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · dispatch_1780922131620 · "Master cleanup — all queued tasks from June 6-7" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · dispatch_1780799046736 · "Fix autonomous queue — process dispatch tasks without manual invoke" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-04T14-50-51-993Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-04T12-02-22-825Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-02T15-08-56-979Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-02T14-52-39-855Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-02T14-11-40-815Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-02T00-13-08-906Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-01T12-20-27-353Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-01T12-10-51-453Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
+- [2026-06-08 20:56 CT] sam · 2026-06-01T09-25-56-610Z-sam_playwright_setup · "Walk Jed through Playwright auth setup for a platform" · BLOCKED · purged KILL
