@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 16:29 CT — [PROJECTS] FLORIDA GOAL (6/9, Jed): by the time Jed is back from Daytona (leaves Fri 6/12 A <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 16:39 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Open Gumroad login + wait for Jed to sign in by hand'  <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 16:30 CT] Feature shipped — commit ddc76c4: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 16:29 CT] FLORIDA GOAL (6/9, Jed): by the time Jed is back from Daytona (leaves Fri 6/12 AM, back Mon 6/22), target = REAL SALES the crew executed end-to-end: Gumroad live + links fixed → 30-day campaign posting REAL (HTTP-200) URLs → a sale lands → Solomon pings Jed + Tasia on Telegram → logged in the new financial tracking. The real-world test of the autonomy Jed built: he's away, system stays up, revenue happens without his hands. TASIA ON-RAMP: she already gets a Telegram sale ping every sale (Solomon Forge) — that zero-pressure, always-good-news ping is the natural seed her future financial money-doc grows from; do NOT add to it yet. ROCKET MONEY: do NOT wire the crew into Rocket Money (no real consumer API; credentialed scraping of a financial account = the high-risk automation we avoid). When building the business money-flow view, match the clean/readable FEEL Tasia likes in Rocket Money's UI; Rocket Money stays their personal app, business dashboard sits alongside, never entangled.
 - [2026-06-09 14:00 CT] Feature shipped — commit 0d909ca: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 13:50 CT] FINANCIAL TRACKING — build item (6/9, Jed). Get clean automated money-flow tracking on the team's radar: every penny IN and OUT, split business vs. personal, feeding the debt snowball. Needed NOW for Jed's own decisions + snowball progress, independent of any Tasia plan. Builds on existing Solomon Gumroad sale alerts → goal is a simple monthly money-flow view (business revenue in, business expenses out, personal/business split, snowball progress). This becomes the real infrastructure that Tasia's future financial-fluency training rides on top of — build it for Jed first, so when she's ready it already exists and is real. NOT a tax-filing tool, NOT financial advice — organization + visibility only. Sam build, scope in a future PC session.
@@ -274,6 +275,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 16:39 CT] Nathan dispatch → caleb: 'Open Gumroad login + wait for Jed to sign in by hand' (status: dispatched_to_caleb, id: dispatch_1781041162937)
 - [2026-06-09 12:48 CT] Nathan dispatch → sam: 'Deploy + run Gumroad relink handler (read-only, 404 root cause)' (status: queued, id: dispatch_1781027311486)
 - [2026-06-09 12:34 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (retry, with URL)' (status: dispatched_to_caleb, id: dispatch_1781026447218)
 - [2026-06-09 09:48 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (book launch backbone)' (status: dispatched_to_caleb, id: dispatch_1781016502102)
@@ -442,6 +444,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 16:39 CT] solomon · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · DISPATCHED · http:200
+- [2026-06-09 16:39 CT] nathan · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · DISPATCHED · file:dispatch_1781041162937.json
 - [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5301
 - [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5299
 - [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5297
