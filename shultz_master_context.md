@@ -446,6 +446,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 16:57 CT] nathan · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
 - [2026-06-09 16:50 CT] solomon · dispatch_1781041810715 · "Re-run Gumroad relink — read live URLs (now logged in)" · FAILED · file:dispatch_1781041810715.json
 - [2026-06-09 16:50 CT] nathan · dispatch_1781041810715 · "Re-run Gumroad relink — read live URLs (now logged in)" · DISPATCHED · file:dispatch_1781041810715.json
 - [2026-06-09 16:45 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNRE
