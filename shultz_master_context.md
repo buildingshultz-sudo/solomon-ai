@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 16:39 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Open Gumroad login + wait for Jed to sign in by hand'  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 16:45 CT — [PROJECTS] Feature shipped — commit 68fbedc: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 16:45 CT] Feature shipped — commit 68fbedc: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 16:30 CT] Feature shipped — commit ddc76c4: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 16:29 CT] FLORIDA GOAL (6/9, Jed): by the time Jed is back from Daytona (leaves Fri 6/12 AM, back Mon 6/22), target = REAL SALES the crew executed end-to-end: Gumroad live + links fixed → 30-day campaign posting REAL (HTTP-200) URLs → a sale lands → Solomon pings Jed + Tasia on Telegram → logged in the new financial tracking. The real-world test of the autonomy Jed built: he's away, system stays up, revenue happens without his hands. TASIA ON-RAMP: she already gets a Telegram sale ping every sale (Solomon Forge) — that zero-pressure, always-good-news ping is the natural seed her future financial money-doc grows from; do NOT add to it yet. ROCKET MONEY: do NOT wire the crew into Rocket Money (no real consumer API; credentialed scraping of a financial account = the high-risk automation we avoid). When building the business money-flow view, match the clean/readable FEEL Tasia likes in Rocket Money's UI; Rocket Money stays their personal app, business dashboard sits alongside, never entangled.
 - [2026-06-09 14:00 CT] Feature shipped — commit 0d909ca: docs(master-context): Nathan append [PROJECTS]
@@ -444,6 +445,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 16:45 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNRE
 - [2026-06-09 16:40 CT] caleb · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · COMPLETED · activity_log#5400
 - [2026-06-09 16:40 CT] caleb · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · STARTED · activity_log#5398
 - [2026-06-09 16:39 CT] solomon · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · DISPATCHED · http:200
