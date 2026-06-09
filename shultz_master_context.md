@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 17:44 CT — [PROJECTS] RELAY RECOVERY + GAPS (6/9 eve). Relay BACK UP: Solomon reports "relay 1.3.0 rea <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 17:55 CT — [PROJECTS] CORRECTION to GAP 1 (6/9): Gabriel is Claude-NATIVE in the OS (the Dispatch/Cowo <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 17:55 CT] CORRECTION to GAP 1 (6/9): Gabriel is Claude-NATIVE in the OS (the Dispatch/Cowork orchestration layer, not something we built). So the bug is NOT "Gabriel built wrong" — it's that something WE built (our custom relay/worker layer that spawns Sam/Caleb sessions) sits out-of-band from the native session registry Gabriel reads, so a session we launched through our own plumbing is INVISIBLE to the native orchestrator. Gabriel honestly reported all idle because he genuinely couldn't see Sam's live Code session. AFTER-FLORIDA FIX should target reconciling our relay/worker session spawning with the native session visibility (make our sessions register where Gabriel can see them), NOT modifying Gabriel. This is the same class of "we built something that interferes with the native layer" issue — investigate what in our stack blocks native session visibility.
+- [2026-06-09 17:45 CT] Feature shipped — commit fd159b5: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 17:44 CT] RELAY RECOVERY + GAPS (6/9 eve). Relay BACK UP: Solomon reports "relay 1.3.0 reachable." Root cause (Sam, Max effort): SolomonRelaySupervisor task trigger was "At log on" only, and wscript launches the detached supervisor then exits 0, so Task Scheduler marks it succeeded and restart-on-failure never fires if the supervisor later dies = silent stall until next logon. Sam building durability fix (self-heal without logon). GAP 1: Gabriel is BLIND to a live Sam/Code session — Jed tested via Dispatch, Gabriel showed all idle while Sam was working; fix so orchestrator sees live crew sessions (after Florida). GAP 2: campaign STILL posting WRONG Gumroad handle at 17:30 (post showed buildingshultz mislink) — campaign-handle fix (smoke-test item 4) NOT applied yet; must drain before Jed leaves Fri. Stuck dispatches 1781027311486 + 1781042255453 = leftover backlog from relay-down window, drained by smoke test.
 - [2026-06-09 17:30 CT] Feature shipped — commit aa89e16: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 17:15 CT] Feature shipped — commit 908d35a: docs(master-context): Nathan append [PROJECTS]
