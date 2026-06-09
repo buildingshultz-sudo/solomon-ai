@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 18:06 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Smoke test — relay verify probe' (status: dispatched_t <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:12 CT — [PROJECTS] SMOKE TEST + DURABILITY FIX — ALL 6 PASS (6/9 ~6:10pm, Sam Max). (1) RELAY DURAB <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 18:12 CT] SMOKE TEST + DURABILITY FIX — ALL 6 PASS (6/9 ~6:10pm, Sam Max). (1) RELAY DURABILITY PASS: new relay-watchdog.vbs + task SolomonRelaySupervisorWatchdog (60s, no PowerShell, no-dup). PROVEN: killed whole chain NO logon, auto-rebuilt 38.9s, 7777 listening. (2) RELAY+WORKER PASS: pidfile guard = one worker; killed relay alone, respawned 2.2s. (3) DISPATCH ROUND-TRIP PASS: Nathan→Solomon→relay→worker→back ran real, ledger wrote VERIFIED line (activity_log#5453). (4) GUMROAD HANDLE PASS: shultzbuilds→buuldingshultz fixed in campaign_30day_book_merch.md (30) + email-sequences.js (3); next slot posts LIVE link. (5) PM2 PASS all three online. (6) LEDGER+HEALTH PASS: caught simulated dead relay + escalated, no false phone alert. Relay now SELF-HEALS without logon = Florida-safe. Old disabled tasks still pending elevated disable when convenient.
 - [2026-06-09 18:00 CT] Feature shipped — commit fc08fe9: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 17:55 CT] CORRECTION to GAP 1 (6/9): Gabriel is Claude-NATIVE in the OS (the Dispatch/Cowork orchestration layer, not something we built). So the bug is NOT "Gabriel built wrong" — it's that something WE built (our custom relay/worker layer that spawns Sam/Caleb sessions) sits out-of-band from the native session registry Gabriel reads, so a session we launched through our own plumbing is INVISIBLE to the native orchestrator. Gabriel honestly reported all idle because he genuinely couldn't see Sam's live Code session. AFTER-FLORIDA FIX should target reconciling our relay/worker session spawning with the native session visibility (make our sessions register where Gabriel can see them), NOT modifying Gabriel. This is the same class of "we built something that interferes with the native layer" issue — investigate what in our stack blocks native session visibility.
 - [2026-06-09 17:45 CT] Feature shipped — commit fd159b5: docs(master-context): Nathan append [PROJECTS]
@@ -456,6 +457,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 18:08 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://127.0.0.1:9 is unreachable (ECONNREFUSED)
 - [2026-06-09 18:06 CT] caleb · dispatch_1781046377001 · "Smoke test — relay verify probe" · COMPLETED · activity_log#5452
 - [2026-06-09 18:06 CT] solomon · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · http:200
 - [2026-06-09 18:06 CT] nathan · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · file:dispatch_1781046377001.json
