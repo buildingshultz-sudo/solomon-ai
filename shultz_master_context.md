@@ -432,6 +432,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 09:48 CT] caleb · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · STARTED · activity_log#5205
+- [2026-06-09 09:48 CT] caleb · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · STARTED · activity_log#5203
 - [2026-06-09 09:48 CT] solomon · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · DISPATCHED · http:200
 - [2026-06-09 09:48 CT] nathan · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · DISPATCHED · file:dispatch_1781016502102.json
 - [2026-06-08 20:56 CT] sam · dispatch_1780799036228 · "Wire survey responses to auto-update Google Sheets lead tracker" · DEFERRED · deferred (held)
