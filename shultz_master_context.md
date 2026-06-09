@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 18:45 CT — [SAMQUEUE] Nathan dispatch → sam: 'Clear 2 stale stuck dispatches (autonomy test)' (status: <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:46 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Audit YouTube/bio for wrong Gumroad handle (autonomy t <!-- LASTUPDATED -->
 
 ---
 
@@ -295,6 +295,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 18:46 CT] Nathan dispatch → caleb: 'Audit YouTube/bio for wrong Gumroad handle (autonomy test)' (status: dispatched_to_caleb, id: dispatch_1781048760703)
 - [2026-06-09 18:45 CT] Nathan dispatch → sam: 'Clear 2 stale stuck dispatches (autonomy test)' (status: queued, id: dispatch_1781048740529)
 - [2026-06-09 18:06 CT] Nathan dispatch → caleb: 'Smoke test — relay verify probe' (status: dispatched_to_caleb, id: dispatch_1781046377001)
 - [2026-06-09 16:58 CT] Nathan dispatch → sam: 'Fix Gumroad handle in campaign source (stop dead links)' (status: queued, id: dispatch_1781042255453)
@@ -467,6 +468,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 18:46 CT] solomon · dispatch_1781048760703 · "Audit YouTube/bio for wrong Gumroad handle (autonomy test)" · DISPATCHED · http:200
+- [2026-06-09 18:46 CT] nathan · dispatch_1781048760703 · "Audit YouTube/bio for wrong Gumroad handle (autonomy test)" · DISPATCHED · file:dispatch_1781048760703.json
 - [2026-06-09 18:45 CT] solomon · dispatch_1781048740529 · "Clear 2 stale stuck dispatches (autonomy test)" · DISPATCHED · file:dispatch_1781048740529.json
 - [2026-06-09 18:45 CT] nathan · dispatch_1781048740529 · "Clear 2 stale stuck dispatches (autonomy test)" · DISPATCHED · file:dispatch_1781048740529.json
 - [2026-06-09 18:08 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://127.0.0.1:9 is unreachable (ECONNREFUSED)
