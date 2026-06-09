@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 18:57 CT — [SAMQUEUE] Nathan dispatch → sam: 'Review sam-worker auto-exec spec (fact-check before buil <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:58 CT — [SAMQUEUE] SAM-WORKER SPEC + FACT-CHECK SENT (6/9). Goal: close the gap where Sam PC jobs o <!-- LASTUPDATED -->
 
 ---
 
@@ -298,6 +298,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 18:58 CT] SAM-WORKER SPEC + FACT-CHECK SENT (6/9). Goal: close the gap where Sam PC jobs only queue, so safe Sam work auto-runs like caleb-worker. SPEC: persistent sam-worker, allowlist by job type. GREEN (auto-run, read-only): verify, grep, status, file-read, node check, pm2 list, health, git status/log/diff. RED (gated to live Sam + Jed diff-approval): build, fix, deploy, git commit/push, file writes, pm2 restart, npm install, credentials, irreversibles. DEFAULT-DENY: not-explicitly-GREEN becomes RED. SINGLE-WRITER: reads freely but stops+queues the instant a job would write. Every GREEN auto-run writes a VERIFIED ledger line. Sent to Sam as read-only review (dispatch 1781049449958, type verify); came back QUEUED, ironically proving the gap. Sam to confirm: second worker keyed to target sam without colliding with caleb-worker/pidfile guard; job type known before exec; default-deny blocks unsupervised PC writes; lift size; dangers missed. BUILD GATED until Sam reviews + Jed approves.
 - [2026-06-09 18:57 CT] Nathan dispatch → sam: 'Review sam-worker auto-exec spec (fact-check before build)' (status: queued, id: dispatch_1781049449958)
 - [2026-06-09 18:52 CT] Nathan dispatch → sam: 'Prove Sam PC task executes (autonomy + comms test)' (status: queued, id: dispatch_1781049168913)
 - [2026-06-09 18:46 CT] Nathan dispatch → caleb: 'Audit YouTube/bio for wrong Gumroad handle (autonomy test)' (status: dispatched_to_caleb, id: dispatch_1781048760703)
