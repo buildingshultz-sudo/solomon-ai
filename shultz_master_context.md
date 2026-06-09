@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 16:55 CT — [PROJECTS] GUMROAD ZERO-SALES ROOT CAUSE (6/9, Jed at PC): products were NEVER broken. Both <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 16:58 CT — [SAMQUEUE] Nathan dispatch → sam: 'Fix Gumroad handle in campaign source (stop dead links)' <!-- LASTUPDATED -->
 
 ---
 
@@ -277,6 +277,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 16:58 CT] Nathan dispatch → sam: 'Fix Gumroad handle in campaign source (stop dead links)' (status: queued, id: dispatch_1781042255453)
 - [2026-06-09 16:39 CT] Nathan dispatch → caleb: 'Open Gumroad login + wait for Jed to sign in by hand' (status: dispatched_to_caleb, id: dispatch_1781041162937)
 - [2026-06-09 12:48 CT] Nathan dispatch → sam: 'Deploy + run Gumroad relink handler (read-only, 404 root cause)' (status: queued, id: dispatch_1781027311486)
 - [2026-06-09 12:34 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (retry, with URL)' (status: dispatched_to_caleb, id: dispatch_1781026447218)
@@ -446,6 +447,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 16:58 CT] solomon · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
 - [2026-06-09 16:57 CT] nathan · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
 - [2026-06-09 16:50 CT] solomon · dispatch_1781041810715 · "Re-run Gumroad relink — read live URLs (now logged in)" · FAILED · file:dispatch_1781041810715.json
 - [2026-06-09 16:50 CT] nathan · dispatch_1781041810715 · "Re-run Gumroad relink — read live URLs (now logged in)" · DISPATCHED · file:dispatch_1781041810715.json
