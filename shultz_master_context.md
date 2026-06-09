@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 17:09 CT — [PROJECTS] KDP PAPERBACK SUBMITTED (6/9, Jed at PC): "Motivation for Tough Guys" paperback  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 17:15 CT — [PROJECTS] Feature shipped — commit 908d35a: docs(master-context): Nathan append [PROJECTS] <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 17:15 CT] Feature shipped — commit 908d35a: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 17:09 CT] KDP PAPERBACK SUBMITTED (6/9, Jed at PC): "Motivation for Tough Guys" paperback successfully submitted to KDP, now IN REVIEW. Root cause of prior non-publish: the Rights & Pricing tab was "Not Started" (Details + Content were Complete) — KDP won't publish until all 3 tabs are green, so earlier Publish clicks never actually submitted (no rejection email because nothing was submitted). Jed completed Rights & Pricing: worldwide territories, and DROPPED PRICE $19.99 → $14.99 (matches launch-research sweet spot). Awaiting KDP review (up to 72 hrs, longer if flagged low-content). Do NOT resubmit/poke during review. STILL PENDING: Kindle eBook is Draft, blocked by PDF manuscript format — Kindle needs reflowable .docx/EPUB not PDF; that conversion is a real document task (crew can help), separate from paperback, do after. Old duplicate hardcover ASIN CH7JED552C4 (no cover) still to delete eventually.
 - [2026-06-09 17:00 CT] Feature shipped — commit 3363b66: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-09 16:55 CT] GUMROAD ZERO-SALES ROOT CAUSE (6/9, Jed at PC): products were NEVER broken. Both Published, pages load fine: Motivation for Tough Guys ($10), Builder's AI Blueprint Founder's Access ($19). REAL store handle has a TYPO: buuldingshultz.gumroad.com (two u letters). Campaign has posted the WRONG handle (shultzbuilds.gumroad.com) all along = true zero-sales cause. REAL URLs: buuldingshultz.gumroad.com/l/ihjobd (book), buuldingshultz.gumroad.com/l/ygmuv (Blueprint). Fix = find and replace the store URL everywhere links live (campaign, YouTube descriptions, link in bio, docs). Not a code or Sam build. DECIDE FIRST: keep buuldingshultz as permanent handle or correct the spelling? Changing later re-breaks corrected links, so decide before mass replacing. FLAG: Caleb/Cowork path genuinely flaky (buried tabs plus an instant error tonight; Jed suspected since the Claude switch). Diagnose worker and delivery handoff in a clean window after Florida.
@@ -449,6 +450,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 17:20 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNRE
 - [2026-06-09 16:58 CT] solomon · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
 - [2026-06-09 16:57 CT] nathan · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
 - [2026-06-09 16:50 CT] solomon · dispatch_1781041810715 · "Re-run Gumroad relink — read live URLs (now logged in)" · FAILED · file:dispatch_1781041810715.json
