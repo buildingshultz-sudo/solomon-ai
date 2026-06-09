@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 07:44 CT — [GENERAL] SOCIAL ARCHITECTURE CORRECTION (6/9, supersedes the "leave personal alone" line) <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 08:01 CT — [PROJECTS] BOOK LINE — "Motivation for Tough Guys" is a PRODUCT LINE, not a one-off (locked <!-- LASTUPDATED -->
 
 ---
 
@@ -86,6 +86,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 08:01 CT] BOOK LINE — "Motivation for Tough Guys" is a PRODUCT LINE, not a one-off (locked 6/9, Jed). Source: 200+ sayings from Jed's notebook (photos on Google Drive, LIKELY already processed by a Manus file — VERIFY that file exists w/ usable text before re-processing; may be in the June-19 Manus export priority files). 200+ sayings → 4 VOLUMES (Vol 1 = existing book, reframed as Volume 1). FORMAT EXPANSIONS off same material: word-a-day / 30-day calendar; hardback / premium editions; higher-margin publisher route (KDP vs IngramSpark — Nathan researching margins). LATER: a different book type — backstory / longer-form narrative (not now). KEY DEPENDENCY: the KDP cover-upload selector bug is the GATE for the ENTIRE line, not just Vol 1 — every volume + format hits that same upload step. Fix once properly (UltraCode candidate given recurring DOM-selector failure) and the whole series flows. Build-once-earn-forever, strong Tuesday-vision fit.
+- [2026-06-09 07:45 CT] Feature shipped — commit 0682a3a: docs(master-context): Nathan append [GENERAL]
 - [2026-06-09 07:30 CT] Feature shipped — commit a8fa79a: docs(master-context): Nathan append [STACK]
 - [2026-06-08 19:15 CT] Feature shipped — commit ff5538f: docs(master-context): Nathan append [STACK]
 - [2026-06-08 18:15 CT] Feature shipped — commit a22a9b5: docs(master-context): Nathan append [GENERAL]
