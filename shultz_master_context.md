@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 17:55 CT — [PROJECTS] CORRECTION to GAP 1 (6/9): Gabriel is Claude-NATIVE in the OS (the Dispatch/Cowo <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:06 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Smoke test — relay verify probe' (status: dispatched_t <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 18:00 CT] Feature shipped — commit fc08fe9: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 17:55 CT] CORRECTION to GAP 1 (6/9): Gabriel is Claude-NATIVE in the OS (the Dispatch/Cowork orchestration layer, not something we built). So the bug is NOT "Gabriel built wrong" — it's that something WE built (our custom relay/worker layer that spawns Sam/Caleb sessions) sits out-of-band from the native session registry Gabriel reads, so a session we launched through our own plumbing is INVISIBLE to the native orchestrator. Gabriel honestly reported all idle because he genuinely couldn't see Sam's live Code session. AFTER-FLORIDA FIX should target reconciling our relay/worker session spawning with the native session visibility (make our sessions register where Gabriel can see them), NOT modifying Gabriel. This is the same class of "we built something that interferes with the native layer" issue — investigate what in our stack blocks native session visibility.
 - [2026-06-09 17:45 CT] Feature shipped — commit fd159b5: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 17:44 CT] RELAY RECOVERY + GAPS (6/9 eve). Relay BACK UP: Solomon reports "relay 1.3.0 reachable." Root cause (Sam, Max effort): SolomonRelaySupervisor task trigger was "At log on" only, and wscript launches the detached supervisor then exits 0, so Task Scheduler marks it succeeded and restart-on-failure never fires if the supervisor later dies = silent stall until next logon. Sam building durability fix (self-heal without logon). GAP 1: Gabriel is BLIND to a live Sam/Code session — Jed tested via Dispatch, Gabriel showed all idle while Sam was working; fix so orchestrator sees live crew sessions (after Florida). GAP 2: campaign STILL posting WRONG Gumroad handle at 17:30 (post showed buildingshultz mislink) — campaign-handle fix (smoke-test item 4) NOT applied yet; must drain before Jed leaves Fri. Stuck dispatches 1781027311486 + 1781042255453 = leftover backlog from relay-down window, drained by smoke test.
@@ -284,6 +285,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 18:06 CT] Nathan dispatch → caleb: 'Smoke test — relay verify probe' (status: dispatched_to_caleb, id: dispatch_1781046377001)
 - [2026-06-09 16:58 CT] Nathan dispatch → sam: 'Fix Gumroad handle in campaign source (stop dead links)' (status: queued, id: dispatch_1781042255453)
 - [2026-06-09 16:39 CT] Nathan dispatch → caleb: 'Open Gumroad login + wait for Jed to sign in by hand' (status: dispatched_to_caleb, id: dispatch_1781041162937)
 - [2026-06-09 12:48 CT] Nathan dispatch → sam: 'Deploy + run Gumroad relink handler (read-only, 404 root cause)' (status: queued, id: dispatch_1781027311486)
@@ -454,6 +456,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 18:06 CT] solomon · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · http:200
+- [2026-06-09 18:06 CT] nathan · dispatch_1781046377001 · "Smoke test — relay verify probe" · DISPATCHED · file:dispatch_1781046377001.json
 - [2026-06-09 17:20 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNRE
 - [2026-06-09 16:58 CT] solomon · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
 - [2026-06-09 16:57 CT] nathan · dispatch_1781042255453 · "Fix Gumroad handle in campaign source (stop dead links)" · DISPATCHED · file:dispatch_1781042255453.json
