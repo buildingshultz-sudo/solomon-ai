@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 18:22 CT — [PROJECTS] VERIFICATION FINDING (6/9 eve): the "Solomon tasks not working" issue is NOT a b <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 18:36 CT — [PROJECTS] VERIFICATION (6/9 eve). FIRST SALE CONFIRMED: Jed bought Motivation for Tough Gu <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 18:36 CT] VERIFICATION (6/9 eve). FIRST SALE CONFIRMED: Jed bought Motivation for Tough Guys ($10) via live buuldingshultz link; Solomon fired NEW SALE Telegram alert = money loop works end-to-end. SALE-ALERT COVERAGE: Gumroad (book+Blueprint) DOES alert (webhook wired). Merch/Spreadshop does NOT alert yet (not connected) — gap, needs webhook. Affiliate (Amazon/Acme) canNOT be real-time (no per-sale webhook) — pull via reports. Tasia's future sale-view = Gumroad-only today. TEST #5 LESSON: fresh Sam session ran kill-recover against VPS, correctly found nothing on 7777 there — relay is PC-SIDE (pc-relay.js, C:\Users\Ashle\Solomon\pc-relay\). Sam refused to kill a nonexistent target (good guardrail) but mis-routed to VPS because prompt led with "VPS IP." LESSON: fresh Sam sessions don't inherit build context — state target MACHINE explicitly (PC vs VPS); Sam's Code host IS the PC. Re-running #5 PC-targeted.
+- [2026-06-09 18:30 CT] Feature shipped — commit 20fa827: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 18:22 CT] VERIFICATION FINDING (6/9 eve): the "Solomon tasks not working" issue is NOT a broken pipe — it's the APPROVAL GATE. Nathan's get_revenue_snapshot call returned "No approval received" (waiting on Jed's approval tap, never actioned). BUT get_recent_activity worked instantly (no approval needed) and showed the smoke-test verify probe dispatch_1781046377001 ran created→dispatched_to_caleb→caleb_done with real result. So: Nathan↔Solomon connection ALIVE, chain executes, relay healthy. The friction is that some Solomon MCP tools require Jed's approval tap and that prompt either isn't surfacing to Jed or isn't getting tapped — making tasks LOOK dead when they're actually waiting. FLORIDA RISK: if a task needs approval while Jed's away and he can't see/tap it, it hangs. AFTER-FLORIDA: review which Solomon tools require approval and how approval prompts surface to Jed (esp. from phone), so nothing silently waits. Health checks passing every 5 min through 23:20.
 - [2026-06-09 18:15 CT] Feature shipped — commit 29dd004: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 18:12 CT] SMOKE TEST + DURABILITY FIX — ALL 6 PASS (6/9 ~6:10pm, Sam Max). (1) RELAY DURABILITY PASS: new relay-watchdog.vbs + task SolomonRelaySupervisorWatchdog (60s, no PowerShell, no-dup). PROVEN: killed whole chain NO logon, auto-rebuilt 38.9s, 7777 listening. (2) RELAY+WORKER PASS: pidfile guard = one worker; killed relay alone, respawned 2.2s. (3) DISPATCH ROUND-TRIP PASS: Nathan→Solomon→relay→worker→back ran real, ledger wrote VERIFIED line (activity_log#5453). (4) GUMROAD HANDLE PASS: shultzbuilds→buuldingshultz fixed in campaign_30day_book_merch.md (30) + email-sequences.js (3); next slot posts LIVE link. (5) PM2 PASS all three online. (6) LEDGER+HEALTH PASS: caught simulated dead relay + escalated, no false phone alert. Relay now SELF-HEALS without logon = Florida-safe. Old disabled tasks still pending elevated disable when convenient.
@@ -253,6 +255,8 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-09 18:35 CT] Revenue/billing email from Gumroad: "New sale of Motivation for Tough Guys for $10"
+- [2026-06-09 18:35 CT] Revenue/billing email from Jedidiah Shultz: "You bought Motivation for Tough Guys!"
 - [2026-06-08 18:10 CT] Revenue/billing email from Cloudflare: "Your additional plan addons for buildingshultz.com subscription has been canceled"
 - [2026-06-08 17:46 CT] CORRECTION — contractor/TradeQuote outreach almost certainly NEVER SENT (6/8): the "send 5 / send 8 / send 4 more" contractor research emails + scrape re-runs are STILL pending files in sam-queue (1780794160200, 1780797136084, 1780840372020, etc.). Per the no-executor architecture truth, pending = never consumed = never sent. The belief "23 contractor outreach touchpoints sent" is almost certainly the same illusion as the Troveo pitch (Gabriel confirmed unsent, zero send_email rows). DO NOT trust "23 sent." This is a FIRST send, not a re-send. Before/after sending, verify against the Gmail Sent folder and require send_email rows in activity_log — send only through a live verified Solomon/Caleb session, confirm each delivery, never assume.
 - [2026-06-08 14:10 CT] Revenue/billing email from Google One: "Changes to your Google One Premium subscription"
