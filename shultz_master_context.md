@@ -444,6 +444,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 16:40 CT] caleb · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · COMPLETED · activity_log#5400
+- [2026-06-09 16:40 CT] caleb · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · STARTED · activity_log#5398
 - [2026-06-09 16:39 CT] solomon · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · DISPATCHED · http:200
 - [2026-06-09 16:39 CT] nathan · dispatch_1781041162937 · "Open Gumroad login + wait for Jed to sign in by hand" · DISPATCHED · file:dispatch_1781041162937.json
 - [2026-06-09 12:57 CT] caleb · dispatch_1780944446155 · "Fix Gumroad 404 — verify live URLs + relink campaign" · STARTED · activity_log#5301
