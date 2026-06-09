@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 12:48 CT — [SAMQUEUE] Nathan dispatch → sam: 'Deploy + run Gumroad relink handler (read-only, 404 root <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 13:50 CT — [PROJECTS] FINANCIAL TRACKING — build item (6/9, Jed). Get clean automated money-flow track <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 13:50 CT] FINANCIAL TRACKING — build item (6/9, Jed). Get clean automated money-flow tracking on the team's radar: every penny IN and OUT, split business vs. personal, feeding the debt snowball. Needed NOW for Jed's own decisions + snowball progress, independent of any Tasia plan. Builds on existing Solomon Gumroad sale alerts → goal is a simple monthly money-flow view (business revenue in, business expenses out, personal/business split, snowball progress). This becomes the real infrastructure that Tasia's future financial-fluency training rides on top of — build it for Jed first, so when she's ready it already exists and is real. NOT a tax-filing tool, NOT financial advice — organization + visibility only. Sam build, scope in a future PC session.
+- [2026-06-09 13:00 CT] Feature shipped — commit fc09f05: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 12:45 CT] Feature shipped — commit 9592197: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 12:15 CT] Feature shipped — commit 46e85f0: docs(master-context): Nathan append [STACK]
 - [2026-06-09 10:00 CT] Feature shipped — commit 0907e6c: docs(master-context): execution ledger [LEDGER]
