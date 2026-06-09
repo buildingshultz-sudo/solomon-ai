@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 12:01 CT — [STACK] STACK DECISION LOCKED (6/9): STAY on Claude API + DigitalOcean. Do NOT switch to <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 12:34 CT — [SAMQUEUE] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (retry, wit <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 12:15 CT] Feature shipped — commit 46e85f0: docs(master-context): Nathan append [STACK]
 - [2026-06-09 10:00 CT] Feature shipped — commit 0907e6c: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 09:48 CT] BOOK MARKETING — execution split (6/9). PHASE 0 (assistant, pre-launch): finalize covers + content-rich interiors; own ISBNs if retail planned; KDP series page + A+ Content all volumes + Author Central/Follow + 7 keyword fields + categories; Beehiiv free-PDF lead magnet ("25 Tough-Guy Truths", $0) + launch email sequence; wire book/newsletter links into all YouTube touchpoints; recruit 20-40 ARC/launch team. PHASE 1 (4-wk launch, assistant-run): email sequence pre-launch→launch→follow-up→weekly sustain; launch-team buys + HONEST reviews (10-15 wk1 then drip; NEVER pay/swap/incentivize/family — TOS, earned ONLY); optional KDP Select Countdown Vol 1. BIG-BOX: SKIP national chains (returnable + 55% + slotting $1k-10k/store = can go negative; BN paid placement = scam). JED-ONLY high-margin: bulk/relationship convos (church men's group, union, contractors). KDP publish gated on Sam cover-selector fix (PC session).
 - [2026-06-09 09:47 CT] BOOK MARKETING STRATEGY LOCKED (6/9, whole-crew) — Motivation for Tough Guys series launch, NO paid ads / NO personal social posting. BACKBONE = Beehiiv email list + coordinated launch-team buy + free Amazon-native levers. Run as a 4-WEEK campaign (sustained velocity), NOT a one-day blitz — 2026 Amazon rewards rolling sales + review velocity over a spike. CHANNELS Jed has: Beehiiv newsletter (VERIFY live + monitored), YouTube ~1,460 subs (book/newsletter link as FIRST line of every long-form description + pinned comments + Community posts), word of mouth + weekly in-home community, local trade/union/church/contractor network. HIGHEST-MARGIN = direct + bulk sales (author copies ~$2.30 pb/$6.80 hc → keep ~$9-13/pb hand-sold vs ~$2-3 Amazon): church men's group, union hall, contractor gifts, trade events. Consignment ONLY at hyper-relevant non-bookstore spots (hardware/farm-supply/gun/barber/diner), 60/40 author-favor, no monthly fees.
@@ -268,6 +269,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 12:34 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (retry, with URL)' (status: dispatched_to_caleb, id: dispatch_1781026447218)
 - [2026-06-09 09:48 CT] Nathan dispatch → caleb: 'Verify Beehiiv newsletter live + monitored (book launch backbone)' (status: dispatched_to_caleb, id: dispatch_1781016502102)
 - [2026-06-08 17:46 CT] QUEUE TRIAGE (6/8, Jed-approved): KILL ~12 dead/superseded — 9 legacy June1-4 generic "build feature" orphans; "Fix autonomous queue" (1780799046736, replaced by today's real executor); master-cleanup (1780922131620); reliability-test (1780947744182); dispatch-cap-raise (1780841495864, done). KILL-AFTER-VERIFY (confirm feature live, then purge): Tasia notification (1780799562798) + whitelist (1780800279119); build-caleb-runner; Gabriel→Nathan channel + get_recent_activity (1780790862462). CONSOLIDATE: 7 KDP dispatches → ONE KDP task gated behind a real cover-selector fix; 5 Manus dispatches → ONE export-before-June-19 task. KEEP: Manus export (June 19 deadline); 2 today Manus verify tasks; Stripe audit (still open); Gumroad 404 (needs REAL browser handler, not a scrape); Sheets lead tracker + survey-to-Sheets wiring. Execution = Sam filesystem cleanup, runs AFTER the foundation task lands.
 - [2026-06-08 14:42 CT] Nathan dispatch → caleb: 'reliability test — caleb verify e2e' (status: dispatched_to_caleb, id: dispatch_1780947744182)
@@ -434,6 +436,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-09 12:34 CT] solomon · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · DISPATCHED · http:200
+- [2026-06-09 12:34 CT] nathan · dispatch_1781026447218 · "Verify Beehiiv newsletter live + monitored (retry, with URL)" · DISPATCHED · file:dispatch_1781026447218.json
 - [2026-06-09 09:48 CT] caleb · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · STARTED · activity_log#5205
 - [2026-06-09 09:48 CT] caleb · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · STARTED · activity_log#5203
 - [2026-06-09 09:48 CT] solomon · dispatch_1781016502102 · "Verify Beehiiv newsletter live + monitored (book launch backbone)" · DISPATCHED · http:200
