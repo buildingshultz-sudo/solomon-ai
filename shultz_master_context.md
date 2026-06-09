@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 07:39 CT — [GENERAL] SOCIAL ARCHITECTURE (locked 6/9, Jed clarified): Jed is NOT a social media perso <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 07:44 CT — [GENERAL] SOCIAL ARCHITECTURE CORRECTION (6/9, supersedes the "leave personal alone" line) <!-- LASTUPDATED -->
 
 ---
 
@@ -372,6 +372,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-09 07:44 CT] SOCIAL ARCHITECTURE CORRECTION (6/9, supersedes the "leave personal alone" line): The personal Jedidiah Shultz Facebook CAN be used as a distribution surface. The rule is NOT "don't use it" — it's that Jed never monitors or performs on it. Solomon may post brand-relevant content there and monitors comments/messages; Solomon surfaces to Jed ONLY legitimate questions worth a real answer (and can draft the reply), filtering out likes/small talk/noise so Jed never has to deal with engagement. HIGHER BAR than the brand page: because it's Jed's personal name/face among real long-time friends, Solomon only posts things Jed would genuinely share (book launch, real milestone, a good build) — NOT daily campaign spam (that's the Building Shultz page's job). Goal unchanged: tap the warm reach without Jed touching it or friends feeling marketed-at. Personal Instagram: still parked/blocked. Building Shultz page = automated hub; Irish Craftsman = light auto amplifier (bigger follower count).
 - [2026-06-09 07:39 CT] SOCIAL ARCHITECTURE (locked 6/9, Jed clarified): Jed is NOT a social media person — near-zero personal engagement, doesn't post about his life, phone is business-ONLY, goal is minimum phone time (Tuesday vision). So: (1) Building Shultz FB page = the single automated hub, Solomon posts here, primary funnel. (2) Irish Craftsman FB page = light fully-automated cross-post amplifier ONLY because it has the bigger follower count — zero effort from Jed; if its upkeep becomes a hassle, pause it without hesitation. (3) Personal Jedidiah Facebook + personal Instagram = LEAVE ALONE — not manual, not automated, not a channel. Do NOT propose turning the personal profile into a marketing/warm-reach surface; it would pull Jed back onto his phone for no return and contradicts the mission. Distribution = YouTube + brand page + products + the apps, NOT Jed personally performing online. The system does the social work on BRAND surfaces so Jed never touches personal social media.
 - [2026-06-09 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-08 18:10 CT] JED-ONLY PENDING — two elevated PowerShell commands to run at the PC (admin) to kill legacy logon tasks for good and remove the duplicate-worker risk: schtasks /Change /TN "CalebWorker" /DISABLE  AND  schtasks /Change /TN "SolomonRelay" /DISABLE. Not urgent — the new supervisor self-corrects the race via port takeover — but until disabled there is a latent duplicate-worker risk at every logon. Run next time at the keyboard.
