@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 17:15 CT — [PROJECTS] Feature shipped — commit 908d35a: docs(master-context): Nathan append [PROJECTS] <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 17:44 CT — [PROJECTS] RELAY RECOVERY + GAPS (6/9 eve). Relay BACK UP: Solomon reports "relay 1.3.0 rea <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-09 17:44 CT] RELAY RECOVERY + GAPS (6/9 eve). Relay BACK UP: Solomon reports "relay 1.3.0 reachable." Root cause (Sam, Max effort): SolomonRelaySupervisor task trigger was "At log on" only, and wscript launches the detached supervisor then exits 0, so Task Scheduler marks it succeeded and restart-on-failure never fires if the supervisor later dies = silent stall until next logon. Sam building durability fix (self-heal without logon). GAP 1: Gabriel is BLIND to a live Sam/Code session — Jed tested via Dispatch, Gabriel showed all idle while Sam was working; fix so orchestrator sees live crew sessions (after Florida). GAP 2: campaign STILL posting WRONG Gumroad handle at 17:30 (post showed buildingshultz mislink) — campaign-handle fix (smoke-test item 4) NOT applied yet; must drain before Jed leaves Fri. Stuck dispatches 1781027311486 + 1781042255453 = leftover backlog from relay-down window, drained by smoke test.
+- [2026-06-09 17:30 CT] Feature shipped — commit aa89e16: docs(master-context): execution ledger [LEDGER]
 - [2026-06-09 17:15 CT] Feature shipped — commit 908d35a: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-09 17:09 CT] KDP PAPERBACK SUBMITTED (6/9, Jed at PC): "Motivation for Tough Guys" paperback successfully submitted to KDP, now IN REVIEW. Root cause of prior non-publish: the Rights & Pricing tab was "Not Started" (Details + Content were Complete) — KDP won't publish until all 3 tabs are green, so earlier Publish clicks never actually submitted (no rejection email because nothing was submitted). Jed completed Rights & Pricing: worldwide territories, and DROPPED PRICE $19.99 → $14.99 (matches launch-research sweet spot). Awaiting KDP review (up to 72 hrs, longer if flagged low-content). Do NOT resubmit/poke during review. STILL PENDING: Kindle eBook is Draft, blocked by PDF manuscript format — Kindle needs reflowable .docx/EPUB not PDF; that conversion is a real document task (crew can help), separate from paperback, do after. Old duplicate hardcover ASIN CH7JED552C4 (no cover) still to delete eventually.
 - [2026-06-09 17:00 CT] Feature shipped — commit 3363b66: docs(master-context): Nathan dispatch [SAMQUEUE]
