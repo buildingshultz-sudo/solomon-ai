@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-10 09:24 CT — [SAMQUEUE] Nathan dispatch → sam: 'GateB proof-b RED deploy' (status: queued, id: dispatch_ <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-10 09:24 CT — [SAMQUEUE] Nathan dispatch → caleb: 'GateB proof-c caleb verify (path-intact check)' (statu <!-- LASTUPDATED -->
 
 ---
 
@@ -315,6 +315,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-10 09:24 CT] Nathan dispatch → caleb: 'GateB proof-c caleb verify (path-intact check)' (status: dispatched_to_caleb, id: dispatch_1781101489618)
 - [2026-06-10 09:24 CT] Nathan dispatch → sam: 'GateB proof-b RED deploy' (status: queued, id: dispatch_1781101488618)
 - [2026-06-10 09:24 CT] Nathan dispatch → sam: 'GateB proof-a GREEN git-status' (status: queued, id: dispatch_1781101487059)
 - [2026-06-10 08:51 CT] GATE B SCOPING REVIEWED + DECISIONS (6/10). Sam's doc accepted — staging IS the safety: env flag SAM_GREEN_ROUTING off/shadow/on, shadow logs would-be routing with ZERO behavior change, instant kill-switch to all-RED-hold. TIMING CALL: build Thursday, ship in SHADOW only, do NOT flip 'on' before Florida — soak the full ten days away, eyeball shadow decisions for false-greens on return, then flip with confidence. Flipping on with no soak 24h before leaving = trading a hard guarantee for speed (never-do). JED DECISIONS (pending confirm): (1) auto-approve GREEN read-only jobs = YES; (2) v1 GREEN set = all six (git-status, git-log, grep, read, list, stat), all proven in Gate A, validated together in shadow; (3) PC-local ledger mirror kept as permanent breadcrumb = YES. verify stays OUT of v1 (overloaded, protects Caleb path), fold in later. Files: dispatch-core ~60-90 lines, pc-relay ~40 (/sam-task), bot.js ~20 (/sam-result), sam-worker ~10-20.
@@ -500,6 +501,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-10 09:24 CT] solomon · dispatch_1781101489618 · "GateB proof-c caleb verify (path-intact check)" · DISPATCHED · http:200
+- [2026-06-10 09:24 CT] nathan · dispatch_1781101489618 · "GateB proof-c caleb verify (path-intact check)" · DISPATCHED · file:dispatch_1781101489618.json
 - [2026-06-10 09:24 CT] solomon · dispatch_1781101488618 · "GateB proof-b RED deploy" · DISPATCHED · file:dispatch_1781101488618.json
 - [2026-06-10 09:24 CT] nathan · dispatch_1781101488618 · "GateB proof-b RED deploy" · DISPATCHED · file:dispatch_1781101488618.json
 - [2026-06-10 09:24 CT] solomon · dispatch_1781101487059 · "GateB proof-a GREEN git-status" · DISPATCHED · file:dispatch_1781101487059.json
