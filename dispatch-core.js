@@ -13,6 +13,13 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const Database = require('better-sqlite3');
+// Universal execution ledger — the single shared logging path (Part 1). Every
+// dispatch lifecycle EVENT / state change here is mirrored to the ledger so the
+// whole crew reads one ground-truth-backed truth. Loaded defensively so a ledger
+// problem can never break dispatch.
+let ledger = null;
+try { ledger = require('./execution-ledger'); } catch (_) { ledger = null; }
+function _ledger(evt) { try { if (ledger) return ledger.record(evt); } catch (_) {} return null; }
 
 const SOLOMON_DIR = '/root/solomon-v4';
 const SAM_QUEUE_DIR = path.join(SOLOMON_DIR, 'sam-queue');
@@ -70,6 +77,33 @@ function resolveRouting(target, taskType) {
   return { target: resolved, rerouted, note };
 }
 
+// ── GATE B — Sam GREEN-lane classification (shadow by default) ───────────────
+// SAM_GREEN_ROUTING: off | shadow | on
+//   off    = pre-Gate-B behavior, no green logic acts, no shadow log (instant revert).
+//   shadow = classify + LOG the would-be lane, but route EVERYTHING to sam-queue
+//            exactly as today. ZERO behavior change.
+//   on     = GREEN-lane sam jobs route to the PC sam-green-queue executor via the
+//            relay /sam-task endpoint; GREEN read-only jobs auto-run (no approval).
+// v1 GREEN set = the six PROVEN Gate A sam-worker registry types (all read-only).
+// verify is DELIBERATELY excluded from v1 (protect the Caleb verify path; fold in
+// later once the VPS autoexec probe is reconciled). git-diff excluded from v1.
+const SAM_GREEN_ROUTING = String(process.env.SAM_GREEN_ROUTING || 'off').toLowerCase();
+const SAM_GREEN_TYPES = new Set(['git-status', 'git-log', 'grep', 'read', 'list', 'stat']);
+function samLaneFor(taskType) {
+  return SAM_GREEN_TYPES.has(String(taskType || '').toLowerCase()) ? 'green' : 'red';
+}
+// One clear, greppable line per dispatch decision (type 'sam_green_shadow').
+// Emitted in shadow AND on, so the soak log is reviewable either way.
+function _shadowLog(rec, lane) {
+  if (SAM_GREEN_ROUTING === 'off') return;
+  const line = `[SHADOW] dispatch=${rec.id} task_type=${rec.task_type} would_be_lane=${lane} target=${rec.target} routing=${SAM_GREEN_ROUTING}`;
+  try {
+    db().prepare("INSERT INTO activity_log (type, status, summary) VALUES (?, ?, ?)")
+      .run('sam_green_shadow', 'ok', `[${ctStamp()}] ${line}`);
+  } catch (_) {}
+  try { console.log(line); } catch (_) {}
+}
+
 // ── activity_log writer (spec format) ───────────────────────────────────────
 function logActivity(summary) {
   try {
@@ -124,6 +158,16 @@ function prepareDispatch(input) {
   const routing = resolveRouting(target, task_type);
   const finalTarget = routing.target;
 
+  // GATE B — Sam GREEN-lane classification. The lane is computed for every
+  // dispatch (for the shadow log), but the green ROUTE + auto-approve only act
+  // when SAM_GREEN_ROUTING === 'on' AND the job is sam-targeted. In shadow/off
+  // a GREEN job keeps today's approval behavior and routes to sam-queue as today.
+  const sam_lane = samLaneFor(task_type);
+  if (sam_lane === 'green' && finalTarget === 'sam' && SAM_GREEN_ROUTING === 'on'
+      && !(input && Object.prototype.hasOwnProperty.call(input, 'requires_approval'))) {
+    requires_approval = false; // Decision (1): GREEN read-only auto-runs, no Jed tap.
+  }
+
   // cap description at 2000 chars
   if (description.length > 2000) description = description.slice(0, 2000) + '...[truncated]';
 
@@ -145,13 +189,19 @@ function prepareDispatch(input) {
     dispatched_by: 'nathan',
     timestamp_ct: new Date().toISOString(),
     status,
+    sam_lane, // GATE B: 'green' (read-only PC executor lane) | 'red' (sam-queue hold)
     params,
     // sam-queue compatibility (get_sam_queue reads .task). NOTE: there is NO autonomous "Sam watcher" — that was never built. build/fix dispatches require the Claude Code agent (manual/orchestrated); verify/ping auto-run via parallel_task_manager.processDispatchQueue; caleb tasks route to the relay->worker.
     task: title,
     handler: finalTarget
   };
   writeRecord(record);
+  _shadowLog(record, sam_lane); // GATE B: one greppable decision line (no-op when routing=off)
   logActivity(`[${ctStamp()}] Nathan dispatch ${id} created: target=${finalTarget} task_type=${task_type} title='${title}' priority=${priority} status=${status}`);
+  // LEDGER: a dispatch was created/queued. Proof = the sam-queue file on disk.
+  _ledger({ agent: record.dispatched_by || 'solomon', taskId: id, title, action: 'dispatched',
+    detail: `target=${finalTarget} type=${task_type} status=${status}`,
+    artifact: { type: 'file', value: dispatchFilePath(id) } });
   return { record, autoProceed: (status === 'queued') };
 }
 
@@ -216,7 +266,49 @@ async function appendSamQueueLog(rec) {
 // master context on success.
 async function routeOnApprove(rec) {
   let cardText, ok = true;
-  if (rec.target === 'sam') {
+  let calebHttp = null; // captured relay HTTP status → ledger artifact for caleb routing
+  let samHttp = null;   // GATE B: captured relay HTTP status for the sam GREEN lane
+  // GATE B — GREEN lane: sam-targeted read-only job → PC sam-green-queue via the
+  // relay /sam-task endpoint. ONLY when SAM_GREEN_ROUTING==='on'. In shadow/off
+  // this condition is false and execution falls through to the sam-queue branch
+  // below (today's behavior, zero change).
+  if (rec.target === 'sam' && rec.sam_lane === 'green' && SAM_GREEN_ROUTING === 'on') {
+    const base = process.env.PC_RELAY_URL;
+    const secret = process.env.PC_RELAY_SECRET;
+    if (!base || base === 'PLACEHOLDER') {
+      rec.status = 'sam_error'; ok = false; writeRecord(rec);
+      cardText = `⚠️ Sam GREEN relay failed (no PC_RELAY_URL) — ${rec.title}`;
+    } else {
+      const axios = require('axios');
+      // Mirrors the /caleb-task contract; handler='sam' targets the sam-green-queue.
+      const body = {
+        ...(rec.params || {}), // task fields (repo/path/pattern/…) — fixed fields below win
+        handler: 'sam',
+        task: rec.title,
+        template_id: 'nathan_dispatch_' + rec.task_type,
+        task_type: rec.task_type,
+        title: rec.title,
+        description: rec.description,
+        priority: rec.priority,
+        dispatch_id: rec.id
+      };
+      const headers = { 'x-relay-secret': secret, 'x-secret': secret, 'Content-Type': 'application/json' };
+      try {
+        const resp = await axios.post(base.replace(/\/+$/, '') + '/sam-task', body, { headers, timeout: 8000, validateStatus: () => true });
+        samHttp = resp.status;
+        if (resp.status === 200) {
+          rec.status = 'dispatched_to_sam'; writeRecord(rec);
+          cardText = `✅ Sent to Sam (GREEN) · ${rec.title}`;
+        } else {
+          rec.status = 'sam_error'; ok = false; writeRecord(rec);
+          cardText = `⚠️ Sam GREEN relay failed (${resp.status}) — ${rec.title}`;
+        }
+      } catch (e) {
+        rec.status = 'sam_error'; ok = false; writeRecord(rec);
+        cardText = `⚠️ Sam GREEN relay failed (${e.code || 'network'}) — ${rec.title}`;
+      }
+    }
+  } else if (rec.target === 'sam') {
     rec.status = 'queued';
     writeRecord(rec);
     cardText = `✅ Queued for Sam · ${rec.title}`;
@@ -246,6 +338,7 @@ async function routeOnApprove(rec) {
       const headers = { 'x-relay-secret': secret, 'x-secret': secret, 'Content-Type': 'application/json' };
       try {
         const resp = await axios.post(base.replace(/\/+$/, '') + '/caleb-task', body, { headers, timeout: 8000, validateStatus: () => true });
+        calebHttp = resp.status;
         if (resp.status === 200) {
           rec.status = 'dispatched_to_caleb'; writeRecord(rec);
           cardText = `✅ Sent to Caleb · ${rec.title}`;
@@ -263,7 +356,20 @@ async function routeOnApprove(rec) {
     cardText = `⚠️ Unknown target '${rec.target}' — ${rec.title}`;
   }
   logActivity(`[${ctStamp()}] Nathan dispatch ${rec.id} ${rec.status}: ${rec.title}`);
-  if (ok && (rec.status === 'queued' || rec.status === 'dispatched_to_caleb')) {
+  // LEDGER: routing decision. Proof for caleb = the relay's HTTP status; for sam
+  // = the queued file on disk; a relay error is a real (negative) http artifact.
+  {
+    const routedOk = ok && (rec.status === 'queued' || rec.status === 'dispatched_to_caleb' || rec.status === 'dispatched_to_sam');
+    const artifact = (rec.target === 'caleb' && calebHttp != null)
+      ? { type: 'http', value: calebHttp }
+      : (samHttp != null)
+        ? { type: 'http', value: samHttp }
+        : { type: 'file', value: dispatchFilePath(rec.id) };
+    _ledger({ agent: 'solomon', taskId: rec.id, title: rec.title,
+      action: routedOk ? 'dispatched' : 'failed',
+      detail: `routed → ${rec.target} (${rec.status})`, artifact });
+  }
+  if (ok && (rec.status === 'queued' || rec.status === 'dispatched_to_caleb' || rec.status === 'dispatched_to_sam')) {
     await appendSamQueueLog(rec); // Step 7
   }
   return { status: rec.status, cardText, ok };
@@ -274,6 +380,9 @@ function cancelDispatch(rec) {
   rec.status = 'cancelled';
   writeRecord(rec);
   logActivity(`[${ctStamp()}] Nathan dispatch ${rec.id} cancelled: ${rec.title}`);
+  // LEDGER: a dispatch was blocked/cancelled. Proof = the persisted file.
+  _ledger({ agent: 'solomon', taskId: rec.id, title: rec.title, action: 'blocked',
+    detail: 'cancelled by Jed', artifact: { type: 'file', value: dispatchFilePath(rec.id) } });
   return `❌ Cancelled · ${rec.title}`;
 }
 
@@ -289,12 +398,54 @@ function recordCalebResult(id, status, summary) {
   rec.caleb_summary = String(summary || '').slice(0, 500);
   rec.caleb_reported_at = new Date().toISOString();
   writeRecord(rec);
-  logActivity(`[${ctStamp()}] Nathan dispatch ${id} ${rec.status}: ${rec.title} — ${rec.caleb_summary}`);
+  // Write the report-back row and CAPTURE its id — that row (proof the PC worker
+  // actually reported back over /caleb-result) is the ground-truth artifact for
+  // the ledger. Verified AT WRITE TIME: a caleb "done" with no report row reads
+  // UNVERIFIED on the spot, not 5 minutes later.
+  let artId = null;
+  try {
+    const info = db().prepare("INSERT INTO activity_log (type, status, summary) VALUES (?, ?, ?)")
+      .run('nathan_dispatch', 'ok',
+        `[${ctStamp()}] Nathan dispatch ${id} ${rec.status}: ${rec.title} — ${rec.caleb_summary}`);
+    artId = info.lastInsertRowid;
+  } catch (_) {}
+  const action = status === 'done' ? 'completed' : status === 'failed' ? 'failed' : 'started';
+  _ledger({ agent: 'caleb', taskId: id, title: rec.title, action,
+    detail: rec.caleb_summary,
+    artifact: artId ? { type: 'activity_log', value: artId } : { type: 'text', value: rec.caleb_summary } });
+  return rec;
+}
+
+// ── GATE B — Sam GREEN report-back — PC sam-worker → VPS /sam-result ─────────
+// Mirror of recordCalebResult with agent='sam'. This is how routed GREEN jobs
+// (those carrying a dispatch_id) UNIFY into the canonical VPS ledger — the PC's
+// local ledger mirror remains a breadcrumb, but THIS row is the authoritative,
+// verified-at-write-time artifact. status: 'done'|'failed'|'refused'|short string.
+function recordSamResult(id, status, summary) {
+  const rec = readDispatch(id);
+  if (!rec) return null;
+  rec.status = status === 'done' ? 'sam_done'
+    : status === 'failed' ? 'sam_failed'
+    : 'sam_' + String(status || 'reported').replace(/[^a-z0-9_]/gi, '_');
+  rec.sam_summary = String(summary || '').slice(0, 500);
+  rec.sam_reported_at = new Date().toISOString();
+  writeRecord(rec);
+  let artId = null;
+  try {
+    const info = db().prepare("INSERT INTO activity_log (type, status, summary) VALUES (?, ?, ?)")
+      .run('nathan_dispatch', 'ok',
+        `[${ctStamp()}] Nathan dispatch ${id} ${rec.status}: ${rec.title} — ${rec.sam_summary}`);
+    artId = info.lastInsertRowid;
+  } catch (_) {}
+  const action = status === 'done' ? 'completed' : status === 'failed' ? 'failed' : 'started';
+  _ledger({ agent: 'sam', taskId: id, title: rec.title, action,
+    detail: rec.sam_summary,
+    artifact: artId ? { type: 'activity_log', value: artId } : { type: 'text', value: rec.sam_summary } });
   return rec;
 }
 
 module.exports = {
   scanCredential, resolveRouting, prepareDispatch, buildCard,
   routeOnApprove, cancelDispatch, readDispatch, appendSamQueueLog,
-  recordCalebResult, SAM_QUEUE_DIR
+  recordCalebResult, recordSamResult, samLaneFor, SAM_GREEN_TYPES, SAM_QUEUE_DIR
 };

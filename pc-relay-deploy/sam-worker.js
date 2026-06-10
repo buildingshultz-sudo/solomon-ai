@@ -41,7 +41,11 @@ try { require('dotenv').config(); } catch (_) { /* env may be pre-set */ }
 const QUEUE_DIR = process.env.SAM_GREEN_QUEUE_DIR || 'C:\\Users\\Ashle\\Solomon\\sam-green-queue';
 const POLL_MS   = parseInt(process.env.SAM_WORKER_POLL_MS || '10000', 10);
 const SECRET    = process.env.PC_RELAY_SECRET;
-const REPORT_URL = process.env.CALEB_REPORT_URL || 'http://167.99.237.26:3000/caleb-result'; // Gate B only (needs dispatch_id)
+// GATE B: routed GREEN jobs (those carrying a dispatch_id) report to the VPS
+// /sam-result endpoint, which unifies them into the canonical ledger via
+// recordSamResult(agent='sam'). Locally-dropped jobs (no dispatch_id) skip
+// report-back and rely on the PC-local ledger mirror, as in Gate A.
+const REPORT_URL = process.env.SAM_RESULT_URL || 'http://167.99.237.26:3000/sam-result';
 const HEARTBEAT_PATH = path.join(__dirname, 'sam-worker.heartbeat');
 const LEDGER_JSONL   = path.join(__dirname, 'sam-worker.ledger.jsonl');
 const LEDGER_LOG     = path.join(__dirname, 'sam-worker.ledger.log');

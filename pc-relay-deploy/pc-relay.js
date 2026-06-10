@@ -213,6 +213,61 @@ app.get('/caleb-task/queue', (req, res) => {
   }
 });
 
+// ── SAM GREEN TASK QUEUE (Gate B) ─────────────────────────────────────────
+// Mirror of /caleb-task for the Sam GREEN lane. dispatch-core POSTs GREEN
+// read-only jobs here (handler='sam') when SAM_GREEN_ROUTING='on'; the PC
+// sam-worker consumes this dir. Distinct from CALEB_QUEUE_DIR so the two workers
+// never race-claim. The worker itself ALSO defaults to this dir (same path).
+const SAM_GREEN_QUEUE_DIR = process.env.SAM_GREEN_QUEUE_DIR || 'C:\\Users\\Ashle\\Solomon\\sam-green-queue';
+try {
+  if (!fs.existsSync(SAM_GREEN_QUEUE_DIR)) fs.mkdirSync(SAM_GREEN_QUEUE_DIR, { recursive: true });
+  console.log(`[PC RELAY] Sam GREEN queue dir: ${SAM_GREEN_QUEUE_DIR}`);
+} catch (e) {
+  console.error(`[PC RELAY] Could not create Sam GREEN queue dir at ${SAM_GREEN_QUEUE_DIR}: ${e.message}`);
+}
+
+app.post('/sam-task', (req, res) => {
+  const p = req.body || {};
+  const missing = [];
+  for (const k of ['task', 'template_id', 'handler']) {
+    if (!p[k] || typeof p[k] !== 'string') missing.push(k);
+  }
+  if (missing.length) {
+    return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.join(',') });
+  }
+  if (p.handler !== 'sam') {
+    return res.status(400).json({ ok: false, error: `Wrong handler: expected 'sam', got '${p.handler}'` });
+  }
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const safeId = String(p.template_id).replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 80);
+  const filename = `${ts}-${safeId}.json`;
+  const filepath = path.join(SAM_GREEN_QUEUE_DIR, filename);
+  const persisted = Object.assign({}, p, { received_at: new Date().toISOString(), status: 'pending' });
+  try {
+    fs.writeFileSync(filepath, JSON.stringify(persisted, null, 2), 'utf8');
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'write failed: ' + e.message });
+  }
+  console.log(`[PC RELAY] Sam GREEN task queued: ${filename} (template ${p.template_id})`);
+  res.json({ ok: true, file: filepath, filename, task_id: ts + '-' + safeId, queue_dir: SAM_GREEN_QUEUE_DIR });
+});
+
+app.get('/sam-task/queue', (req, res) => {
+  try {
+    const files = fs.readdirSync(SAM_GREEN_QUEUE_DIR)
+      .filter(f => f.endsWith('.json'))
+      .map(f => {
+        const full = path.join(SAM_GREEN_QUEUE_DIR, f);
+        const st = fs.statSync(full);
+        return { filename: f, size: st.size, mtime: st.mtime.toISOString() };
+      })
+      .sort((a, b) => a.mtime.localeCompare(b.mtime));
+    res.json({ ok: true, queue_dir: SAM_GREEN_QUEUE_DIR, count: files.length, files });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── SCREENSHOT ───────────────────────────────────────────────────────────
 app.get('/screenshot', (req, res) => {
   const tmpFile = path.join(os.tmpdir(), `shot_${Date.now()}.png`);

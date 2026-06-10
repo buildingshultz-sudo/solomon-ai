@@ -2161,6 +2161,30 @@ app.post('/caleb-result', async (req, res) => {
   }
 });
 
+// ── GATE B — Sam GREEN report-back — PC sam-worker → VPS /sam-result ─────────
+// Mirror of /caleb-result for the Sam GREEN lane. Routed GREEN jobs (carrying a
+// dispatch_id) report here; recordSamResult unifies them into the canonical ledger.
+app.post('/sam-result', async (req, res) => {
+  if (req.get('X-Secret') !== process.env.PC_RELAY_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  const { dispatch_id, status, summary, title } = req.body || {};
+  if (!dispatch_id) return res.status(400).json({ error: 'dispatch_id required' });
+  try {
+    const core = require('./dispatch-core.js');
+    const rec = core.recordSamResult(dispatch_id, status, summary);
+    const label = (rec && rec.title) || title || dispatch_id;
+    const ICONS = { done: '✅', failed: '⚠️', error: '⚠️', refused: '🛑', red_hold: '🛑', progress: '🤖', acknowledged: 'ℹ️' };
+    const icon = ICONS[status] || 'ℹ️';
+    const finalStatus = rec ? rec.status : ('sam_' + (status || 'reported'));
+    await bot.sendMessage(OWNER_ID, `${icon} Sam ${status || 'reported'} · ${label}\nstatus: ${finalStatus}\n${String(summary || '').slice(0, 500)}`)
+      .catch(() => {});
+    log('INFO', 'SAM', 'result report-back', { dispatch_id, status, found: !!rec });
+    res.json({ ok: true, status: finalStatus, found: !!rec });
+  } catch (e) {
+    log('ERROR', 'SAM', 'sam-result handler failed', { error: e.message });
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ── API ENDPOINTS (Phase 8B) ─────────────────────────────────────────────
 app.get('/api/nathan-inbox', (req, res) => {
   try {
