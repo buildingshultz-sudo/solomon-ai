@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-09 19:17 CT — [PROJECTS] NATIVE SCHEDULING MOVE (6/9, Jed found Cowork Scheduled tab + Code Routines). DE <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-09 19:19 CT — [SAMQUEUE] SAM PROMPT FACT-CHECK FIXES (6/9, Gabriel caught 3 plus 1 open question, baked i <!-- LASTUPDATED -->
 
 ---
 
@@ -300,6 +300,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-09 19:19 CT] SAM PROMPT FACT-CHECK FIXES (6/9, Gabriel caught 3 plus 1 open question, baked in before firing). (1) "Code Routines" name UNCONFIRMED — Sam must FIRST confirm the real native Code automation feature name in his session before proposing (may be "scheduled jobs"). (2) Gumroad handle check broadened: flag ANY handle not exactly buuldingshultz.gumroad.com (catches shultzbuilds, buildingshultz-no-double-u, any variant). (3) PROCESS COUNT WRONG: Nathan listed 3 Solomon procs but there are 5 plus (solomon-v4, -scheduler, -dashboard, -mcp, -health — health built today); check must match solomon-star not a fixed 3 or it misses ledger plus alerting. (4) OPEN QUESTION Sam to flag: the sam-worker single-writer guarantee only holds if GREEN/RED type detection is airtight BEFORE execution — predicting whether arbitrary bash writes is hard; this is the make-or-break concern; Sam to assess pre-exec detection reliability. Both prompts (Caleb 3-fix plus Sam corrected) greenlit, relaying via Gabriel.
 - [2026-06-09 18:58 CT] SAM-WORKER SPEC + FACT-CHECK SENT (6/9). Goal: close the gap where Sam PC jobs only queue, so safe Sam work auto-runs like caleb-worker. SPEC: persistent sam-worker, allowlist by job type. GREEN (auto-run, read-only): verify, grep, status, file-read, node check, pm2 list, health, git status/log/diff. RED (gated to live Sam + Jed diff-approval): build, fix, deploy, git commit/push, file writes, pm2 restart, npm install, credentials, irreversibles. DEFAULT-DENY: not-explicitly-GREEN becomes RED. SINGLE-WRITER: reads freely but stops+queues the instant a job would write. Every GREEN auto-run writes a VERIFIED ledger line. Sent to Sam as read-only review (dispatch 1781049449958, type verify); came back QUEUED, ironically proving the gap. Sam to confirm: second worker keyed to target sam without colliding with caleb-worker/pidfile guard; job type known before exec; default-deny blocks unsupervised PC writes; lift size; dangers missed. BUILD GATED until Sam reviews + Jed approves.
 - [2026-06-09 18:57 CT] Nathan dispatch → sam: 'Review sam-worker auto-exec spec (fact-check before build)' (status: queued, id: dispatch_1781049449958)
 - [2026-06-09 18:52 CT] Nathan dispatch → sam: 'Prove Sam PC task executes (autonomy + comms test)' (status: queued, id: dispatch_1781049168913)
