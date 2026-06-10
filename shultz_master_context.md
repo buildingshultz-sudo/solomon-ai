@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-10 09:27 CT — [SAMQUEUE] GATE B DEPLOYED IN SHADOW — ALL 3 PROOFS PASS (6/10 ~9am, NO flip to on). Deploy <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-10 09:40 CT — [PROJECTS] DAILY WATCH WIRED (6/10 Caleb, no duplicates — updated existing schedules). Thre <!-- LASTUPDATED -->
 
 ---
 
@@ -88,6 +88,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-10 09:40 CT] DAILY WATCH WIRED (6/10 Caleb, no duplicates — updated existing schedules). Three daily checks live, each pushing a 1-line result via Solomon send_telegram: 7:30am FB campaign Gumroad-handle check (flags ANY variant not exactly buuldingshultz.gumroad.com, char-by-char, screenshot), 8:00am Gumroad product pages (/l/ihjobd + /l/ygmuv, 200/title/price), 9:00am Spreadshop storefront. Spreadshop VERIFIED live now: 200, real store "Buildingshultz | Spreadshop", shop_id 2000900, designs visible — schedule kept. retry-sam-queue-batch (15min) unchanged. Blocked-on-login reports BLOCKED_ON_LOGIN, never silent-skips; YouTube Studio not scheduled (needs login). All read/verify/screenshot only. JED PRE-TRIP ACTION: click "Run now" on all three before leaving to pre-grant tool approvals (Chrome MCP, Telegram, web_fetch) — else first scheduled run can pause on a permission prompt. Keep Cowork pinned + session unlocked 6/12-6/22.
+- [2026-06-10 09:30 CT] Feature shipped — commit a978bae: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-10 09:00 CT] Feature shipped — commit 96bdd8a: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-10 08:15 CT] Feature shipped — commit 9e2b39f: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-10 08:00 CT] Feature shipped — commit c270ba3: docs(master-context): Nathan append [PROJECTS]
