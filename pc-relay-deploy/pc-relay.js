@@ -63,6 +63,24 @@ function _calebWorkerStatus() {
   };
 }
 
+// ── SAM-WORKER SUPERVISION STATE (Gate A) ──────────────────────────────────
+// Parallel to caleb above: the relay also spawns sam-worker (the GREEN executor)
+// as a child (see bottom of file) and exposes its liveness here. Separate
+// heartbeat + pidfile so the two workers never read/kill each other's state.
+const SAM_WORKER_HEARTBEAT = path.join(__dirname, 'sam-worker.heartbeat');
+let _samChild = null;
+function _samWorkerStatus() {
+  let hb = 0;
+  try { hb = parseInt(fs.readFileSync(SAM_WORKER_HEARTBEAT, 'utf8'), 10) || 0; } catch (_) {}
+  const ageMs = hb ? (Date.now() - hb) : null;
+  return {
+    child_pid: _samChild ? _samChild.pid : null,
+    heartbeat_epoch_ms: hb || null,
+    heartbeat_age_s: ageMs != null ? Math.round(ageMs / 1000) : null,
+    alive: ageMs != null && ageMs < 120000  // heartbeat within 2 min
+  };
+}
+
 app.get('/status', (req, res) => {
   res.json({
     ok: true,
@@ -77,7 +95,8 @@ app.get('/status', (req, res) => {
     d_write_routes: ['/file/write'],
     d_write_allowlist: D_WRITE_ALLOWLIST,
     relay_version: '1.3.0',
-    caleb_worker: _calebWorkerStatus()
+    caleb_worker: _calebWorkerStatus(),
+    sam_worker: _samWorkerStatus()
   });
 });
 
@@ -613,14 +632,29 @@ app.listen(PORT, '0.0.0.0', () => {
 // the relay's interactive session, so the worker's headful Chrome stays visible.
 const { spawn: _spawn } = require('child_process');
 const WORKER_SCRIPT = path.join(__dirname, 'caleb-worker.js');
+const WORKER_PIDFILE = path.join(__dirname, 'caleb-worker.pid');
 let _calebRestarts = 0;
 let _calebBackoff = 1000;
 let _calebStableTimer = null;
+// Windows has no process-group teardown: if THIS relay was hard-killed or
+// crashed, the worker it spawned keeps running as an orphan. A fresh relay would
+// then spawn a SECOND worker → duplicate-worker race. So before spawning, kill
+// the worker pid recorded by the previous relay incarnation. This makes "exactly
+// one worker per relay" hold across restarts, crashes, and supervisor respawns.
+function _killStaleWorker() {
+  let pid = 0;
+  try { pid = parseInt(fs.readFileSync(WORKER_PIDFILE, 'utf8'), 10) || 0; } catch (_) { return; }
+  if (!pid || (_calebChild && pid === _calebChild.pid)) return;
+  try { process.kill(pid, 0); } catch (_) { return; } // not alive → nothing to do
+  try { process.kill(pid); console.log(`[RELAY] killed stale caleb-worker pid=${pid} from previous incarnation`); } catch (_) {}
+}
 function startCalebWorker() {
   if (!fs.existsSync(WORKER_SCRIPT)) { console.error('[RELAY] caleb-worker.js missing — cannot supervise'); return; }
+  _killStaleWorker();
   try {
     _calebChild = _spawn(process.execPath, [WORKER_SCRIPT], { cwd: __dirname, env: process.env, stdio: 'ignore', windowsHide: true });
   } catch (e) { console.error('[RELAY] caleb-worker spawn failed:', e.message); _calebChild = null; setTimeout(startCalebWorker, _calebBackoff); return; }
+  try { fs.writeFileSync(WORKER_PIDFILE, String(_calebChild.pid)); } catch (_) {}
   console.log(`[RELAY] caleb-worker spawned pid=${_calebChild.pid} (restart #${_calebRestarts})`);
   if (_calebStableTimer) clearTimeout(_calebStableTimer);
   _calebStableTimer = setTimeout(() => { _calebBackoff = 1000; }, 60000); // reset backoff after a stable minute
@@ -636,3 +670,42 @@ function startCalebWorker() {
 // SINGLE supervisor, then spawn our own.
 startCalebWorker();
 process.on('exit', () => { try { if (_calebChild) _calebChild.kill(); } catch (_) {} });
+
+// ── SAM-WORKER SUPERVISOR (Gate A) ─────────────────────────────────────────
+// Same flash-free child-supervision pattern as caleb-worker above, for the PC
+// GREEN executor (sam-worker.js). DISTINCT pidfile (sam-worker.pid) so
+// _killStaleWorker (which only targets caleb-worker.pid) and this one never kill
+// each other's process. Two-level supervision is preserved: supervisor → relay →
+// { caleb-worker, sam-worker }. Reuses _spawn (required above for caleb).
+const SAM_WORKER_SCRIPT = path.join(__dirname, 'sam-worker.js');
+const SAM_WORKER_PIDFILE = path.join(__dirname, 'sam-worker.pid');
+let _samRestarts = 0;
+let _samBackoff = 1000;
+let _samStableTimer = null;
+function _killStaleSamWorker() {
+  let pid = 0;
+  try { pid = parseInt(fs.readFileSync(SAM_WORKER_PIDFILE, 'utf8'), 10) || 0; } catch (_) { return; }
+  if (!pid || (_samChild && pid === _samChild.pid)) return;
+  try { process.kill(pid, 0); } catch (_) { return; } // not alive → nothing to do
+  try { process.kill(pid); console.log(`[RELAY] killed stale sam-worker pid=${pid} from previous incarnation`); } catch (_) {}
+}
+function startSamWorker() {
+  if (!fs.existsSync(SAM_WORKER_SCRIPT)) { console.error('[RELAY] sam-worker.js missing — cannot supervise'); return; }
+  _killStaleSamWorker();
+  try {
+    _samChild = _spawn(process.execPath, [SAM_WORKER_SCRIPT], { cwd: __dirname, env: process.env, stdio: 'ignore', windowsHide: true });
+  } catch (e) { console.error('[RELAY] sam-worker spawn failed:', e.message); _samChild = null; setTimeout(startSamWorker, _samBackoff); return; }
+  try { fs.writeFileSync(SAM_WORKER_PIDFILE, String(_samChild.pid)); } catch (_) {}
+  console.log(`[RELAY] sam-worker spawned pid=${_samChild.pid} (restart #${_samRestarts})`);
+  if (_samStableTimer) clearTimeout(_samStableTimer);
+  _samStableTimer = setTimeout(() => { _samBackoff = 1000; }, 60000); // reset backoff after a stable minute
+  _samChild.on('error', (e) => console.error('[RELAY] sam-worker child error:', e.message));
+  _samChild.on('exit', (code, sig) => {
+    _samChild = null; _samRestarts++;
+    console.error(`[RELAY] sam-worker exited (code=${code} sig=${sig}) — respawning in ${_samBackoff}ms`);
+    setTimeout(startSamWorker, _samBackoff);
+    _samBackoff = Math.min(_samBackoff * 2, 30000);
+  });
+}
+startSamWorker();
+process.on('exit', () => { try { if (_samChild) _samChild.kill(); } catch (_) {} });
