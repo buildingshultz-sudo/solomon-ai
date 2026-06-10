@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-10 06:28 CT — [PROJECTS] AUTONOMY SCOPE + DEADLINE (6/10 6:26am). Jed: lock link-verify + comment autonom <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-10 06:31 CT — [PROJECTS] IRONEDIT THROUGHLINE CLARIFIED (6/10 Jed). IronEdit (drop-to-post pipeline: raw  <!-- LASTUPDATED -->
 
 ---
 
@@ -87,6 +87,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-10 06:31 CT] IRONEDIT THROUGHLINE CLARIFIED (6/10 Jed). IronEdit (drop-to-post pipeline: raw footage in → finished cut + thumbnail/title/desc/SEO out → posted) is the ORIGINAL goal from the start. The $295 DaVinci Resolve Studio purchase is the money blocker — BUT the deeper blocker is TRUST: Jed won't spend the $295 until he trusts the crew + system can execute reliably and unattended. So the autonomy build (sam-worker, comms hardening, draft-to-approval) is NOT a detour from IronEdit — it's the PREREQUISITE. Sequence: trust the system → justify the Studio spend → build the drop-to-post pipeline → IronEdit becomes a funnel bigger than YouTube (currently the biggest funnel). Jed already has UNEDITED projects on the PC that need no filming = immediate raw material to run through the pipeline the moment Studio is in and it works. This is WHY the current autonomy push matters and why we push through it ASAP. Order still holds: prove trust now (by Thu), TradeQuote + IronEdit next.
+- [2026-06-10 06:30 CT] Feature shipped — commit 6067f48: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-10 06:28 CT] AUTONOMY SCOPE + DEADLINE (6/10 6:26am). Jed: lock link-verify + comment autonomy by THURSDAY NIGHT, then SHIFT to TradeQuote (App #2) and IronEdit (App #1) — YouTube still the biggest funnel; don't let infra-building keep delaying revenue apps. COMMENT POLICY DECIDED: DRAFT-TO-APPROVAL for now (team drafts replies in Jed's voice, queues for his one-tap approval; NO auto-post) until Jed trusts it enough later — protects brand authenticity; posting is publish-class/RED. LINK-VERIFY: flag-not-fix (GREEN, read-only) first; auto-editing live posts stays gated. PLATFORM ACCESS: Caleb to audit which of FB/IG/TikTok/YouTube can be READ vs POSTED now + which need Jed to connect (YouTube OAuth works, FB flaky, IG not connected, TikTok never wired). NEWSLETTER: Jed wants Beehiiv signup flow live + fully autonomous (signup→list→welcome) — Caleb to verify. Website funnel = soon, not this week. Gate B (routing surgery) = scoping only first, own gated diff later.
 - [2026-06-09 21:15 CT] Feature shipped — commit e5c05b5: docs(master-context): Nathan append [SAMQUEUE]
 - [2026-06-09 21:00 CT] Feature shipped — commit 63b43e6: docs(master-context): Nathan append [SAMQUEUE]
