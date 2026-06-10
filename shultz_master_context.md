@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-10 09:24 CT — [SAMQUEUE] Nathan dispatch → caleb: 'GateB proof-c caleb verify (path-intact check)' (statu <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-10 09:27 CT — [SAMQUEUE] GATE B DEPLOYED IN SHADOW — ALL 3 PROOFS PASS (6/10 ~9am, NO flip to on). Deploy <!-- LASTUPDATED -->
 
 ---
 
@@ -315,6 +315,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-10 09:27 CT] GATE B DEPLOYED IN SHADOW — ALL 3 PROOFS PASS (6/10 ~9am, NO flip to on). Deploy: backups both sides; VPS dispatch-core.js + bot.js (sha-verified), env flag SAM_GREEN_ROUTING=shadow added (uncommitted); solomon-v4 + solomon-mcp restarted clean; PC pc-relay.js + sam-worker.js deployed, supervisor respawned relay->caleb+sam; /sam-task live; commit dc7986c (4 files +239/-5), nothing sensitive committed. PROOFS: (a) GREEN git-status -> shadow log would_be_lane=green but landed IN sam-queue RED hold as today, PC queue count=0; (b) RED deploy -> red, sam-queue as today; (c) Caleb verify dispatched_to_caleb, relay 200, executed — Caleb path UNAFFECTED; census 1 each, all solomon-* online. Shadow log greppable: activity_log type=sam_green_shadow, one line per decision. Test artifacts cleaned. SHADOW SOAKS DURING FLORIDA — Jed decides soak length + flip date post-trip after eyeballing shadow lines for false-greens; off = instant revert. Thursday deadline met Wednesday morning.
 - [2026-06-10 09:24 CT] Nathan dispatch → caleb: 'GateB proof-c caleb verify (path-intact check)' (status: dispatched_to_caleb, id: dispatch_1781101489618)
 - [2026-06-10 09:24 CT] Nathan dispatch → sam: 'GateB proof-b RED deploy' (status: queued, id: dispatch_1781101488618)
 - [2026-06-10 09:24 CT] Nathan dispatch → sam: 'GateB proof-a GREEN git-status' (status: queued, id: dispatch_1781101487059)
