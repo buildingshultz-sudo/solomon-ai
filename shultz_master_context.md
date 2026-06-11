@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-10 12:32 CT — [PROJECTS] TRADEQUOTE FULL DEFINITION LOCKED (6/10, full report = artifact in chat). FINDIN <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-11 11:29 CT — [GENERAL] FACT-CHECK DOCTRINE (locked, permanent): every build touching live systems is pa <!-- LASTUPDATED -->
 
 ---
 
@@ -88,6 +88,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-10 12:45 CT] Feature shipped — commit c47045b: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-10 12:32 CT] TRADEQUOTE FULL DEFINITION LOCKED (6/10, full report = artifact in chat). FINDINGS: voice-first estimating NOT greenfield — Handoff ($25M+ raised), QuoteIQ, CountBricks already market "driveway" quoting. WEDGE: conversational walkthrough that ELICITS detail like a journeyman (asks clarifying Qs) + trade-specific nothing-forgotten checklist for licensed mechanical trades — no one owns that. LOCKED: freemium (3-5 quotes/mo) -> Pro $49/mo FLAT (annual ~$39) + payments 2.9%+$0.30 stream #2; iOS-first React Native+Expo, offline audio capture, web quote delivery; mandatory human-review gate (liability + Apple 5.1.2(i) AI-disclosure); V1 = voice walkthrough + checklist + review gate + price book + e-sign + 3-touch follow-up + pipeline; invoicing V1.5. GTM: audience-first thru Building Shultz (QuoteIQ playbook, zero ads). Realistic 3yr: low-thousands paying, $100-250K MRR. Milestones: M1 voice-to-quote slice (plumbing only), M2 elicitation+checklist+review, M3 pipeline+follow-up+Stripe.
 - [2026-06-10 11:15 CT] Feature shipped — commit 963fe72: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-10 11:11 CT] VIDIQ EXTRACTION DONE + ACCOUNT SPLIT FOUND (6/10). Caleb pulled 16 files read-only to C:\Users\Ashle\IronEdit\vidiq-extract\ (scripts/ 3 full scripts incl. favorited treehouse; generator-outputs/ 5 Generate canvases w/ title+desc+scored tags+hook+outline + 2 AI Coach transcripts; ideas/ 4 files; branding/ memory profile w/ channel positioning — Voice Profile/SOPs flagged Not saved). DISCREPANCY SOLVED: TWO vidIQ identities — phone app shows MAX on buildingshultz@gmail.com, but Caleb's PC browser session was in an account vidIQ read as FREE (Boost sections locked, MCP keys 0/250) — same irishcraftsman7 vs buildingshultz split as YouTube. TONIGHT: log Caleb's browser into the Max-holding vidIQ account, re-run extraction for Max-gated sections + grab the real MCP key (6,000-credit pool). YOUTUBE OWNERSHIP: Jed's transfer attempt failed — channel stays owned by irishcraftsman7; transfer = Jed-only doc-only planning, post-Florida at earliest; OAuth keeps using irishcraftsman7.
@@ -286,6 +287,8 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-10 14:10 CT] Revenue/billing email from service@paypal.com: "You’ve added another way to log in to PayPal"
+- [2026-06-10 14:10 CT] Revenue/billing email from service@paypal.com: "Stay logged in on this trusted device"
 - [2026-06-09 18:35 CT] Revenue/billing email from Gumroad: "New sale of Motivation for Tough Guys for $10"
 - [2026-06-09 18:35 CT] Revenue/billing email from Jedidiah Shultz: "You bought Motivation for Tough Guys!"
 - [2026-06-08 18:10 CT] Revenue/billing email from Cloudflare: "Your additional plan addons for buildingshultz.com subscription has been canceled"
@@ -457,6 +460,8 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-11 11:29 CT] FACT-CHECK DOCTRINE (locked, permanent): every build touching live systems is paper-checked BEFORE execution — Sam command-checks against current docs, Gabriel sequence-checks, cross-checked vs master context + live state. Any finding = STOP, do not execute, back to Nathan; Jed makes the final call. Clean across all three = fire. Stands alongside "built to last / root-cause over workaround." Proven 6/11 catching real build-breakers on the vault (B1 missing seal current_key_id, B2 boot-time race) before any command ran.
+- [2026-06-11 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-10 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-09 07:44 CT] SOCIAL ARCHITECTURE CORRECTION (6/9, supersedes the "leave personal alone" line): The personal Jedidiah Shultz Facebook CAN be used as a distribution surface. The rule is NOT "don't use it" — it's that Jed never monitors or performs on it. Solomon may post brand-relevant content there and monitors comments/messages; Solomon surfaces to Jed ONLY legitimate questions worth a real answer (and can draft the reply), filtering out likes/small talk/noise so Jed never has to deal with engagement. HIGHER BAR than the brand page: because it's Jed's personal name/face among real long-time friends, Solomon only posts things Jed would genuinely share (book launch, real milestone, a good build) — NOT daily campaign spam (that's the Building Shultz page's job). Goal unchanged: tap the warm reach without Jed touching it or friends feeling marketed-at. Personal Instagram: still parked/blocked. Building Shultz page = automated hub; Irish Craftsman = light auto amplifier (bigger follower count).
 - [2026-06-09 07:39 CT] SOCIAL ARCHITECTURE (locked 6/9, Jed clarified): Jed is NOT a social media person — near-zero personal engagement, doesn't post about his life, phone is business-ONLY, goal is minimum phone time (Tuesday vision). So: (1) Building Shultz FB page = the single automated hub, Solomon posts here, primary funnel. (2) Irish Craftsman FB page = light fully-automated cross-post amplifier ONLY because it has the bigger follower count — zero effort from Jed; if its upkeep becomes a hassle, pause it without hesitation. (3) Personal Jedidiah Facebook + personal Instagram = LEAVE ALONE — not manual, not automated, not a channel. Do NOT propose turning the personal profile into a marketing/warm-reach surface; it would pull Jed back onto his phone for no return and contradicts the mission. Distribution = YouTube + brand page + products + the apps, NOT Jed personally performing online. The system does the social work on BRAND surfaces so Jed never touches personal social media.
