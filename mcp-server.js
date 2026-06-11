@@ -40,29 +40,18 @@ const SAM_QUEUE_DIR = path.join(SOLOMON_DIR, 'sam-queue');
 const OWNER_ID = parseInt(process.env.OWNER_CHAT_ID || '8762434280', 10);
 
 // ── BEARER TOKEN BOOTSTRAP ────────────────────────────────────────────────
-// On first startup, generate a 32-char URL-safe random secret and append to .env.
+// The bearer token is supplied via the environment (MCP_SERVER_SECRET), sourced
+// from the secrets vault and rendered into the env file. This process NEVER
+// generates or persists the secret; the vault is the single source of truth and
+// the rendered env file is read-only. A missing or invalid secret is a fatal
+// misconfiguration that must fail loudly, not be silently minted.
 // Never log the value; only first/last 4 chars sanitized for diagnostic output.
 function _ensureSecret() {
-  let secret = process.env.MCP_SERVER_SECRET;
+  const secret = process.env.MCP_SERVER_SECRET;
   if (secret && secret.length >= 16 && secret !== 'PLACEHOLDER') return secret;
-  secret = crypto.randomBytes(24).toString('base64url'); // 32 chars URL-safe
-  const envPath = path.join(SOLOMON_DIR, '.env');
-  try {
-    let body = fs.readFileSync(envPath, 'utf8');
-    if (/^MCP_SERVER_SECRET=/m.test(body)) {
-      body = body.replace(/^MCP_SERVER_SECRET=.*$/m, 'MCP_SERVER_SECRET=' + secret);
-    } else {
-      if (!body.endsWith('\n')) body += '\n';
-      body += 'MCP_SERVER_SECRET=' + secret + '\n';
-    }
-    fs.writeFileSync(envPath, body);
-    process.env.MCP_SERVER_SECRET = secret;
-    console.log('[' + APP_NAME + '] generated MCP_SERVER_SECRET and wrote to .env');
-  } catch (e) {
-    console.error('[' + APP_NAME + '] FATAL: could not persist MCP_SERVER_SECRET to .env:', e.message);
-    process.exit(1);
-  }
-  return secret;
+  console.error('[' + APP_NAME + '] FATAL: MCP_SERVER_SECRET missing or invalid in environment - '
+    + 'expected it from the vault-rendered env file. Refusing to start.');
+  process.exit(1);
 }
 const BEARER_TOKEN = _ensureSecret();
 const _tailToken = (t) => t ? t.slice(0, 4) + '...' + t.slice(-4) : '<none>';
@@ -730,7 +719,7 @@ app.listen(PORT, process.env.MCP_BIND || '127.0.0.1', () => {
   console.log(`[${APP_NAME}] health:  http://0.0.0.0:${PORT}/health`);
   console.log(`[${APP_NAME}] mcp:     http://0.0.0.0:${PORT}/mcp  (bearer required)`);
   console.log(`[${APP_NAME}] tools:   ${TOOLS.length} -- ${TOOLS.map(t => t.name).join(', ')}`);
-  console.log(`[${APP_NAME}] token:   ${_tailToken(BEARER_TOKEN)}  (full value in /root/solomon-v4/.env as MCP_SERVER_SECRET)`);
+  console.log(`[${APP_NAME}] token:   ${_tailToken(BEARER_TOKEN)}  (value supplied via env as MCP_SERVER_SECRET)`);
 });
 
 process.on('unhandledRejection', (e) => console.error(`[${APP_NAME}] unhandledRejection:`, e));
