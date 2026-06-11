@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-11 12:45 CT — [PROJECTS] Feature shipped — commit 9430af2: fix(mcp): stop self-minting MCP_SERVER_SECRET; <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-11 17:45 CT — [PROJECTS] Feature shipped — commit e748d4f: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
 
 ---
 
@@ -89,6 +89,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-11 17:45 CT] Feature shipped — commit e748d4f: docs(master-context): execution ledger [LEDGER]
 - [2026-06-11 12:45 CT] Feature shipped — commit 9430af2: fix(mcp): stop self-minting MCP_SERVER_SECRET; read from env (vault-sourced), fail-loud if absent
 - [2026-06-11 11:45 CT] Feature shipped — commit fded663: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-11 11:30 CT] INTER-AGENT COMMS (designed, build order priority #2 — starts AFTER vault is live + proven). Goal: agents send/receive/coordinate autonomously, surfacing to Jed only for decisions/approvals — no more Jed as copy-paste relay. Architecture: agent_messages table in Solomon's SQLite (NOT Redis/new broker), Solomon = router/switchboard, agents call via extended solomon-mcp tools, HMAC-signed from OpenBao, audit-logged by correlation_id. Sam woken via sam-worker launching claude -p headless. Caleb best-effort (PC awake+app open). Nathan claude.ai chat NOT programmatically reachable — optional Nathan-service on API for the auto fact-check loop. GATES BY CONSTRUCTION: money/legal/irreversible/credential msgs flagged approval_required, cannot self-clear, physically blocked until Jed taps Approve on Telegram (fail-closed). Depends on vault (auth keys come from it) — that's why vault is first.
@@ -520,6 +521,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-11 18:25 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNRE
 - [2026-06-11 17:40 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-06-10 09:25 CT] caleb · dispatch_1781101489618 · "GateB proof-c caleb verify (path-intact check)" · COMPLETED · activity_log#5875
 - [2026-06-10 09:24 CT] solomon · dispatch_1781101489618 · "GateB proof-c caleb verify (path-intact check)" · DISPATCHED · http:200
