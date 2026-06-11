@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-11 11:30 CT — [STACK] VAULT (in progress, build order priority #1): self-hosted OpenBao (MPL-2.0 Vault <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-11 11:30 CT — [PROJECTS] INTER-AGENT COMMS (designed, build order priority #2 — starts AFTER vault is liv <!-- LASTUPDATED -->
 
 ---
 
@@ -89,6 +89,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-11 11:30 CT] INTER-AGENT COMMS (designed, build order priority #2 — starts AFTER vault is live + proven). Goal: agents send/receive/coordinate autonomously, surfacing to Jed only for decisions/approvals — no more Jed as copy-paste relay. Architecture: agent_messages table in Solomon's SQLite (NOT Redis/new broker), Solomon = router/switchboard, agents call via extended solomon-mcp tools, HMAC-signed from OpenBao, audit-logged by correlation_id. Sam woken via sam-worker launching claude -p headless. Caleb best-effort (PC awake+app open). Nathan claude.ai chat NOT programmatically reachable — optional Nathan-service on API for the auto fact-check loop. GATES BY CONSTRUCTION: money/legal/irreversible/credential msgs flagged approval_required, cannot self-clear, physically blocked until Jed taps Approve on Telegram (fail-closed). Depends on vault (auth keys come from it) — that's why vault is first.
 - [2026-06-11 11:30 CT] Feature shipped — commit 4cf9eba: docs(master-context): Nathan append [GENERAL]
 - [2026-06-10 12:45 CT] Feature shipped — commit c47045b: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-10 12:32 CT] TRADEQUOTE FULL DEFINITION LOCKED (6/10, full report = artifact in chat). FINDINGS: voice-first estimating NOT greenfield — Handoff ($25M+ raised), QuoteIQ, CountBricks already market "driveway" quoting. WEDGE: conversational walkthrough that ELICITS detail like a journeyman (asks clarifying Qs) + trade-specific nothing-forgotten checklist for licensed mechanical trades — no one owns that. LOCKED: freemium (3-5 quotes/mo) -> Pro $49/mo FLAT (annual ~$39) + payments 2.9%+$0.30 stream #2; iOS-first React Native+Expo, offline audio capture, web quote delivery; mandatory human-review gate (liability + Apple 5.1.2(i) AI-disclosure); V1 = voice walkthrough + checklist + review gate + price book + e-sign + 3-touch follow-up + pipeline; invoicing V1.5. GTM: audience-first thru Building Shultz (QuoteIQ playbook, zero ads). Realistic 3yr: low-thousands paying, $100-250K MRR. Milestones: M1 voice-to-quote slice (plumbing only), M2 elicitation+checklist+review, M3 pipeline+follow-up+Stripe.
