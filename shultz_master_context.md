@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-12 04:15 CT — [PROJECTS] Feature shipped — commit a54f98e: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-12 05:00 CT — [GENERAL] Daily 5 AM check-in — context refreshed; Solomon online. <!-- LASTUPDATED -->
 
 ---
 
@@ -89,6 +89,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-12 04:45 CT] Feature shipped — commit 27ae135: docs(master-context): execution ledger [LEDGER]
 - [2026-06-12 04:15 CT] Feature shipped — commit a54f98e: docs(master-context): execution ledger [LEDGER]
 - [2026-06-12 03:45 CT] Feature shipped — commit 637488b: docs(master-context): execution ledger [LEDGER]
 - [2026-06-12 03:15 CT] Feature shipped — commit 265d129: docs(master-context): execution ledger [LEDGER]
@@ -478,6 +479,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-12 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-11 11:29 CT] FACT-CHECK DOCTRINE (locked, permanent): every build touching live systems is paper-checked BEFORE execution — Sam command-checks against current docs, Gabriel sequence-checks, cross-checked vs master context + live state. Any finding = STOP, do not execute, back to Nathan; Jed makes the final call. Clean across all three = fire. Stands alongside "built to last / root-cause over workaround." Proven 6/11 catching real build-breakers on the vault (B1 missing seal current_key_id, B2 boot-time race) before any command ran.
 - [2026-06-11 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-10 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -533,6 +535,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-12 05:10 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-06-12 04:35 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-06-12 04:05 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-06-12 03:35 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
