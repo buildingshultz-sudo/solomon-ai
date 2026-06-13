@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-12 20:14 CT — [STACK] GLOSSARY for Solomon: "Gate B" = the green-sam routing system Sam built on the V <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-12 21:24 CT — [GENERAL] JED DAILY ROUTINE update (effective on return from Florida): Jed is adding the g <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-12 20:15 CT] Feature shipped — commit 3396711: docs(master-context): Nathan append [STACK]
 - [2026-06-12 19:30 CT] Feature shipped — commit 3b72dd0: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-12 19:23 CT] INTER-AGENT COMMS design amendment (Jed-approved): fact-check hops are first-class citizens of the message flow, by construction. Flow: Nathan fires → Gabriel fact-checks (sequence/completeness/ground-truth — his proven strength) → Sam receives and paper-checks technical correctness vs live system before executing (his proven strength). Role-matched checks at every hop where a sharp reviewer makes sense. Any finding at any hop = STOP, back up the chain, Jed decides. Clean pass = fires through. Solomon ROUTES only (message bus/rails) — he does NOT fact-check yet, not until Jed decides he's earned that seat. This extends the locked Fact-Check Doctrine from manual orchestration into the comms layer itself — checked by construction, not by discipline. Applies as a modification to the 7-stage comms build (post-vault, post-Florida).
 - [2026-06-12 19:15 CT] Feature shipped — commit ad60327: docs(master-context): Nathan dispatch [SAMQUEUE]
@@ -494,6 +495,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-12 21:24 CT] JED DAILY ROUTINE update (effective on return from Florida): Jed is adding the gym back into his mornings. The YMCA (VALP membership, already in the budget) opens at 5 AM. New Monday–Friday morning shape: 4–5 AM = work/build window (lighter focused work), then 5 AM get dressed and go to the gym. This refines the prior 4–6 AM build window — the 4 AM wake-up he started in Feb was the first step toward this. Family/presence still #1; gym is part of the Tuesday vision (\"wake up, work out, go to work\"). Schedule Nathan/dispatch work and prompt timing around this: the 4–5 AM slot is now shorter and gym-bookended on weekdays.
 - [2026-06-12 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-11 11:29 CT] FACT-CHECK DOCTRINE (locked, permanent): every build touching live systems is paper-checked BEFORE execution — Sam command-checks against current docs, Gabriel sequence-checks, cross-checked vs master context + live state. Any finding = STOP, do not execute, back to Nathan; Jed makes the final call. Clean across all three = fire. Stands alongside "built to last / root-cause over workaround." Proven 6/11 catching real build-breakers on the vault (B1 missing seal current_key_id, B2 boot-time race) before any command ran.
 - [2026-06-11 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
