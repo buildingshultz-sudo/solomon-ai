@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-12 19:09 CT — [SAMQUEUE] Nathan dispatch → sam: 'Verify Irish Craftsman FB token (read-only check)' (stat <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-12 19:23 CT — [PROJECTS] INTER-AGENT COMMS design amendment (Jed-approved): fact-check hops are first-cla <!-- LASTUPDATED -->
 
 ---
 
@@ -89,6 +89,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-12 19:23 CT] INTER-AGENT COMMS design amendment (Jed-approved): fact-check hops are first-class citizens of the message flow, by construction. Flow: Nathan fires → Gabriel fact-checks (sequence/completeness/ground-truth — his proven strength) → Sam receives and paper-checks technical correctness vs live system before executing (his proven strength). Role-matched checks at every hop where a sharp reviewer makes sense. Any finding at any hop = STOP, back up the chain, Jed decides. Clean pass = fires through. Solomon ROUTES only (message bus/rails) — he does NOT fact-check yet, not until Jed decides he's earned that seat. This extends the locked Fact-Check Doctrine from manual orchestration into the comms layer itself — checked by construction, not by discipline. Applies as a modification to the 7-stage comms build (post-vault, post-Florida).
+- [2026-06-12 19:15 CT] Feature shipped — commit ad60327: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-12 10:00 CT] Feature shipped — commit b935480: docs(master-context): execution ledger [LEDGER]
 - [2026-06-12 09:30 CT] Feature shipped — commit e40b90a: docs(master-context): execution ledger [LEDGER]
 - [2026-06-12 09:00 CT] Feature shipped — commit e1e4bd4: docs(master-context): execution ledger [LEDGER]
