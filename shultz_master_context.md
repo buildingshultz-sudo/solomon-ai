@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-13 05:37 CT — [GENERAL] CANARY-TEST DOCTRINE (Jed-approved, standing build requirement): every automated <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-23 10:21 CT — [SAMQUEUE] Nathan dispatch → sam: 'Clear orphaned stuck dispatch 1781309398032' (status: qu <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-13 05:45 CT] Feature shipped — commit 818881e: docs(master-context): Nathan append [GENERAL]
 - [2026-06-12 21:30 CT] Feature shipped — commit ed07046: docs(master-context): Nathan append [GENERAL]
 - [2026-06-12 20:15 CT] Feature shipped — commit 3396711: docs(master-context): Nathan append [STACK]
 - [2026-06-12 19:30 CT] Feature shipped — commit 3b72dd0: docs(master-context): Nathan append [PROJECTS]
@@ -322,6 +323,13 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-06-23 10:15 CT] Revenue/billing email from Soundstripe Team: "This one stays with you. (New from marigolde)"
+- [2026-06-22 09:05 CT] Revenue/billing email from Squarespace: "Save 20% on your website subscription"
+- [2026-06-19 21:45 CT] Revenue/billing email from OpenAI OpCo, LLC: "Your refund from OpenAI OpCo, LLC #3984-2020"
+- [2026-06-19 21:45 CT] Revenue/billing email from OpenAI OpCo, LLC: "Credit note from OpenAI OpCo, LLC for invoice #4PUTIXIO-0012"
+- [2026-06-16 13:15 CT] Revenue/billing email from Spreadshirt Inc.: "Spreadshirt Inc. sent you a payment"
+- [2026-06-14 13:15 CT] Revenue/billing email from Anthropic, PBC: "Your receipt from Anthropic, PBC #2306-2444-2674"
+- [2026-06-13 17:35 CT] Revenue/billing email from Soundstripe Team: "Marriott got sued. Crumbl got sued. Who's next? ⚖️"
 - [2026-06-10 14:10 CT] Revenue/billing email from service@paypal.com: "You’ve added another way to log in to PayPal"
 - [2026-06-10 14:10 CT] Revenue/billing email from service@paypal.com: "Stay logged in on this trusted device"
 - [2026-06-09 18:35 CT] Revenue/billing email from Gumroad: "New sale of Motivation for Tough Guys for $10"
@@ -361,6 +369,7 @@
 10. **PC-side Caleb endpoint** — IN PROGRESS 2026-05-30: build `/caleb-task` on the PC relay so Solomon-dispatched Caleb payloads execute; unlocks 4 Caleb templates (affiliate_link_verify, gmail_labels_setup, mercury_upload, kdp_upload).
 11. **Auto-dispatch on free text** — IN PROGRESS 2026-05-30: route any non-slash Telegram message through the dispatch classifier automatically; Jed-flippable `/dispatch mode live` / `/dispatch mode shadow`.
 <!-- LOG:SAMQUEUE -->
+- [2026-06-23 10:21 CT] Nathan dispatch → sam: 'Clear orphaned stuck dispatch 1781309398032' (status: queued, id: dispatch_1782228105657)
 - [2026-06-12 19:09 CT] Nathan dispatch → sam: 'Verify Irish Craftsman FB token (read-only check)' (status: queued, id: dispatch_1781309398032)
 - [2026-06-10 09:27 CT] GATE B DEPLOYED IN SHADOW — ALL 3 PROOFS PASS (6/10 ~9am, NO flip to on). Deploy: backups both sides; VPS dispatch-core.js + bot.js (sha-verified), env flag SAM_GREEN_ROUTING=shadow added (uncommitted); solomon-v4 + solomon-mcp restarted clean; PC pc-relay.js + sam-worker.js deployed, supervisor respawned relay->caleb+sam; /sam-task live; commit dc7986c (4 files +239/-5), nothing sensitive committed. PROOFS: (a) GREEN git-status -> shadow log would_be_lane=green but landed IN sam-queue RED hold as today, PC queue count=0; (b) RED deploy -> red, sam-queue as today; (c) Caleb verify dispatched_to_caleb, relay 200, executed — Caleb path UNAFFECTED; census 1 each, all solomon-* online. Shadow log greppable: activity_log type=sam_green_shadow, one line per decision. Test artifacts cleaned. SHADOW SOAKS DURING FLORIDA — Jed decides soak length + flip date post-trip after eyeballing shadow lines for false-greens; off = instant revert. Thursday deadline met Wednesday morning.
 - [2026-06-10 09:24 CT] Nathan dispatch → caleb: 'GateB proof-c caleb verify (path-intact check)' (status: dispatched_to_caleb, id: dispatch_1781101489618)
@@ -496,6 +505,14 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-23 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-22 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-21 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-20 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-18 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-16 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-15 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-06-14 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-13 05:37 CT] CANARY-TEST DOCTRINE (Jed-approved, standing build requirement): every automated workflow gets a cheap, unambiguous \"brown M&M\" tripwire — a signal ONLY present if the agent did the hard work, whose absence BLOCKS the next stage (never advisory). From the Van Halen canary: a missing signal = the contract wasn't read = audit the whole run, don't just patch the signal. Patterns: (1) agent emits a structured compliance marker at task end (sources cited, checks run, hash/word-count); (2) plant an easy-to-verify requirement inside long instructions — if absent, the rest was skipped; (3) canary inputs — seed fact-check flows with a known-wrong claim, halt if it passes unflagged. Rules: failed canary auto-blocks publish; when one fires, audit the whole run; convert each root-cause failure into a new permanent canary. Extends Fact-Check Doctrine — verify the SYSTEM was respected, not just that output looks right. Roll into vault Gates 4-7, comms, all future workflows.
 - [2026-06-13 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-12 21:24 CT] JED DAILY ROUTINE update (effective on return from Florida): Jed is adding the gym back into his mornings. The YMCA (VALP membership, already in the budget) opens at 5 AM. New Monday–Friday morning shape: 4–5 AM = work/build window (lighter focused work), then 5 AM get dressed and go to the gym. This refines the prior 4–6 AM build window — the 4 AM wake-up he started in Feb was the first step toward this. Family/presence still #1; gym is part of the Tuesday vision (\"wake up, work out, go to work\"). Schedule Nathan/dispatch work and prompt timing around this: the 4–5 AM slot is now shorter and gym-bookended on weekdays.
@@ -555,6 +572,8 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-23 10:21 CT] solomon · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
+- [2026-06-23 10:21 CT] nathan · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
 - [2026-06-12 20:12 CT] sam · fb-token-verify-irish-craftsman · "Verify Irish Craftsman FB page token (read-only)" · COMPLETED · http:200
 - [2026-06-12 19:09 CT] solomon · dispatch_1781309398032 · "Verify Irish Craftsman FB token (read-only check)" · DISPATCHED · file:dispatch_1781309398032.json
 - [2026-06-12 19:09 CT] nathan · dispatch_1781309398032 · "Verify Irish Craftsman FB token (read-only check)" · DISPATCHED · file:dispatch_1781309398032.json
@@ -653,3 +672,6 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 - [2026-06-08 20:56 CT] sam · 2026-06-01T12-20-27-353Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
 - [2026-06-08 20:56 CT] sam · 2026-06-01T12-10-51-453Z-sam_build_feature · "Generic Sam: build a small feature in Solomon" · BLOCKED · purged KILL
 - [2026-06-08 20:56 CT] sam · 2026-06-01T09-25-56-610Z-sam_playwright_setup · "Walk Jed through Playwright auth setup for a platform" · BLOCKED · purged KILL
+
+### 2026-06-15 — Weekly Pattern Digest (7-day window)
+**Threshold adjustments:** none — every template within the [0.40, 0.85] approval band or below 3 samples.
