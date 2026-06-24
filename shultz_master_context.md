@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-23 10:21 CT — [SAMQUEUE] Nathan dispatch → sam: 'Clear orphaned stuck dispatch 1781309398032' (status: qu <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-24 09:41 CT — [PROJECTS] TRADEQUOTE design decision (App #2, Jed-approved): voice walkthrough = FREE-TALK <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-24 09:41 CT] TRADEQUOTE design decision (App #2, Jed-approved): voice walkthrough = FREE-TALK FIRST, THEN AI GAP-FILL. Contractor walks the job and talks naturally (hands-free, no interruptions, dumps everything in his own words). THEN the AI extracts what it caught, compares against the built-in checklist (permits, disposal, contingency, waste factor), and asks ONLY the follow-up questions he didn't already answer (e.g. \"you said new tile — what's the sq ft?\" / \"didn't mention the old tub — haul it or client?\" / \"this likely needs a plumbing permit — flag it?\"). The checklist IS the AI's question bank / gap-finder — this is how pillar 1 (voice) and pillar 2 (checklist) work together, and how \"best output from best input\" is delivered: ~90 sec talking + 3 smart follow-ups = quote in the driveway. CANARY fit: a missing required checklist item (permit/disposal/contingency) BLOCKS quote completion — never advisory — which is what makes the quote trustworthy to send to a client.
+- [2026-06-23 10:30 CT] Feature shipped — commit 1cda8f8: docs(master-context): Nathan dispatch [SAMQUEUE]
 - [2026-06-13 05:45 CT] Feature shipped — commit 818881e: docs(master-context): Nathan append [GENERAL]
 - [2026-06-12 21:30 CT] Feature shipped — commit ed07046: docs(master-context): Nathan append [GENERAL]
 - [2026-06-12 20:15 CT] Feature shipped — commit 3396711: docs(master-context): Nathan append [STACK]
@@ -505,6 +507,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-24 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-23 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-22 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-21 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
