@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-26 10:10 CT — [PROJECTS] PC TO-DO (Jed keyboard, channel-revival project): Study Josh K. Fay channel (@jo <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-26 10:10 CT — [GENERAL] FUEL PRINCIPLE (motivational doctrine + Nathan accountability lens; from Josh K. <!-- LASTUPDATED -->
 
 ---
 
@@ -515,6 +515,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-26 10:10 CT] FUEL PRINCIPLE (motivational doctrine + Nathan accountability lens; from Josh K. Fay 'The Fuel Principle / The 10 Years That Decide'). The pipefitter income IS the fuel — protect the income supply: the Bowen day job funds the entire build, so don't jeopardize it or go full-time before revenue is proven (this reinforces roadmap discipline). These prime earning years are the decisive ~10-year window; the monthly budget surplus is the lever that kills the ~$70K debt and buys assets. The goal is not infinite wealth — it's the 'work optional' threshold, which IS the Tuesday vision (present, generous, work by choice). Turn income into wealth: every month convert earned income into debt payoff + passive streams. Nathan's standing job: keep this front of mind and push back on anything that burns the fuel — risks the job, stalls the debt snowball, or chases opportunity over mission.
 - [2026-06-26 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-25 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-24 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
