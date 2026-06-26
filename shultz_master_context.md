@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-26 10:10 CT — [GENERAL] FUEL PRINCIPLE (motivational doctrine + Nathan accountability lens; from Josh K. <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-26 10:33 CT — [PROJECTS] IRONEDIT-FIRST reasoning reaffirmed by Jed (locked). Beyond roadmap discipline,  <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-26 10:33 CT] IRONEDIT-FIRST reasoning reaffirmed by Jed (locked). Beyond roadmap discipline, IronEdit is correctly first because it compounds three ways: it reduces JED'S OWN friction to publish long-form on a manageable schedule -> which feeds the relationship/community building the Defensibility Doctrine requires (channel = trust layer) -> AND makes Jed the first real dogfood user (satisfies the roadmap's 'real user before App #2' gate). Three birds: content cadence, distribution moat, proven user. TradeQuote stays a warm prototype only; validation via friends/family contractor test-runs (zero build) runs in parallel and must NOT pull build focus off IronEdit.
+- [2026-06-26 10:15 CT] Feature shipped — commit 4619d49: docs(master-context): Nathan append [GENERAL]
 - [2026-06-26 10:10 CT] PC TO-DO (Jed keyboard, channel-revival project): Study Josh K. Fay channel (@josh_k_fay, ~21.5K subs, 53 long-form videos, finance/wealth niche) as a PACKAGING + FUNNEL reference for Building Shultz back-catalog revival. Copy the MECHANICS: high-contrast 2-panel thumbnails with a tension hook (ESSENTIALS FUNDED -> WORK OPTIONAL; YOU WERE LIED TO); curiosity-gap titles ('The 10 Years That Decide Whether You Retire Rich or Broke' = 204K views); chapters on long-form; clean description funnel with links first (call booking + newsletter capture). Do NOT copy the suit-and-mic finance aesthetic — translate the structure to the blue-collar/trades brand and keep AI invisible. Reference only: adapt, don't imitate.
 - [2026-06-26 10:02 CT] DEFENSIBILITY DOCTRINE (locked — applies to ALL products). Premise: code is no longer the moat — AI-built app supply flooded while usage stayed flat, so distribution, trust, and lived expertise are the scarce assets. Rules per app: (1) Authenticity is the wedge — lead every listing/video with 'built by a working pipefitter, for the trades.' (2) Own the audience (email/list), never just rent platforms. (3) Audience-first — talk the problem publicly before building; build only validated, lived problems. (4) Idea double-filter: Jed lived it + LLM can't one-prompt it + too narrow for big players/cloners + buyer has budget. (5) Go absurdly narrow first, then expand (ServiceTitan model). (6) Build proprietary data/workflow loops that compound switching cost. (7) Reject AI-slop look and generic copy. (8) Build in public. (9) Launch to warm audience, engineer word-of-mouth, stay reachable. (10) Optimize for retention not downloads. Kill/pivot any app with no weekly community use in 30 days.
 - [2026-06-25 21:15 CT] Feature shipped — commit c8ac109: docs(master-context): Nathan append [PROJECTS]
