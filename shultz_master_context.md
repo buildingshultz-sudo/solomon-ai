@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-26 10:44 CT — [PROJECTS] FUTURE APP PARKED (roadmap candidate, NOT active): industrial/commercial pipefit <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-26 10:44 CT — [PROJECTS] OFF-WEEK CONTENT STRUCTURE (locked — keeps weekly cadence + bridges channel->app <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-26 10:44 CT] OFF-WEEK CONTENT STRUCTURE (locked — keeps weekly cadence + bridges channel->apps). Project/build video = the anchor (every-other-week target, realistically monthly). Fill off weeks with LOW-FRICTION phone formats, <30 min each (Fuel Principle protects Jed's time), on a 4-week rotation: (Wk1) Project video; (Wk2) Story/lesson — a 'Tough Guys' principle from a real jobsite moment (ties book+merch); (Wk3) BUILD-IN-PUBLIC — the tool/process he's building, framed as workshop/story with AI invisible (this IS the app bridge); (Wk4) Community/Q&A or jobsite gear feature (Amazon affiliate). IronEdit is what makes this sustainable by cutting edit friction. Adjustable; consistency over perfection.
 - [2026-06-26 10:44 CT] FUTURE APP PARKED (roadmap candidate, NOT active): industrial/commercial pipefitting workflow tool — Jed's deepest lived expertise (big jobs for large GCs, the Bowen Engineering world; journeyman on crews, not solo quoting). This is where his 'lived it' moat is strongest. Distinct from TradeQuote (solo residential). Real pain/scope TBD by research. Stays parked behind IronEdit (App #1) and the locked roadmap order — captured so the insight isn't lost, acted on later.
 - [2026-06-26 10:33 CT] IRONEDIT-FIRST reasoning reaffirmed by Jed (locked). Beyond roadmap discipline, IronEdit is correctly first because it compounds three ways: it reduces JED'S OWN friction to publish long-form on a manageable schedule -> which feeds the relationship/community building the Defensibility Doctrine requires (channel = trust layer) -> AND makes Jed the first real dogfood user (satisfies the roadmap's 'real user before App #2' gate). Three birds: content cadence, distribution moat, proven user. TradeQuote stays a warm prototype only; validation via friends/family contractor test-runs (zero build) runs in parallel and must NOT pull build focus off IronEdit.
 - [2026-06-26 10:15 CT] Feature shipped — commit 4619d49: docs(master-context): Nathan append [GENERAL]
