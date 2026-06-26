@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-26 12:00 CT — [PROJECTS] CONTENT SYSTEM — template pack v1 DRAFTED by Nathan in chat (2026-06-26): title  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-26 12:19 CT — [GENERAL] NATHAN ROLE EXPANDED: personal life coach for Jed (added to CSO/strategy hats),  <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-26 12:15 CT] Feature shipped — commit 4d24dca: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-26 12:00 CT] CONTENT SYSTEM — template pack v1 DRAFTED by Nathan in chat (2026-06-26): title framework (curiosity-gap formulas), thumbnail formula (2-panel tension hook), SEO description template (links-first funnel + chapters + sign-off), tag approach (10-15 mixed), lightweight shooting/B-roll plan, per-upload integration checklist (end screen, cards, playlist, pinned comment, affiliate store buildingshu0e-20, VidIQ A/B, first-hour comment replies). Lives in this chat until file tools are available to save the durable reference doc. IMPORTANT CORRECTION: Nathan does NOT have VidIQ built in, and the team can't cleanly drive it (Caleb browser read-wall) — so thumbnails = Nathan specs the exact concept (text/layout/image/color) and Jed assembles ~5 min in his own VidIQ/Canva. Scripts still pending the 3-transcript voice pull.
 - [2026-06-26 12:00 CT] Feature shipped — commit 2fc1550: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-26 11:56 CT] YOUTUBE CONTENT SYSTEM — inputs resolved (both open gaps from the locked spec now closed). (1) Voice profile source: pull transcripts from Jed's EXISTING long-form YouTube videos via Sam — public auto-captions, read-only, NO OAuth/auth needed, fully independent of the analytics credential re-mint. Build the voice profile from ~3 transcripts before any scripts get written. (2) Thumbnails/branding: Jed established these via VidIQ over the past couple months — so the thumbnail FORMULA in the template pack must be VidIQ-executable by Jed himself, tuned with the Josh K. Fay 2-panel tension-hook study. Net: content-system build has everything it needs; template-pack drafting (PC-free) can proceed on Jed's word.
@@ -527,6 +528,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-26 12:19 CT] NATHAN ROLE EXPANDED: personal life coach for Jed (added to CSO/strategy hats), scope set by Jed 2026-06-26. Mandate: accountability + honest pushback + naming where he's missing the mark on ALL fronts (business AND personal). Includes the literal 'close the laptop' call when the build eats the family time it's meant to give back, and reading between the lines for what he may be missing or not saying. Anchored to the Tuesday vision, the Fuel Principle, and Tasia/family as the real scoreboard (not revenue). Jed invited scripture / Bible-based parables woven in from time to time. Honest boundary kept: Nathan is not a licensed therapist/counselor and won't pose as one; calibrates to Jed himself, not generic coaching templates. This role is active in every conversation, not a separate mode.
 - [2026-06-26 10:10 CT] FUEL PRINCIPLE (motivational doctrine + Nathan accountability lens; from Josh K. Fay 'The Fuel Principle / The 10 Years That Decide'). The pipefitter income IS the fuel — protect the income supply: the Bowen day job funds the entire build, so don't jeopardize it or go full-time before revenue is proven (this reinforces roadmap discipline). These prime earning years are the decisive ~10-year window; the monthly budget surplus is the lever that kills the ~$70K debt and buys assets. The goal is not infinite wealth — it's the 'work optional' threshold, which IS the Tuesday vision (present, generous, work by choice). Turn income into wealth: every month convert earned income into debt payoff + passive streams. Nathan's standing job: keep this front of mind and push back on anything that burns the fuel — risks the job, stalls the debt snowball, or chases opportunity over mission.
 - [2026-06-26 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-25 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -598,6 +600,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-26 12:11 CT] sam · voice-samples-jed · "Jed voice-profile transcripts: 3 BuildingShultz long-form auto-captions" · COMPLETED · file:D59l0UAu-L8.voicesample.txt
 - [2026-06-26 07:01 CT] sam · yt-analytics-auth · "Durable YouTube Analytics API access" · ESCALATED · UNVERIFIED
 - [2026-06-23 10:21 CT] solomon · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
 - [2026-06-23 10:21 CT] nathan · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
