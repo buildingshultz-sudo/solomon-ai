@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-26 10:33 CT — [PROJECTS] IRONEDIT-FIRST reasoning reaffirmed by Jed (locked). Beyond roadmap discipline,  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-26 10:44 CT — [PROJECTS] FUTURE APP PARKED (roadmap candidate, NOT active): industrial/commercial pipefit <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-26 10:44 CT] FUTURE APP PARKED (roadmap candidate, NOT active): industrial/commercial pipefitting workflow tool — Jed's deepest lived expertise (big jobs for large GCs, the Bowen Engineering world; journeyman on crews, not solo quoting). This is where his 'lived it' moat is strongest. Distinct from TradeQuote (solo residential). Real pain/scope TBD by research. Stays parked behind IronEdit (App #1) and the locked roadmap order — captured so the insight isn't lost, acted on later.
 - [2026-06-26 10:33 CT] IRONEDIT-FIRST reasoning reaffirmed by Jed (locked). Beyond roadmap discipline, IronEdit is correctly first because it compounds three ways: it reduces JED'S OWN friction to publish long-form on a manageable schedule -> which feeds the relationship/community building the Defensibility Doctrine requires (channel = trust layer) -> AND makes Jed the first real dogfood user (satisfies the roadmap's 'real user before App #2' gate). Three birds: content cadence, distribution moat, proven user. TradeQuote stays a warm prototype only; validation via friends/family contractor test-runs (zero build) runs in parallel and must NOT pull build focus off IronEdit.
 - [2026-06-26 10:15 CT] Feature shipped — commit 4619d49: docs(master-context): Nathan append [GENERAL]
 - [2026-06-26 10:10 CT] PC TO-DO (Jed keyboard, channel-revival project): Study Josh K. Fay channel (@josh_k_fay, ~21.5K subs, 53 long-form videos, finance/wealth niche) as a PACKAGING + FUNNEL reference for Building Shultz back-catalog revival. Copy the MECHANICS: high-contrast 2-panel thumbnails with a tension hook (ESSENTIALS FUNDED -> WORK OPTIONAL; YOU WERE LIED TO); curiosity-gap titles ('The 10 Years That Decide Whether You Retire Rich or Broke' = 204K views); chapters on long-form; clean description funnel with links first (call booking + newsletter capture). Do NOT copy the suit-and-mic finance aesthetic — translate the structure to the blue-collar/trades brand and keep AI invisible. Reference only: adapt, don't imitate.
