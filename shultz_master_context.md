@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-06-25 21:04 CT — [PROJECTS] STANDING REMINDER (Jed flagged, do not let slip): APPLY the back-catalog revival <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-06-26 10:02 CT — [PROJECTS] DEFENSIBILITY DOCTRINE (locked — applies to ALL products). Premise: code is no l <!-- LASTUPDATED -->
 
 ---
 
@@ -90,6 +90,8 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-06-26 10:02 CT] DEFENSIBILITY DOCTRINE (locked — applies to ALL products). Premise: code is no longer the moat — AI-built app supply flooded while usage stayed flat, so distribution, trust, and lived expertise are the scarce assets. Rules per app: (1) Authenticity is the wedge — lead every listing/video with 'built by a working pipefitter, for the trades.' (2) Own the audience (email/list), never just rent platforms. (3) Audience-first — talk the problem publicly before building; build only validated, lived problems. (4) Idea double-filter: Jed lived it + LLM can't one-prompt it + too narrow for big players/cloners + buyer has budget. (5) Go absurdly narrow first, then expand (ServiceTitan model). (6) Build proprietary data/workflow loops that compound switching cost. (7) Reject AI-slop look and generic copy. (8) Build in public. (9) Launch to warm audience, engineer word-of-mouth, stay reachable. (10) Optimize for retention not downloads. Kill/pivot any app with no weekly community use in 30 days.
+- [2026-06-25 21:15 CT] Feature shipped — commit c8ac109: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-25 21:04 CT] STANDING REMINDER (Jed flagged, do not let slip): APPLY the back-catalog revival playbook to the Building Shultz channel. Source = June 2026 \"reviving underperforming long-form\" research: diagnosis A/B/C → repackage Bucket B → playlists → Shorts→long-form Related-video links → end screens/cards/pinned comments from top 5 performers into underperformers → SEO descriptions+chapters. Reinforced by Wes McDowell + vidIQ videos (\"blow up channel WITHOUT making videos\" = repackaging; vidIQ MCP = Claude+YouTube data). FREE, on-brand, AI-invisible, feeds the 4,000 watch-hour goal. Gated on PC/relay back online so Caleb can pull YouTube Studio + vidIQ analytics. FIRST ACTION when PC up: Caleb pulls per-video analytics export (impressions, CTR by traffic source, avg % viewed) → tag each long-form discovery/packaging/retention. That diagnosis drives everything. Most steps delegable to Caleb, Jed approves thumbnail/title changes.
 - [2026-06-25 09:45 CT] Feature shipped — commit 879b4de: docs(master-context): Nathan append [PROJECTS]
 - [2026-06-25 09:37 CT] IRONEDIT design principles 2/2 (continued): (3) HUMAN-IN-THE-LOOP MVP — loop is watch-folder → rough cut → package → affiliate-inject → ONE-TAP APPROVE → schedule/publish. The approval gate IS the canary (finished cut + packaging presented, Jed taps approve before publish). Only test removing the gate after ~50 real videos with <10% manual fix-ups. Fully-unattended edits of real footage risk retention problems + \"AI slop\" damage; the 2026 market converged on human-in-the-loop, so the gate is a feature not a weakness. (4) OWN THE TWO HARD/DEFENSIBLE PROBLEMS early (painful for competitors to copy): (a) in-video product→ASIN affiliate mapping WITH built-in compliant disclosure (exact Amazon Associates phrase + FTC placement; ~3% reinstatement after Amazon termination); (b) YouTube API compliance for real PUBLIC auto-publish (default quota ~6 uploads/day, unaudited apps forced to private — plan OAuth verification + compliance audit, ~2-4 wks).
@@ -512,6 +514,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-06-26 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-25 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-24 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-23 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -581,6 +584,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-06-26 07:01 CT] sam · yt-analytics-auth · "Durable YouTube Analytics API access" · ESCALATED · UNVERIFIED
 - [2026-06-23 10:21 CT] solomon · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
 - [2026-06-23 10:21 CT] nathan · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
 - [2026-06-12 20:12 CT] sam · fb-token-verify-irish-craftsman · "Verify Irish Craftsman FB page token (read-only)" · COMPLETED · http:200
