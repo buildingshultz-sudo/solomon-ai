@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-07-01 06:22 CT — [STACK] CONTEXT DISCIPLINE (locked, from 2026 playbook). Context rot is real + measured  <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-07-01 06:22 CT — [PROJECTS] FUNNEL MECHANICS (locked, 2026 playbook — ADOPT structure, REJECT hype). Data co <!-- LASTUPDATED -->
 
 ---
 
@@ -92,6 +92,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-07-01 06:22 CT] FUNNEL MECHANICS (locked, 2026 playbook — ADOPT structure, REJECT hype). Data confirms doctrine: consumer preference for AI-made creator content fell 60% (2023) -> 26% (2025); 52% disengage when they sense AI. AI stays INVISIBLE (back-of-house only). ADOPT: first-person + specific-outcome + honest-deliverable titles; high-contrast thumbnail, one subject (Jed or real work), <4 words; deliver the title promise in the FIRST 30 sec (channels lose 30-40% there); primary CTA in first 2 description lines + matching pinned comment + UTM tags; free community/lead magnet = owned-audience MOAT; ladder = free content -> community -> email -> paid -> contact. ADAPT: INVERT Nate Herk link order to VALUE-FIRST (free first, contact last); sustainable cadence (weekly/biweekly). REJECT: income-claim titles, AI-guru positioning, faceless/AI-voice content, clickbait breaking click-promise, leading with the paid ask. Herk = mechanics only; his income numbers self-reported/disputed.
 - [2026-06-26 14:15 CT] Feature shipped — commit fa8aa09: docs(master-context): Nathan append [GENERAL]
 - [2026-06-26 12:30 CT] Feature shipped — commit b0454ca: docs(master-context): Nathan append [GENERAL]
 - [2026-06-26 12:15 CT] Feature shipped — commit 4d24dca: docs(master-context): Nathan append [PROJECTS]
