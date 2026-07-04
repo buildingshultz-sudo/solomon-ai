@@ -616,6 +616,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-07-03 19:10 CT] solomon-health · health_campaign_day_out_of_range · "Campaign day out of range" · ESCALATED · Computed dayIndex=31 from start_date=2026-06-04 — outside 1..30.
 - [2026-07-03 19:05 CT] solomon-health · health_campaign_day_out_of_range · "Campaign day out of range" · ESCALATED · Computed dayIndex=31 from start_date=2026-06-04 — outside 1..30.
 - [2026-07-03 19:00 CT] solomon-health · health_campaign_day_out_of_range · "Campaign day out of range" · ESCALATED · Computed dayIndex=31 from start_date=2026-06-04 — outside 1..30.
 - [2026-06-26 12:11 CT] sam · voice-samples-jed · "Jed voice-profile transcripts: 3 BuildingShultz long-form auto-captions" · COMPLETED · file:D59l0UAu-L8.voicesample.txt
