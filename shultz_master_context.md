@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-07-01 06:22 CT — [PROJECTS] FUNNEL MECHANICS (locked, 2026 playbook — ADOPT structure, REJECT hype). Data co <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-07-03 16:35 CT — [REVENUE] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jul <!-- LASTUPDATED -->
 
 ---
 
@@ -92,6 +92,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-07-01 06:30 CT] Feature shipped — commit 612ac91: docs(master-context): Nathan append [PROJECTS]
 - [2026-07-01 06:22 CT] FUNNEL MECHANICS (locked, 2026 playbook — ADOPT structure, REJECT hype). Data confirms doctrine: consumer preference for AI-made creator content fell 60% (2023) -> 26% (2025); 52% disengage when they sense AI. AI stays INVISIBLE (back-of-house only). ADOPT: first-person + specific-outcome + honest-deliverable titles; high-contrast thumbnail, one subject (Jed or real work), <4 words; deliver the title promise in the FIRST 30 sec (channels lose 30-40% there); primary CTA in first 2 description lines + matching pinned comment + UTM tags; free community/lead magnet = owned-audience MOAT; ladder = free content -> community -> email -> paid -> contact. ADAPT: INVERT Nate Herk link order to VALUE-FIRST (free first, contact last); sustainable cadence (weekly/biweekly). REJECT: income-claim titles, AI-guru positioning, faceless/AI-voice content, clickbait breaking click-promise, leading with the paid ask. Herk = mechanics only; his income numbers self-reported/disputed.
 - [2026-06-26 14:15 CT] Feature shipped — commit fa8aa09: docs(master-context): Nathan append [GENERAL]
 - [2026-06-26 12:30 CT] Feature shipped — commit b0454ca: docs(master-context): Nathan append [GENERAL]
@@ -351,6 +352,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-07-03 16:35 CT] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Jul 3, 2026"
 - [2026-07-01 03:30 CT] Revenue/billing email from DigitalOcean Support: "[DigitalOcean] Your 2026-06 invoice is available"
 - [2026-06-23 10:15 CT] Revenue/billing email from Soundstripe Team: "This one stays with you. (New from marigolde)"
 - [2026-06-22 09:05 CT] Revenue/billing email from Squarespace: "Save 20% on your website subscription"
@@ -534,6 +536,8 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-07-03 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
+- [2026-07-02 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-07-01 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-30 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-06-29 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -612,6 +616,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-07-03 19:00 CT] solomon-health · health_campaign_day_out_of_range · "Campaign day out of range" · ESCALATED · Computed dayIndex=31 from start_date=2026-06-04 — outside 1..30.
 - [2026-06-26 12:11 CT] sam · voice-samples-jed · "Jed voice-profile transcripts: 3 BuildingShultz long-form auto-captions" · COMPLETED · file:D59l0UAu-L8.voicesample.txt
 - [2026-06-26 07:01 CT] sam · yt-analytics-auth · "Durable YouTube Analytics API access" · ESCALATED · UNVERIFIED
 - [2026-06-23 10:21 CT] solomon · dispatch_1782228105657 · "Clear orphaned stuck dispatch 1781309398032" · DISPATCHED · file:dispatch_1782228105657.json
