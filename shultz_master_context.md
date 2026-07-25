@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-07-24 24:30 CT — [REVENUE] Revenue/billing email from Epidemic Sound: "Fancy 3 months’ free subscription?" <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-07-25 24:45 CT — [PROJECTS] Feature shipped — commit e6bb4ea: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
 
 ---
 
@@ -92,6 +92,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-07-25 24:45 CT] Feature shipped — commit e6bb4ea: docs(master-context): execution ledger [LEDGER]
 - [2026-07-22 13:45 CT] Feature shipped — commit 88b6bcf: docs(master-context): execution ledger [LEDGER]
 - [2026-07-10 16:15 CT] Feature shipped — commit 69c73da: docs(master-context): execution ledger [LEDGER]
 - [2026-07-04 06:30 CT] Feature shipped — commit 66648d2: docs(master-context): execution ledger [LEDGER]
@@ -688,6 +689,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-07-25 01:10 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-07-25 24:35 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-07-22 13:35 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-07-10 16:08 CT] nathan · dispatch_1783717706412 · "SECURITY: Telegram bot token leak audit" · DISPATCHED · file:dispatch_1783717706412.json
