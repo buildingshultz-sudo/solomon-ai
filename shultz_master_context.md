@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-08-17 14:30 CT — [PROJECTS] Feature shipped — commit 85fd854: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-08-17 15:35 CT — [REVENUE] Revenue/billing email from Spreadshirt Inc.: "Spreadshirt Inc. sent you a paymen <!-- LASTUPDATED -->
 
 ---
 
@@ -92,6 +92,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-08-17 15:15 CT] Feature shipped — commit fc9a94d: docs(master-context): execution ledger [LEDGER]
 - [2026-08-17 14:30 CT] Feature shipped — commit 85fd854: docs(master-context): execution ledger [LEDGER]
 - [2026-08-17 14:00 CT] Feature shipped — commit 7161f8f: docs(master-context): execution ledger [LEDGER]
 - [2026-08-17 13:30 CT] Feature shipped — commit 738f4db: docs(master-context): execution ledger [LEDGER]
@@ -1448,6 +1449,7 @@
 | Motivation for Tough Guys — audiobook | TBD (Gumroad / Audible) | PLANNED — not recorded yet | — |
 - _Revenue notification emails (Gumroad/Stripe/PayPal) auto-append here as detected._
 <!-- LOG:REVENUE -->
+- [2026-08-17 15:35 CT] Revenue/billing email from Spreadshirt Inc.: "Spreadshirt Inc. sent you a payment"
 - [2026-08-12 09:40 CT] Revenue/billing email from Squarespace: "Tired of chasing invoices? There’s a better way."
 - [2026-08-03 16:35 CT] Revenue/billing email from Google Play: "Your Google Play Order Receipt from Aug 3, 2026"
 - [2026-08-01 01:35 CT] Revenue/billing email from DigitalOcean Support: "[DigitalOcean] Your 2026-07 invoice is available"
@@ -1764,6 +1766,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-08-17 15:35 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-08-17 15:00 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-08-17 14:25 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-08-17 13:50 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
