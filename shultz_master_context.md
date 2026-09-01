@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-09-01 02:10 CT — [REVENUE] Revenue/billing email from DigitalOcean Support: "[DigitalOcean] Your 2026-08 in <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-09-01 02:30 CT — [PROJECTS] Feature shipped — commit 965372a: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
 
 ---
 
@@ -92,6 +92,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-09-01 02:30 CT] Feature shipped — commit 965372a: docs(master-context): execution ledger [LEDGER]
 - [2026-09-01 02:00 CT] Feature shipped — commit a6e3f8f: docs(master-context): execution ledger [LEDGER]
 - [2026-09-01 01:30 CT] Feature shipped — commit 058d739: docs(master-context): execution ledger [LEDGER]
 - [2026-09-01 24:45 CT] Feature shipped — commit 9dd682e: docs(master-context): execution ledger [LEDGER]
@@ -2412,6 +2413,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-09-01 02:55 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-01 02:25 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-01 01:50 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-01 01:15 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
