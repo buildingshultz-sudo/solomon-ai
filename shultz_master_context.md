@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-09-02 05:00 CT — [GENERAL] Daily 5 AM check-in — context refreshed; Solomon online. <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-09-02 05:30 CT — [PROJECTS] Feature shipped — commit e5d7b97: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
 
 ---
 
@@ -92,6 +92,7 @@
 - **30-Day Book & Merch Campaign** — **LAUNCHED** (`/launch` sent; first post fired 6 PM CT 2026-05-29). FB auto-posts 7 AM & 6 PM CT; IG/YT handed to Telegram.
 - **IronEdit** — App #1 of the roadmap; AI video-editing desktop app, foundation being built (needs DaVinci Resolve Studio $295).
 <!-- LOG:PROJECTS -->
+- [2026-09-02 05:30 CT] Feature shipped — commit e5d7b97: docs(master-context): execution ledger [LEDGER]
 - [2026-09-02 04:45 CT] Feature shipped — commit 14c8c99: docs(master-context): execution ledger [LEDGER]
 - [2026-09-02 04:15 CT] Feature shipped — commit a3e5fca: docs(master-context): execution ledger [LEDGER]
 - [2026-09-02 03:45 CT] Feature shipped — commit 55860ed: docs(master-context): execution ledger [LEDGER]
@@ -2462,6 +2463,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-09-02 05:50 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-02 05:15 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-02 04:40 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-02 04:05 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
