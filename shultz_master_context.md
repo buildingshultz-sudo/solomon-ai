@@ -9,7 +9,7 @@
 > NOTE: live credentials/passwords are NOT stored here (committed file) — they live in
 > `.env` / a password manager and are only referenced by name.
 
-**LAST UPDATED:** 2026-09-21 04:15 CT — [PROJECTS] Feature shipped — commit 14bb3b4: docs(master-context): execution ledger [LEDGER <!-- LASTUPDATED -->
+**LAST UPDATED:** 2026-09-21 05:00 CT — [GENERAL] Daily 5 AM check-in — context refreshed; Solomon online. <!-- LASTUPDATED -->
 
 ---
 
@@ -2785,6 +2785,7 @@
 ## 13. CHANGE LOG (append-only — never edited or deleted)
 > Every auto-update and major event appends here with a timestamp, tagged by section.
 <!-- LOG:GENERAL -->
+- [2026-09-21 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-09-20 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-09-18 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
 - [2026-09-16 05:00 CT] Daily 5 AM check-in — context refreshed; Solomon online.
@@ -2935,6 +2936,7 @@ _End of master context. Source file: /root/solomon-v4/shultz_master_context.md �
 
 ## EXECUTION LEDGER (append-only — one line per lifecycle event)
 <!-- LOG:LEDGER -->
+- [2026-09-21 05:20 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-21 04:45 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-21 04:15 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
 - [2026-09-21 03:40 CT] solomon-health · health_pc_relay_down · "PC relay DOWN" · ESCALATED · The PC relay at http://98.46.185.19:7777 is unreachable (ECONNAB
